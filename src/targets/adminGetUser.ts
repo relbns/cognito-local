@@ -7,6 +7,7 @@ interface Input {
 }
 
 interface Output {
+  UserStatus: string;
   UserAttributes: any;
 }
 
@@ -22,6 +23,7 @@ export const AdminGetUser = ({
     throw new NotAuthorizedError();
   }
   return {
+    UserStatus: user.UserStatus,
     UserAttributes: user.Attributes,
   };
 };
