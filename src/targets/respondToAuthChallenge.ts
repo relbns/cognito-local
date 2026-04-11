@@ -62,6 +62,21 @@ export const RespondToAuthChallenge =
         MFACode: undefined,
         UserLastModifiedDate: clock.get(),
       });
+    } else if (req.ChallengeName === "SOFTWARE_TOKEN_MFA") {
+      if (!req.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE) {
+        throw new InvalidParameterError(
+          "Missing required parameter SOFTWARE_TOKEN_MFA_CODE",
+        );
+      }
+      if (user.MFACode !== req.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE) {
+        throw new CodeMismatchError();
+      }
+
+      await userPool.saveUser(ctx, {
+        ...user,
+        MFACode: undefined,
+        UserLastModifiedDate: clock.get(),
+      });
     } else if (req.ChallengeName === "NEW_PASSWORD_REQUIRED") {
       if (!req.ChallengeResponses.NEW_PASSWORD) {
         throw new InvalidParameterError(
@@ -76,6 +91,25 @@ export const RespondToAuthChallenge =
         UserLastModifiedDate: clock.get(),
         UserStatus: "CONFIRMED",
       });
+    } else if (req.ChallengeName === "CUSTOM_CHALLENGE") {
+      if (!triggers.enabled("VerifyAuthChallengeResponse")) {
+        throw new UnsupportedError(
+          "CUSTOM_CHALLENGE requires VerifyAuthChallengeResponse trigger",
+        );
+      }
+
+      const verifyResult = await triggers.verifyAuthChallengeResponse(ctx, {
+        clientId: req.ClientId,
+        userAttributes: user.Attributes,
+        username: user.Username,
+        userPoolId: userPool.options.Id,
+        challengeAnswer: req.ChallengeResponses.ANSWER ?? "",
+        clientMetadata: req.ClientMetadata,
+      });
+
+      if (!verifyResult.answerCorrect) {
+        throw new CodeMismatchError();
+      }
     } else {
       throw new UnsupportedError(
         `respondToAuthChallenge with ChallengeName=${req.ChallengeName}`,
