@@ -11,6 +11,7 @@ import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { UUID } from "../__tests__/patterns";
@@ -28,7 +29,12 @@ import {
   type UserPoolService,
 } from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
-import { attributesToRecord, type User } from "../services/userPoolService";
+import type { TokenVerifier } from "../services/tokenVerifier";
+import {
+  attributesToRecord,
+  attributeValue,
+  type User,
+} from "../services/userPoolService";
 import { InitiateAuth, type InitiateAuthTarget } from "./initiateAuth";
 
 describe("InitiateAuth target", () => {
@@ -38,6 +44,7 @@ describe("InitiateAuth target", () => {
   let mockOtp: Mock<() => string>;
   let mockTriggers: MockedObject<Triggers>;
   let mockTokenGenerator: MockedObject<TokenGenerator>;
+  let mockTokenVerifier: MockedObject<TokenVerifier>;
   let authSessions: InMemoryAuthSessions;
   let clock: ClockFake;
   const userPoolClient = TDB.appClient();
@@ -50,6 +57,7 @@ describe("InitiateAuth target", () => {
     mockOtp = vi.fn().mockReturnValue("123456");
     mockTriggers = newMockTriggers();
     mockTokenGenerator = newMockTokenGenerator();
+    mockTokenVerifier = newMockTokenVerifier();
     clock = new ClockFake(new Date());
     authSessions = new InMemoryAuthSessions(clock);
 
@@ -63,6 +71,8 @@ describe("InitiateAuth target", () => {
       otp: mockOtp,
       triggers: mockTriggers,
       tokenGenerator: mockTokenGenerator,
+      tokenVerifier: mockTokenVerifier,
+      clock: new ClockFake(new Date()),
     });
   });
 
@@ -123,6 +133,8 @@ describe("InitiateAuth target", () => {
             AccessToken: "access",
             IdToken: "id",
             RefreshToken: "refresh",
+            ExpiresIn: 3600,
+            TokenType: "Bearer",
           });
 
           const user = TDB.user();
@@ -385,6 +397,8 @@ describe("InitiateAuth target", () => {
               AccessToken: "access",
               IdToken: "id",
               RefreshToken: "refresh",
+              ExpiresIn: 3600,
+              TokenType: "Bearer",
             });
             mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -542,6 +556,8 @@ describe("InitiateAuth target", () => {
             AccessToken: "access",
             IdToken: "id",
             RefreshToken: "refresh",
+            ExpiresIn: 3600,
+            TokenType: "Bearer",
           });
           mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -579,6 +595,8 @@ describe("InitiateAuth target", () => {
               AccessToken: "access",
               IdToken: "id",
               RefreshToken: "refresh",
+              ExpiresIn: 3600,
+              TokenType: "Bearer",
             });
 
             mockTriggers.enabled.mockImplementation(
@@ -665,20 +683,23 @@ describe("InitiateAuth target", () => {
   });
 
   describe("REFRESH_TOKEN_AUTH auth flow", () => {
-    it("returns new tokens", async () => {
-      mockTokenGenerator.generate.mockResolvedValue({
-        AccessToken: "access",
-        IdToken: "id",
-        RefreshToken: "refresh",
-      });
+    const existingUser = TDB.user({
+      RefreshTokens: ["refresh token"],
+      TokenOrigins: [
+        { Jti: "origin", ClientId: userPoolClient.ClientId, ExpiresAt: 4e9 },
+      ],
+    });
 
-      const existingUser = TDB.user({
-        RefreshTokens: ["refresh token"],
+    beforeEach(() => {
+      mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+        claims: { "cognito:username": existingUser.Username, jti: "origin" },
+        user: existingUser,
+        userPool: mockUserPoolService,
       });
-
-      mockUserPoolService.getUserByRefreshToken.mockResolvedValue(existingUser);
       mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+    });
 
+    it("returns new tokens in the refresh token's session", async () => {
       const response = await initiateAuth(TestContext, {
         AuthFlow: "REFRESH_TOKEN_AUTH",
         ClientId: userPoolClient.ClientId,
@@ -690,12 +711,13 @@ describe("InitiateAuth target", () => {
         },
       });
 
-      expect(response.AuthenticationResult?.AccessToken).toEqual("access");
-      expect(response.AuthenticationResult?.IdToken).toEqual("id");
-
-      // does not return a refresh token as part of a refresh token flow
-      expect(response.AuthenticationResult?.RefreshToken).not.toBeDefined();
-
+      expect(response.AuthenticationResult).toEqual({
+        AccessToken: "access",
+        IdToken: "id",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
+      });
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
       expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
         TestContext,
         existingUser,
@@ -703,9 +725,88 @@ describe("InitiateAuth target", () => {
         userPoolClient,
         undefined,
         "RefreshTokens",
+        [],
+        { originJti: "origin" },
+      );
+    });
+
+    it("registers the session of a refresh token issued before sessions were tracked", async () => {
+      const legacyUser = { ...existingUser, TokenOrigins: undefined };
+      mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+        claims: {
+          "cognito:username": legacyUser.Username,
+          jti: "legacy",
+          exp: 4e9,
+        },
+        user: legacyUser,
+        userPool: mockUserPoolService,
+      });
+
+      await initiateAuth(TestContext, {
+        AuthFlow: "REFRESH_TOKEN_AUTH",
+        ClientId: userPoolClient.ClientId,
+        AuthParameters: { REFRESH_TOKEN: "refresh token" },
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
+        ...legacyUser,
+        TokenOrigins: [
+          { Jti: "legacy", ClientId: userPoolClient.ClientId, ExpiresAt: 4e9 },
+        ],
+      });
+    });
+
+    it("checks SECRET_HASH against the user's sub when username is not a sign-in attribute", async () => {
+      mockUserPoolService.options.UsernameAttributes = ["email"];
+
+      await initiateAuth(TestContext, {
+        AuthFlow: "REFRESH_TOKEN_AUTH",
+        ClientId: userPoolClient.ClientId,
+        AuthParameters: { REFRESH_TOKEN: "refresh token", SECRET_HASH: "hash" },
+      });
+
+      expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+        userPoolClient,
+        [attributeValue("sub", existingUser.Attributes)],
+        "hash",
+      );
+    });
+
+    it("checks SECRET_HASH against the username when username is a sign-in attribute", async () => {
+      await initiateAuth(TestContext, {
+        AuthFlow: "REFRESH_TOKEN_AUTH",
+        ClientId: userPoolClient.ClientId,
+        AuthParameters: { REFRESH_TOKEN: "refresh token", SECRET_HASH: "hash" },
+      });
+
+      expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+        userPoolClient,
+        [existingUser.Username],
+        "hash",
       );
     });
   });
+
+  it("checks SECRET_HASH against USERNAME before a sign-in flow", async () => {
+    mockTokenVerifier.verifySecretHash.mockImplementation(() => {
+      throw new NotAuthorizedError("Unable to verify secret hash");
+    });
+
+    await expect(
+      initiateAuth(TestContext, {
+        AuthFlow: "USER_PASSWORD_AUTH",
+        ClientId: userPoolClient.ClientId,
+        AuthParameters: { USERNAME: "u", PASSWORD: "p", SECRET_HASH: "bad" },
+      }),
+    ).rejects.toEqual(new NotAuthorizedError("Unable to verify secret hash"));
+    expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+      userPoolClient,
+      ["u"],
+      "bad",
+    );
+    expect(mockUserPoolService.getUserByUsername).not.toHaveBeenCalled();
+  });
+
   describe("CUSTOM_AUTH auth flow", () => {
     const user = TDB.user();
 
@@ -787,6 +888,8 @@ describe("InitiateAuth target", () => {
         otp: mockOtp,
         triggers: mockTriggers,
         tokenGenerator: mockTokenGenerator,
+        tokenVerifier: newMockTokenVerifier(),
+        clock: new ClockFake(new Date()),
       });
 
       const output = await target(TestContext, {
@@ -812,6 +915,8 @@ describe("InitiateAuth target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
 
       const output = await initiateAuth(TestContext, {

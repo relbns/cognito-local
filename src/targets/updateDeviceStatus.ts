@@ -2,14 +2,8 @@ import type {
   UpdateDeviceStatusRequest,
   UpdateDeviceStatusResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import {
-  InvalidParameterError,
-  ResourceNotFoundError,
-  UserNotFoundError,
-} from "../errors";
+import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 export type UpdateDeviceStatusTarget = Target<
@@ -17,24 +11,18 @@ export type UpdateDeviceStatusTarget = Target<
   UpdateDeviceStatusResponse
 >;
 
-type UpdateDeviceStatusServices = Pick<Services, "cognito" | "clock">;
+type UpdateDeviceStatusServices = Pick<Services, "clock" | "tokenVerifier">;
 
 export const UpdateDeviceStatus =
-  ({ cognito, clock }: UpdateDeviceStatusServices): UpdateDeviceStatusTarget =>
+  ({
+    clock,
+    tokenVerifier,
+  }: UpdateDeviceStatusServices): UpdateDeviceStatusTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     const devices = user.Devices ?? [];
     const device = devices.find((d) => d.DeviceKey === req.DeviceKey);

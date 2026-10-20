@@ -2,11 +2,9 @@ import type {
   ChangePasswordRequest,
   ChangePasswordResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import { NotAuthorizedError } from "../errors";
 import type { Services } from "../services";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 export type ChangePasswordTarget = Target<
@@ -14,26 +12,20 @@ export type ChangePasswordTarget = Target<
   ChangePasswordResponse
 >;
 
-type ChangePasswordServices = Pick<Services, "cognito" | "clock"> &
+type ChangePasswordServices = Pick<Services, "clock" | "tokenVerifier"> &
   Partial<Pick<Services, "config">>;
 
 export const ChangePassword =
-  ({ cognito, clock, config }: ChangePasswordServices): ChangePasswordTarget =>
+  ({
+    clock,
+    config,
+    tokenVerifier,
+  }: ChangePasswordServices): ChangePasswordTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      ctx.logger.info("Unable to decode token");
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.username);
-    if (!user) {
-      throw new NotAuthorizedError();
-    }
 
     if (req.PreviousPassword !== user.Password) {
       throw new NotAuthorizedError("Incorrect username or password.");

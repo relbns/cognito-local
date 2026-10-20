@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
@@ -8,9 +9,11 @@ import * as TDB from "../__tests__/testDataBuilder";
 import {
   CodeMismatchError,
   InvalidPasswordError,
+  NotAuthorizedError,
   UserNotFoundError,
 } from "../errors";
-import type { Triggers, UserPoolService } from "../services";
+import type { CognitoService, Triggers, UserPoolService } from "../services";
+import type { TokenVerifier } from "../services/tokenVerifier";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import {
   ConfirmForgotPassword,
@@ -20,6 +23,8 @@ import {
 const currentDate = new Date();
 
 describe("ConfirmForgotPassword target", () => {
+  let mockCognito: MockedObject<CognitoService>;
+  let mockTokenVerifier: MockedObject<TokenVerifier>;
   let confirmForgotPassword: ConfirmForgotPasswordTarget;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let mockTriggers: MockedObject<Triggers>;
@@ -30,12 +35,38 @@ describe("ConfirmForgotPassword target", () => {
     clock = new ClockFake(currentDate);
 
     mockUserPoolService = newMockUserPoolService();
+    mockCognito = newMockCognitoService(mockUserPoolService);
+    mockTokenVerifier = newMockTokenVerifier();
     mockTriggers = newMockTriggers();
     confirmForgotPassword = ConfirmForgotPassword({
       clock,
-      cognito: newMockCognitoService(mockUserPoolService),
+      cognito: mockCognito,
+      tokenVerifier: mockTokenVerifier,
       triggers: mockTriggers,
     });
+  });
+
+  it("checks SecretHash against the username", async () => {
+    const client = TDB.appClient({ ClientSecret: "secret" });
+    mockCognito.getAppClient.mockResolvedValue(client);
+    mockTokenVerifier.verifySecretHash.mockImplementation(() => {
+      throw new NotAuthorizedError("Unable to verify secret hash");
+    });
+
+    await expect(
+      confirmForgotPassword(TestContext, {
+        ClientId: client.ClientId,
+        Username: "u",
+        SecretHash: "bad",
+        ConfirmationCode: "123456",
+        Password: "Passw0rd!",
+      }),
+    ).rejects.toEqual(new NotAuthorizedError("Unable to verify secret hash"));
+    expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+      client,
+      ["u"],
+      "bad",
+    );
   });
 
   it("throws if user doesn't exist", async () => {

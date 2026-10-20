@@ -13,7 +13,7 @@ const originalDate = new Date(2022, 4, 30, 17, 30, 0, 0);
 const ONE_MINUTE = 60;
 const ONE_HOUR = ONE_MINUTE * 60;
 const ONE_DAY = ONE_HOUR * 24;
-const SEVEN_DAYS = ONE_DAY * 7;
+const THIRTY_DAYS = ONE_DAY * 30;
 
 describe("JwtTokenGenerator", () => {
   let mockTriggers: MockedObject<Triggers>;
@@ -194,14 +194,20 @@ describe("JwtTokenGenerator", () => {
         "RefreshTokens",
       );
 
+      const refreshJti = (jwt.decode(tokens.RefreshToken) as any).jti;
+      expect(refreshJti).toMatch(UUID);
+      expect(tokens.ExpiresIn).toEqual(ONE_HOUR);
+      expect(tokens.TokenType).toEqual("Bearer");
+
       expect(jwt.decode(tokens.AccessToken)).toEqual({
         auth_time: expect.any(Number),
         client_id: userPoolClient.ClientId,
         event_id: expect.stringMatching(UUID),
-        exp: Math.floor(originalDate.getTime() / 1000) + ONE_DAY,
+        exp: Math.floor(originalDate.getTime() / 1000) + ONE_HOUR,
         iat: Math.floor(originalDate.getTime() / 1000),
         iss: `http://example.com/${userPoolClient.UserPoolId}`,
         jti: expect.stringMatching(UUID),
+        origin_jti: refreshJti,
         scope: "aws.cognito.signin.user.admin",
         sub: attributeValue("sub", user.Attributes),
         token_use: "access",
@@ -215,21 +221,45 @@ describe("JwtTokenGenerator", () => {
         email: attributeValue("email", user.Attributes),
         email_verified: false,
         event_id: expect.stringMatching(UUID),
-        exp: Math.floor(originalDate.getTime() / 1000) + ONE_DAY,
+        exp: Math.floor(originalDate.getTime() / 1000) + ONE_HOUR,
         iat: Math.floor(originalDate.getTime() / 1000),
         iss: `http://example.com/${userPoolClient.UserPoolId}`,
         jti: expect.stringMatching(UUID),
+        origin_jti: refreshJti,
         sub: attributeValue("sub", user.Attributes),
         token_use: "id",
       });
 
       expect(jwt.decode(tokens.RefreshToken)).toEqual({
         "cognito:username": user.Username,
+        client_id: userPoolClient.ClientId,
         email: attributeValue("email", user.Attributes),
-        exp: Math.floor(originalDate.getTime() / 1000) + SEVEN_DAYS,
+        exp: Math.floor(originalDate.getTime() / 1000) + THIRTY_DAYS,
         iat: Math.floor(originalDate.getTime() / 1000),
         iss: `http://example.com/${userPoolClient.UserPoolId}`,
-        jti: expect.stringMatching(UUID),
+        jti: refreshJti,
+      });
+    });
+
+    it("keeps the session of the refresh token it was given", async () => {
+      mockTriggers.enabled.mockReturnValue(false);
+
+      const tokens = await tokenGenerator.generate(
+        TestContext,
+        user,
+        [],
+        TDB.appClient(),
+        undefined,
+        "RefreshTokens",
+        undefined,
+        { originJti: "existing-origin" },
+      );
+
+      expect(jwt.decode(tokens.AccessToken)).toMatchObject({
+        origin_jti: "existing-origin",
+      });
+      expect(jwt.decode(tokens.IdToken)).toMatchObject({
+        origin_jti: "existing-origin",
       });
     });
   });
@@ -256,14 +286,15 @@ describe("JwtTokenGenerator", () => {
         );
 
         expect((jwt.decode(tokens.AccessToken) as any).exp).toEqual(
-          Math.floor(originalDate.getTime() / 1000) + ONE_DAY,
+          Math.floor(originalDate.getTime() / 1000) + ONE_HOUR,
         );
         expect((jwt.decode(tokens.IdToken) as any).exp).toEqual(
-          Math.floor(originalDate.getTime() / 1000) + ONE_DAY,
+          Math.floor(originalDate.getTime() / 1000) + ONE_HOUR,
         );
         expect((jwt.decode(tokens.RefreshToken) as any).exp).toEqual(
-          Math.floor(originalDate.getTime() / 1000) + SEVEN_DAYS,
+          Math.floor(originalDate.getTime() / 1000) + THIRTY_DAYS,
         );
+        expect(tokens.ExpiresIn).toEqual(ONE_HOUR);
       });
     });
 
@@ -292,14 +323,15 @@ describe("JwtTokenGenerator", () => {
         );
 
         expect((jwt.decode(tokens.AccessToken) as any).exp).toEqual(
-          Math.floor(originalDate.getTime() / 1000) + ONE_DAY,
+          Math.floor(originalDate.getTime() / 1000) + ONE_HOUR,
         );
         expect((jwt.decode(tokens.IdToken) as any).exp).toEqual(
-          Math.floor(originalDate.getTime() / 1000) + ONE_DAY,
+          Math.floor(originalDate.getTime() / 1000) + ONE_HOUR,
         );
         expect((jwt.decode(tokens.RefreshToken) as any).exp).toEqual(
-          Math.floor(originalDate.getTime() / 1000) + SEVEN_DAYS,
+          Math.floor(originalDate.getTime() / 1000) + THIRTY_DAYS,
         );
+        expect(tokens.ExpiresIn).toEqual(ONE_HOUR);
       });
     });
 
@@ -362,6 +394,7 @@ describe("JwtTokenGenerator", () => {
         expect((jwt.decode(tokens.AccessToken) as any).exp).toEqual(
           Math.floor(originalDate.getTime() / 1000) + 10,
         );
+        expect(tokens.ExpiresIn).toEqual(10);
         expect((jwt.decode(tokens.IdToken) as any).exp).toEqual(
           Math.floor(originalDate.getTime() / 1000) + 20 * ONE_MINUTE,
         );

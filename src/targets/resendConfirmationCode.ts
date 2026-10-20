@@ -5,6 +5,7 @@ import type {
 import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import type { Target } from "./Target";
 
 export type ResendConfirmationCodeTarget = Target<
@@ -14,7 +15,7 @@ export type ResendConfirmationCodeTarget = Target<
 
 type ResendConfirmationCodeServices = Pick<
   Services,
-  "cognito" | "clock" | "messages" | "otp"
+  "clock" | "cognito" | "messages" | "otp" | "tokenVerifier"
 >;
 
 export const ResendConfirmationCode =
@@ -23,9 +24,17 @@ export const ResendConfirmationCode =
     clock,
     messages,
     otp,
+    tokenVerifier,
   }: ResendConfirmationCodeServices): ResendConfirmationCodeTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
+    await verifyRequestSecretHash(
+      ctx,
+      { cognito, tokenVerifier },
+      req.ClientId,
+      req.Username,
+      req.SecretHash,
+    );
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
       throw new UserNotFoundError();

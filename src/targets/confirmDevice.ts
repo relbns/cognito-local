@@ -2,10 +2,7 @@ import type {
   ConfirmDeviceRequest,
   ConfirmDeviceResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 export type ConfirmDeviceTarget = Target<
@@ -13,24 +10,15 @@ export type ConfirmDeviceTarget = Target<
   ConfirmDeviceResponse
 >;
 
-type ConfirmDeviceServices = Pick<Services, "cognito" | "clock">;
+type ConfirmDeviceServices = Pick<Services, "clock" | "tokenVerifier">;
 
 export const ConfirmDevice =
-  ({ cognito, clock }: ConfirmDeviceServices): ConfirmDeviceTarget =>
+  ({ clock, tokenVerifier }: ConfirmDeviceServices): ConfirmDeviceTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     const now = clock.get();
     const device = {

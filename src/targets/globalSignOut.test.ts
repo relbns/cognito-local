@@ -1,11 +1,11 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { UserPoolService } from "../services";
 import { GlobalSignOut, type GlobalSignOutTarget } from "./globalSignOut";
@@ -19,12 +19,12 @@ describe("GlobalSignOut target", () => {
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService();
     globalSignOut = GlobalSignOut({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
       clock: new ClockFake(currentDate),
     });
   });
 
-  it("clears RefreshTokens for a valid user", async () => {
+  it("revokes every refresh and access token for a valid user", async () => {
     const user = TDB.user({
       RefreshTokens: ["token1", "token2"],
     });
@@ -49,6 +49,7 @@ describe("GlobalSignOut target", () => {
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...user,
       RefreshTokens: [],
+      TokenOrigins: [],
       UserLastModifiedDate: currentDate,
     });
   });
@@ -56,7 +57,7 @@ describe("GlobalSignOut target", () => {
   it("throws if token is invalid", async () => {
     await expect(
       globalSignOut(TestContext, { AccessToken: "invalid-token" }),
-    ).rejects.toBeInstanceOf(InvalidParameterError);
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
 
     expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });
@@ -77,7 +78,7 @@ describe("GlobalSignOut target", () => {
 
     await expect(
       globalSignOut(TestContext, { AccessToken: validToken }),
-    ).rejects.toBeInstanceOf(UserNotFoundError);
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
 
     expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });

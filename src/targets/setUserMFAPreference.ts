@@ -2,10 +2,8 @@ import type {
   SetUserMFAPreferenceRequest,
   SetUserMFAPreferenceResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import { InvalidParameterError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 export type SetUserMFAPreferenceTarget = Target<
@@ -13,28 +11,21 @@ export type SetUserMFAPreferenceTarget = Target<
   SetUserMFAPreferenceResponse
 >;
 
-type SetUserMFAPreferenceServices = Pick<Services, "cognito">;
+type SetUserMFAPreferenceServices = Pick<Services, "tokenVerifier">;
 
 export const SetUserMFAPreference =
-  ({ cognito }: SetUserMFAPreferenceServices): SetUserMFAPreferenceTarget =>
+  ({
+    tokenVerifier,
+  }: SetUserMFAPreferenceServices): SetUserMFAPreferenceTarget =>
   async (ctx, req) => {
     if (!req.AccessToken) {
       throw new InvalidParameterError("Missing required parameter AccessToken");
     }
 
-    const decoded = jwt.decode(req.AccessToken) as Token | null;
-    if (!decoded) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decoded.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decoded.sub);
-    if (!user) {
-      throw new NotAuthorizedError();
-    }
 
     const sms = req.SMSMfaSettings;
     const software = req.SoftwareTokenMfaSettings;

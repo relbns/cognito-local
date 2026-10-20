@@ -25,7 +25,7 @@ describe("AdminUserGlobalSignOut target", () => {
     });
   });
 
-  it("clears RefreshTokens for the user", async () => {
+  it("revokes every refresh and access token for the user", async () => {
     const user = TDB.user({
       Username: "testuser",
       RefreshTokens: ["token1", "token2"],
@@ -41,6 +41,7 @@ describe("AdminUserGlobalSignOut target", () => {
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...user,
       RefreshTokens: [],
+      TokenOrigins: [],
       UserLastModifiedDate: currentDate,
     });
   });

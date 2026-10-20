@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import {
   AdminAddUserToGroupCommand,
   AdminCreateUserCommand,
@@ -20,6 +21,7 @@ import {
   DescribeUserPoolClientCommand,
   DescribeUserPoolCommand,
   ForgotPasswordCommand,
+  GetTokensFromRefreshTokenCommand,
   GetUserCommand,
   GlobalSignOutCommand,
   InitiateAuthCommand,
@@ -29,6 +31,7 @@ import {
   ListUsersCommand,
   NotAuthorizedException,
   RespondToAuthChallengeCommand,
+  RevokeTokenCommand,
   SignUpCommand,
   UpdateUserAttributesCommand,
   UpdateUserPoolClientCommand,
@@ -398,6 +401,11 @@ describe(
         });
 
         await cognito.send(new GlobalSignOutCommand({ AccessToken }));
+        const afterSignOut = await cognito
+          .send(new GetUserCommand({ AccessToken }))
+          .catch((e) => e);
+        expect(afterSignOut).toBeInstanceOf(NotAuthorizedException);
+        expect(afterSignOut.message).toBe("Access Token has been revoked");
         const refresh = await cognito
           .send(
             new InitiateAuthCommand({
@@ -410,6 +418,109 @@ describe(
           )
           .catch((e) => e);
         expect(refresh).toBeInstanceOf(NotAuthorizedException);
+        expect(refresh.message).toBe("Refresh Token has been revoked");
+      });
+
+      it("rejects a garbage access token with NotAuthorizedException", async () => {
+        const { cognito } = await setup();
+        const error = await cognito
+          .send(new GetUserCommand({ AccessToken: "garbage" }))
+          .catch((e) => e);
+        expect(error).toBeInstanceOf(NotAuthorizedException);
+        expect(error.message).toBe("Invalid Access Token");
+        expect(error.$metadata.attempts).toBe(1);
+      });
+
+      it("revokes a refresh token and honours the client's token validity", async () => {
+        const { cognito, UserPoolId, ClientId } = await setup();
+        await cognito.send(
+          new UpdateUserPoolClientCommand({
+            UserPoolId,
+            ClientId,
+            AccessTokenValidity: 15,
+            TokenValidityUnits: { AccessToken: "minutes" },
+          }),
+        );
+        await createConfirmedUser(cognito, UserPoolId, "rae");
+        const auth = await passwordLogin(cognito, ClientId, "rae");
+        expect(auth.AuthenticationResult?.ExpiresIn).toBe(900);
+        const RefreshToken = auth.AuthenticationResult!.RefreshToken!;
+
+        const refreshed = await cognito.send(
+          new GetTokensFromRefreshTokenCommand({ ClientId, RefreshToken }),
+        );
+        expect(refreshed.AuthenticationResult?.ExpiresIn).toBe(900);
+
+        await cognito.send(
+          new RevokeTokenCommand({ ClientId, Token: RefreshToken }),
+        );
+        const revoked = await cognito
+          .send(
+            new GetUserCommand({
+              AccessToken: refreshed.AuthenticationResult!.AccessToken!,
+            }),
+          )
+          .catch((e) => e);
+        expect(revoked).toBeInstanceOf(NotAuthorizedException);
+        expect(revoked.message).toBe("Access Token has been revoked");
+      });
+
+      it("requires a matching SECRET_HASH from a client with a secret", async () => {
+        const { cognito, UserPoolId } = await setup();
+        const app = await cognito.send(
+          new CreateUserPoolClientCommand({
+            UserPoolId,
+            ClientName: "server",
+            GenerateSecret: true,
+          }),
+        );
+        const ClientId = app.UserPoolClient!.ClientId!;
+        const secret = app.UserPoolClient!.ClientSecret!;
+        const hash = (username: string) =>
+          createHmac("sha256", secret)
+            .update(username + ClientId)
+            .digest("base64");
+        await createConfirmedUser(cognito, UserPoolId, "sam");
+        const signIn = (extra: Record<string, string>) =>
+          cognito.send(
+            new InitiateAuthCommand({
+              ClientId,
+              AuthFlow: "USER_PASSWORD_AUTH",
+              AuthParameters: { USERNAME: "sam", PASSWORD, ...extra },
+            }),
+          );
+
+        const missing = await signIn({}).catch((e) => e);
+        expect(missing).toBeInstanceOf(NotAuthorizedException);
+        expect(missing.message).toBe(
+          `Client ${ClientId} is configured for secret but secret was not received`,
+        );
+        const wrong = await signIn({ SECRET_HASH: hash("someone") }).catch(
+          (e) => e,
+        );
+        expect(wrong.message).toBe(
+          `Unable to verify secret hash for client ${ClientId}`,
+        );
+        const ok = await signIn({ SECRET_HASH: hash("sam") });
+        expect(ok.AuthenticationResult?.AccessToken).toBeDefined();
+      });
+
+      it("answers an unknown operation once, without SDK retries", async () => {
+        const cognito = client();
+        cognito.middlewareStack.add(
+          (next) => async (args: any) => {
+            args.request.headers["x-amz-target"] =
+              "AWSCognitoIdentityProviderService.NoSuchOperation";
+            return next(args);
+          },
+          { step: "build" },
+        );
+        const error = await cognito
+          .send(new ListUserPoolsCommand({ MaxResults: 1 }))
+          .catch((e) => e);
+        expect(error.name).toBe("UnknownOperationException");
+        expect(error.$metadata.httpStatusCode).toBe(400);
+        expect(error.$metadata.attempts).toBe(1);
       });
 
       describe("errors surface as the modeled v3 exception classes", () => {

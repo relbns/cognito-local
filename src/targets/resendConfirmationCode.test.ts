@@ -9,11 +9,13 @@ import {
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { UserNotFoundError } from "../errors";
-import type { Messages, UserPoolService } from "../services";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
+import type { CognitoService, Messages, UserPoolService } from "../services";
+import type { TokenVerifier } from "../services/tokenVerifier";
 import {
   ResendConfirmationCode,
   type ResendConfirmationCodeTarget,
@@ -22,6 +24,8 @@ import {
 const currentDate = new Date();
 
 describe("ResendConfirmationCode target", () => {
+  let mockCognito: MockedObject<CognitoService>;
+  let mockTokenVerifier: MockedObject<TokenVerifier>;
   let resendConfirmationCode: ResendConfirmationCodeTarget;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let mockMessages: MockedObject<Messages>;
@@ -32,15 +36,39 @@ describe("ResendConfirmationCode target", () => {
       Id: "test",
       AutoVerifiedAttributes: ["email"],
     });
+    mockCognito = newMockCognitoService(mockUserPoolService);
+    mockTokenVerifier = newMockTokenVerifier();
     mockMessages = newMockMessages();
     mockOtp = vi.fn().mockReturnValue("123456");
 
     resendConfirmationCode = ResendConfirmationCode({
-      cognito: newMockCognitoService(mockUserPoolService),
+      cognito: mockCognito,
+      tokenVerifier: mockTokenVerifier,
       clock: new ClockFake(currentDate),
       messages: mockMessages,
       otp: mockOtp,
     });
+  });
+
+  it("checks SecretHash against the username", async () => {
+    const client = TDB.appClient({ ClientSecret: "secret" });
+    mockCognito.getAppClient.mockResolvedValue(client);
+    mockTokenVerifier.verifySecretHash.mockImplementation(() => {
+      throw new NotAuthorizedError("Unable to verify secret hash");
+    });
+
+    await expect(
+      resendConfirmationCode(TestContext, {
+        ClientId: client.ClientId,
+        Username: "u",
+        SecretHash: "bad",
+      }),
+    ).rejects.toEqual(new NotAuthorizedError("Unable to verify secret hash"));
+    expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+      client,
+      ["u"],
+      "bad",
+    );
   });
 
   it("generates code, delivers message, saves on user", async () => {

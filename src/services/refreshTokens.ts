@@ -1,0 +1,59 @@
+import type { AppClient } from "./appClient";
+import type { Clock } from "./clock";
+import type { Context } from "./context";
+import type { TokenGenerator, Tokens } from "./tokenGenerator";
+import { isTokenOriginActive, withTokenOrigin } from "./tokenRevocation";
+import type { VerifiedRefreshToken } from "./tokenVerifier";
+
+export interface RefreshedTokens extends VerifiedRefreshToken {
+  tokens: Tokens;
+  scopes: string[];
+}
+
+/** Issues access and ID tokens in the same session (origin_jti). */
+export const refreshTokens = async (
+  ctx: Context,
+  services: { clock: Clock; tokenGenerator: TokenGenerator },
+  client: AppClient,
+  verified: VerifiedRefreshToken,
+  clientMetadata?: Record<string, string>,
+): Promise<RefreshedTokens> => {
+  const { claims, userPool } = verified;
+  let { user } = verified;
+
+  const now = services.clock.get();
+  const originJti = typeof claims.jti === "string" ? claims.jti : undefined;
+  if (originJti && !isTokenOriginActive(user, originJti, now)) {
+    user = withTokenOrigin(
+      user,
+      {
+        Jti: originJti,
+        ClientId: client.ClientId,
+        ExpiresAt:
+          typeof claims.exp === "number"
+            ? claims.exp
+            : Math.floor(now.getTime() / 1000),
+      },
+      now,
+    );
+    await userPool.saveUser(ctx, user);
+  }
+
+  const scopes =
+    typeof claims.scope === "string"
+      ? claims.scope.split(" ").filter(Boolean)
+      : [];
+  const userGroups = await userPool.listUserGroupMembership(ctx, user);
+  const tokens = await services.tokenGenerator.generate(
+    ctx,
+    user,
+    userGroups,
+    client,
+    clientMetadata,
+    "RefreshTokens",
+    scopes,
+    { originJti },
+  );
+
+  return { claims, user, userPool, tokens, scopes };
+};

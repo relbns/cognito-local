@@ -10,6 +10,7 @@ import {
 import type { Services } from "../services";
 import { enforceAliasUniqueness } from "../services/aliases";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -24,9 +25,20 @@ export const ConfirmSignUp =
     cognito,
     clock,
     triggers,
-  }: Pick<Services, "cognito" | "clock" | "triggers">): ConfirmSignUpTarget =>
+    tokenVerifier,
+  }: Pick<
+    Services,
+    "clock" | "cognito" | "tokenVerifier" | "triggers"
+  >): ConfirmSignUpTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
+    await verifyRequestSecretHash(
+      ctx,
+      { cognito, tokenVerifier },
+      req.ClientId,
+      req.Username,
+      req.SecretHash,
+    );
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
       throw new NotAuthorizedError();

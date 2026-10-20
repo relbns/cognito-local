@@ -2,10 +2,8 @@ import type {
   GlobalSignOutRequest,
   GlobalSignOutResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
+import { withAllTokensRevoked } from "../services/tokenRevocation";
 import type { Target } from "./Target";
 
 export type GlobalSignOutTarget = Target<
@@ -13,28 +11,18 @@ export type GlobalSignOutTarget = Target<
   GlobalSignOutResponse
 >;
 
-type GlobalSignOutServices = Pick<Services, "cognito" | "clock">;
+type GlobalSignOutServices = Pick<Services, "clock" | "tokenVerifier">;
 
 export const GlobalSignOut =
-  ({ cognito, clock }: GlobalSignOutServices): GlobalSignOutTarget =>
+  ({ clock, tokenVerifier }: GlobalSignOutServices): GlobalSignOutTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     await userPool.saveUser(ctx, {
-      ...user,
-      RefreshTokens: [],
+      ...withAllTokensRevoked(user),
       UserLastModifiedDate: clock.get(),
     });
 

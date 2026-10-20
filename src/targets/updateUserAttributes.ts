@@ -2,8 +2,7 @@ import type {
   UpdateUserAttributesRequest,
   UpdateUserAttributesResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import { InvalidParameterError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
 import {
   aliasAttributesTouchedBy,
@@ -13,7 +12,6 @@ import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
 import type { Present } from "../services/sdkTypes";
-import type { Token } from "../services/tokenGenerator";
 import {
   attributesAppend,
   hasUnverifiedContactAttributes,
@@ -63,31 +61,21 @@ export type UpdateUserAttributesTarget = Target<
 
 type UpdateUserAttributesServices = Pick<
   Services,
-  "clock" | "cognito" | "otp" | "messages"
+  "clock" | "messages" | "otp" | "tokenVerifier"
 >;
 
 export const UpdateUserAttributes =
   ({
     clock,
-    cognito,
-    otp,
     messages,
+    otp,
+    tokenVerifier,
   }: UpdateUserAttributesServices): UpdateUserAttributesTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      ctx.logger.info("Unable to decode token");
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new NotAuthorizedError();
-    }
 
     const permittedAttributeChanges = validatePermittedAttributeChanges(
       req.UserAttributes,

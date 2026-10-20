@@ -9,7 +9,11 @@ import Pino from "pino-http";
 import * as uuid from "uuid";
 import { ADMIN_UI_PATH } from "../admin/html";
 import { createAdminRouter } from "../admin/routes";
-import { CognitoError, UnsupportedError } from "../errors";
+import {
+  CognitoError,
+  UnknownOperationError,
+  UnsupportedError,
+} from "../errors";
 import PublicKey from "../keys/cognitoLocal.public.json";
 import { AuthorizationCodeStore } from "../oauth2/authorizationCodeStore";
 import { attachOAuth2Routes } from "../oauth2/routes";
@@ -146,7 +150,10 @@ export const createServer = (
           .type("application/x-amz-json-1.1")
           .send(JSON.stringify(output, replacer)),
       (ex) => {
-        if (ex instanceof UnsupportedError) {
+        if (
+          ex instanceof UnsupportedError ||
+          ex instanceof UnknownOperationError
+        ) {
           if (options.development) {
             req.log.info("======");
             req.log.info("");
@@ -159,8 +166,14 @@ export const createServer = (
             req.log.info("======");
           }
 
+          if (ex instanceof UnknownOperationError) {
+            req.log.error(`Unknown operation: ${ex.message}`);
+            res.status(400).json({ __type: ex.code, message: ex.message });
+            return;
+          }
           req.log.error(`Cognito Local unsupported feature: ${ex.message}`);
-          res.status(500).json({
+          // 400, not 500: SDKs retry 5xx responses.
+          res.status(400).json({
             __type: "CognitoLocal#Unsupported",
             message: `Cognito Local unsupported feature: ${ex.message}`,
           });

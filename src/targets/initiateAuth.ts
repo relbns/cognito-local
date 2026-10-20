@@ -18,7 +18,9 @@ import {
   passwordVerifierChallengeParameters,
   startCustomAuth,
 } from "../services/customAuth";
+import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
+import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import {
   attributesToRecord,
   attributeValue,
@@ -35,10 +37,12 @@ export type InitiateAuthTarget = Target<
 type InitiateAuthServices = Pick<
   Services,
   | "authSessions"
+  | "clock"
   | "cognito"
   | "messages"
   | "otp"
   | "tokenGenerator"
+  | "tokenVerifier"
   | "triggers"
 >;
 
@@ -312,27 +316,22 @@ const refreshTokenAuthFlow = async (
     throw new InvalidParameterError("AuthParameters REFRESH_TOKEN is required");
   }
 
-  const user = await userPool.getUserByRefreshToken(
+  const verified = await services.tokenVerifier.verifyRefreshToken(
     ctx,
     req.AuthParameters.REFRESH_TOKEN,
+    req.ClientId,
   );
-  if (!user) {
-    throw new NotAuthorizedError();
-  }
-
-  const userGroups = await userPool.listUserGroupMembership(ctx, user);
-
-  const tokens = await services.tokenGenerator.generate(
-    ctx,
-    user,
-    userGroups,
+  services.tokenVerifier.verifySecretHash(
     userPoolClient,
-    // The docs for the pre-token generation trigger only say that the ClientMetadata is passed as part of the
-    // AdminRespondToAuthChallenge and RespondToAuthChallenge triggers.
-    //
-    // source: https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-pre-token-generation.html
-    undefined,
-    "RefreshTokens",
+    [refreshSecretHashUsername(userPool, verified.user)],
+    req.AuthParameters.SECRET_HASH,
+  );
+
+  const { tokens } = await refreshTokens(
+    ctx,
+    services,
+    userPoolClient,
+    verified,
   );
 
   return {
@@ -344,8 +343,8 @@ const refreshTokenAuthFlow = async (
       RefreshToken: undefined,
       IdToken: tokens.IdToken,
       NewDeviceMetadata: undefined,
-      TokenType: undefined,
-      ExpiresIn: undefined,
+      TokenType: tokens.TokenType,
+      ExpiresIn: tokens.ExpiresIn,
     },
   };
 };
@@ -435,6 +434,17 @@ export const InitiateAuth =
     );
     if (!userPoolClient) {
       throw new NotAuthorizedError();
+    }
+
+    if (
+      req.AuthFlow !== "REFRESH_TOKEN" &&
+      req.AuthFlow !== "REFRESH_TOKEN_AUTH"
+    ) {
+      services.tokenVerifier.verifySecretHash(
+        userPoolClient,
+        [req.AuthParameters?.USERNAME],
+        req.AuthParameters?.SECRET_HASH,
+      );
     }
 
     if (req.AuthFlow === "USER_PASSWORD_AUTH") {

@@ -37,10 +37,11 @@ describe("CreateUserPoolClient target", () => {
         ClientName: "clientName",
         CreationDate: originalDate,
         LastModifiedDate: originalDate,
+        EnableTokenRevocation: true,
         UserPoolId: "userPoolId",
         TokenValidityUnits: {
           AccessToken: "hours",
-          IdToken: "minutes",
+          IdToken: "hours",
           RefreshToken: "days",
         },
       },
@@ -52,14 +53,63 @@ describe("CreateUserPoolClient target", () => {
         ClientName: "clientName",
         CreationDate: originalDate,
         LastModifiedDate: originalDate,
+        EnableTokenRevocation: true,
         UserPoolId: "userPoolId",
         TokenValidityUnits: {
           AccessToken: "hours",
-          IdToken: "minutes",
+          IdToken: "hours",
           RefreshToken: "days",
         },
       },
     });
+  });
+
+  it.each([
+    [
+      {
+        AccessTokenValidity: 4,
+        TokenValidityUnits: { AccessToken: "minutes" },
+      },
+    ],
+    [{ AccessTokenValidity: 25 }],
+    [{ IdTokenValidity: 25 }],
+    [{ RefreshTokenValidity: 3651 }],
+    [
+      {
+        RefreshTokenValidity: 59,
+        TokenValidityUnits: { RefreshToken: "minutes" },
+      },
+    ],
+  ] as const)(
+    "rejects token validity outside AWS's range: %j",
+    async (validity) => {
+      await expect(
+        createUserPoolClient(TestContext, {
+          ClientName: "clientName",
+          UserPoolId: "userPoolId",
+          ...validity,
+        }),
+      ).rejects.toEqual(
+        new InvalidParameterError("Invalid range for token validity."),
+      );
+    },
+  );
+
+  it("accepts token validity at the edges of AWS's range", async () => {
+    await createUserPoolClient(TestContext, {
+      ClientName: "clientName",
+      UserPoolId: "userPoolId",
+      AccessTokenValidity: 5,
+      IdTokenValidity: 1,
+      RefreshTokenValidity: 60,
+      TokenValidityUnits: {
+        AccessToken: "minutes",
+        IdToken: "days",
+        RefreshToken: "minutes",
+      },
+    });
+
+    expect(mockUserPoolService.saveAppClient).toHaveBeenCalled();
   });
 
   it("stores and returns AuthSessionValidity", async () => {

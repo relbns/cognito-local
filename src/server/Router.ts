@@ -1,4 +1,4 @@
-import { UnsupportedError } from "../errors";
+import { UnknownOperationError } from "../errors";
 import type { Services } from "../services";
 import type { Context } from "../services/context";
 import { isSupportedTarget } from "../targets/Target";
@@ -14,7 +14,9 @@ export const Router =
     if (!isSupportedTarget(target)) {
       return () =>
         Promise.reject(
-          new UnsupportedError(`Unsupported x-amz-target header "${target}"`),
+          new UnknownOperationError(
+            `Unsupported x-amz-target header "${target}"`,
+          ),
         );
     }
 

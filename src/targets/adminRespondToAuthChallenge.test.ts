@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
@@ -52,6 +53,7 @@ describe("AdminRespondToAuthChallenge target", () => {
       clock,
       cognito: mockCognitoService,
       tokenGenerator: mockTokenGenerator,
+      tokenVerifier: newMockTokenVerifier(),
       triggers: mockTriggers,
     });
   });
@@ -120,6 +122,8 @@ describe("AdminRespondToAuthChallenge target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -170,6 +174,8 @@ describe("AdminRespondToAuthChallenge target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -257,6 +263,8 @@ describe("AdminRespondToAuthChallenge target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -283,6 +291,8 @@ describe("AdminRespondToAuthChallenge target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       mockTriggers.enabled.mockImplementation(
         (name) => name !== "PostAuthentication",

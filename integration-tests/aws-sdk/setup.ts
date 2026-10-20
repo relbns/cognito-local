@@ -28,6 +28,7 @@ import type { DataStoreFactory } from "../../src/services/dataStore/factory";
 import { StormDBDataStoreFactory } from "../../src/services/dataStore/stormDb";
 import { otp } from "../../src/services/otp";
 import { JwtTokenGenerator } from "../../src/services/tokenGenerator";
+import { JwtTokenVerifier } from "../../src/services/tokenVerifier";
 import { UserPoolServiceFactoryImpl } from "../../src/services/userPoolService";
 
 const mkdtemp = promisify(fs.mkdtemp);
@@ -104,7 +105,12 @@ export const withCognitoSdk =
         tokenGenerator: new JwtTokenGenerator(
           clock,
           triggers,
-          DefaultConfig.TokenConfig,
+          config.TokenConfig,
+        ),
+        tokenVerifier: new JwtTokenVerifier(
+          clock,
+          cognitoClient,
+          config.TokenConfig,
         ),
       };
       const router = Router(services);

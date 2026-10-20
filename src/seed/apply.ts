@@ -109,7 +109,7 @@ const NESTED_POOL_KEYS = new Set([
 
 const TOKEN_UNIT_DEFAULTS = {
   AccessToken: "hours",
-  IdToken: "minutes",
+  IdToken: "hours",
   RefreshToken: "days",
 } as const;
 

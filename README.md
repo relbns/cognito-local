@@ -7,6 +7,7 @@ A local Amazon Cognito User Pool emulator. This fork of [jagregory/cognito-local
 - **PR #468 integrated.** [jagregory/cognito-local#468](https://github.com/jagregory/cognito-local/pull/468) by [vipinkashyap](https://github.com/vipinkashyap) (full User Pool API coverage, OAuth2/OIDC endpoints, MFA, WebAuthn and more) merged on top of upstream 5.3.0, with Biome fixes.
 - **Stateful CUSTOM_AUTH.** `InitiateAuth` / `RespondToAuthChallenge` keep a real challenge session: the Define, Create and Verify triggers run as in Cognito, Define gets the session history, Verify gets the private challenge parameters, a wrong answer returns a new `Session`, and the session expires after the app client's `AuthSessionValidity` (3-15 minutes), else `AuthSessionConfig.AuthSessionValidity` (3 minutes by default).
 - **Cognito-compatible `/oauth2/authorize` and `/oauth2/token`.** `response_type` `code` or `token` in any case, optional PKCE, scopes checked against the client's `AllowedOAuthScopes` and returned in the `scope` claim, client secret by HTTP Basic or in the body (`invalid_client` otherwise), `identity_provider=COGNITO` shows the built-in login.
+- **Tokens checked as in Cognito.** Access tokens are verified on every token-authorised call (signature, issuer, expiry, user, revocation), `GlobalSignOut`, `AdminUserGlobalSignOut` and `RevokeToken` revoke tokens and survive a restart, refresh tokens expire, the app client's token validity sets `exp` and `ExpiresIn`, and `SECRET_HASH` is required from clients with a secret. See [docs/tokens.md](docs/tokens.md).
 - **Admin UI at `/_admin`.** User pools, app clients, users (create, confirm, set password, enable or disable, groups), a codes viewer with every sign-up, forgot-password, MFA and CUSTOM_AUTH code (including the OTP your `CreateAuthChallenge` trigger generated), a JSON feed of the same codes for test scripts, and a JWT decoder that verifies a token against the pool.
 
 ## Quick start
@@ -95,6 +96,8 @@ npx github:relbns/cognito-local status --json
 | `AdminUIConfig.CodeLogSize` | `100` | How many recent codes the admin UI keeps |
 | `COGNITO_LOCAL_ADMIN_UI` (env) | on | `false`, `0` or `off` disables the admin UI |
 | `PasswordPolicyConfig.Enforce` | `true` | Enforce each pool's `PasswordPolicy` (AWS default when unset); `false` restores the old lenient behaviour |
+| `TokenConfig.Verify` | `true` | Verify access and refresh tokens as Cognito does; `false` restores the old behaviour (access tokens decoded unchecked): see [docs/tokens.md](docs/tokens.md) |
+| `TokenConfig.CheckSecretHash` | `true` | Require `SECRET_HASH` / `SecretHash` / `ClientSecret` from app clients with a secret; `false` skips the check |
 | `LambdaClient`, `KMSConfig` client options | -- | AWS SDK v3 client options (`region`, `endpoint`, `credentials`, `maxAttempts`, ...). v2 names (`maxRetries`, `sslEnabled`, `httpOptions`, top-level keys) are translated with a startup warning, others are ignored with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md) |
 
 ## Not supported yet
@@ -104,8 +107,8 @@ npx github:relbns/cognito-local status --json
 - CUSTOM_AUTH sessions and the admin UI code log are in memory and are lost on restart (users, pools and clients persist).
 - The admin UI has no authentication. Anyone who can reach the port can read users, codes and client secrets. Do not expose it beyond your machine.
 - The built-in login page is a plain form without Cognito's styling.
-- Access tokens are not verified on token-authorised calls, so a token still works after `GlobalSignOut` or expiry, and refresh tokens never expire.
-- `SECRET_HASH` is not checked, the `USER_AUTH` flow is not supported, and SRP proofs are not verified.
+- The `USER_AUTH` flow is not supported, and SRP proofs are not verified.
+- Refresh token rotation is not supported.
 
 ## Credits
 

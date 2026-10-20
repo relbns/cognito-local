@@ -10,6 +10,7 @@ import {
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { UUID } from "../__tests__/patterns";
@@ -18,15 +19,24 @@ import * as TDB from "../__tests__/testDataBuilder";
 import {
   InvalidParameterError,
   InvalidPasswordError,
+  NotAuthorizedError,
   UserLambdaValidationError,
   UsernameExistsError,
 } from "../errors";
 import { type Config, DefaultConfig } from "../server/config";
-import type { Messages, Triggers, UserPoolService } from "../services";
+import type {
+  CognitoService,
+  Messages,
+  Triggers,
+  UserPoolService,
+} from "../services";
+import type { TokenVerifier } from "../services/tokenVerifier";
 import { attribute } from "../services/userPoolService";
 import { SignUp, type SignUpTarget } from "./signUp";
 
 describe("SignUp target", () => {
+  let mockCognito: MockedObject<CognitoService>;
+  let mockTokenVerifier: MockedObject<TokenVerifier>;
   let signUp: SignUpTarget;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let mockMessages: MockedObject<Messages>;
@@ -39,18 +49,43 @@ describe("SignUp target", () => {
     now = new Date(2020, 1, 2, 3, 4, 5);
 
     mockUserPoolService = newMockUserPoolService();
+    mockCognito = newMockCognitoService(mockUserPoolService);
+    mockTokenVerifier = newMockTokenVerifier();
     mockMessages = newMockMessages();
     mockOtp = vi.fn();
     mockTriggers = newMockTriggers();
     config = DefaultConfig;
     signUp = SignUp({
-      cognito: newMockCognitoService(mockUserPoolService),
+      cognito: mockCognito,
+      tokenVerifier: mockTokenVerifier,
       clock: new ClockFake(now),
       messages: mockMessages,
       otp: mockOtp,
       config,
       triggers: mockTriggers,
     });
+  });
+
+  it("checks SecretHash against the username", async () => {
+    const client = TDB.appClient({ ClientSecret: "secret" });
+    mockCognito.getAppClient.mockResolvedValue(client);
+    mockTokenVerifier.verifySecretHash.mockImplementation(() => {
+      throw new NotAuthorizedError("Unable to verify secret hash");
+    });
+
+    await expect(
+      signUp(TestContext, {
+        ClientId: client.ClientId,
+        Username: "u",
+        SecretHash: "bad",
+        Password: "Passw0rd!",
+      }),
+    ).rejects.toEqual(new NotAuthorizedError("Unable to verify secret hash"));
+    expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+      client,
+      ["u"],
+      "bad",
+    );
   });
 
   it("throws if user already exists", async () => {
@@ -878,6 +913,7 @@ describe("SignUp target", () => {
     it("accepts a weak password when enforcement is off", async () => {
       signUp = SignUp({
         cognito: newMockCognitoService(mockUserPoolService),
+        tokenVerifier: mockTokenVerifier,
         clock: new ClockFake(now),
         messages: mockMessages,
         otp: mockOtp,

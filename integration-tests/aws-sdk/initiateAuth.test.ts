@@ -198,6 +198,7 @@ describe(
         iat: expect.any(Number),
         iss: `http://localhost:9229/${userPoolId}`,
         jti: expect.stringMatching(UUID),
+        origin_jti: expect.stringMatching(UUID),
         scope: "aws.cognito.signin.user.admin",
         sub: userSub,
         token_use: "access",
@@ -217,6 +218,7 @@ describe(
         iat: expect.any(Number),
         iss: `http://localhost:9229/${userPoolId}`,
         jti: expect.stringMatching(UUID),
+        origin_jti: expect.stringMatching(UUID),
         sub: userSub,
         token_use: "id",
       });
@@ -225,6 +227,7 @@ describe(
         jwt.decode(response.AuthenticationResult?.RefreshToken as string),
       ).toEqual({
         "cognito:username": "abc",
+        client_id: upc.UserPoolClient?.ClientId,
         email: "example@example.com",
         exp: expect.any(Number),
         iat: expect.any(Number),
@@ -307,6 +310,7 @@ describe(
         iat: expect.any(Number),
         iss: `http://localhost:9229/${userPoolId}`,
         jti: expect.stringMatching(UUID),
+        origin_jti: expect.stringMatching(UUID),
         scope: "aws.cognito.signin.user.admin",
         sub: userSub,
         token_use: "access",
@@ -328,6 +332,7 @@ describe(
         iat: expect.any(Number),
         iss: `http://localhost:9229/${userPoolId}`,
         jti: expect.stringMatching(UUID),
+        origin_jti: expect.stringMatching(UUID),
         sub: userSub,
         token_use: "id",
       });

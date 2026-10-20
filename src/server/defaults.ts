@@ -24,6 +24,7 @@ import type { MessageSender } from "../services/messageDelivery/messageSender";
 import { SmtpMessageSender } from "../services/messageDelivery/smtpMessageSender";
 import { otp } from "../services/otp";
 import { JwtTokenGenerator } from "../services/tokenGenerator";
+import { JwtTokenVerifier } from "../services/tokenVerifier";
 import { UserPoolServiceFactoryImpl } from "../services/userPoolService";
 import { type ConfigOverrides, loadConfig } from "./config";
 import { Router } from "./Router";
@@ -141,6 +142,11 @@ export const createDefaultServices = async (
     messages: codeLog ? new RecordingMessages(messages, codeLog) : messages,
     otp,
     tokenGenerator: new JwtTokenGenerator(clock, triggers, config.TokenConfig),
+    tokenVerifier: new JwtTokenVerifier(
+      clock,
+      cognitoClient,
+      config.TokenConfig,
+    ),
     triggers,
   };
 

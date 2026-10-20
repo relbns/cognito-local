@@ -78,6 +78,8 @@ export const DefaultConfig: Config = {
   },
   TokenConfig: {
     IssuerDomain: `http://${issuerHost}:${port}`,
+    Verify: true,
+    CheckSecretHash: true,
   },
   AuthSessionConfig: {
     AuthSessionValidity: DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,

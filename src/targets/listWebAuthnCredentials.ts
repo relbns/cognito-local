@@ -1,8 +1,5 @@
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { paginate } from "../services/pagination";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 interface ListWebAuthnCredentialsRequest {
@@ -21,21 +18,14 @@ export type ListWebAuthnCredentialsTarget = Target<
 >;
 
 export const ListWebAuthnCredentials =
-  ({ cognito }: Pick<Services, "cognito">): ListWebAuthnCredentialsTarget =>
+  ({
+    tokenVerifier,
+  }: Pick<Services, "tokenVerifier">): ListWebAuthnCredentialsTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
 
