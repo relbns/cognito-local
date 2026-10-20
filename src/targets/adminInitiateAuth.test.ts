@@ -52,6 +52,42 @@ describe("AdminInitiateAuth target", () => {
     });
   });
 
+  it("invokes PostAuthentication without ClientMetadata before issuing tokens", async () => {
+    mockTokenGenerator.generate.mockResolvedValue({
+      AccessToken: "access",
+      IdToken: "id",
+      RefreshToken: "refresh",
+      ExpiresIn: 3600,
+      TokenType: "Bearer",
+    });
+    mockTriggers.enabled.mockImplementation(
+      (name) => name === "PostAuthentication",
+    );
+    const existingUser = TDB.user();
+    mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
+    mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+
+    await adminInitiateAuth(TestContext, {
+      AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+      ClientId: userPoolClient.ClientId,
+      UserPoolId: userPoolClient.UserPoolId,
+      AuthParameters: {
+        USERNAME: existingUser.Username,
+        PASSWORD: existingUser.Password,
+      },
+      ClientMetadata: { client: "metadata" },
+    });
+
+    expect(mockTriggers.postAuthentication).toHaveBeenCalledWith(TestContext, {
+      clientId: userPoolClient.ClientId,
+      clientMetadata: undefined,
+      source: "PostAuthentication_Authentication",
+      userAttributes: existingUser.Attributes,
+      username: existingUser.Username,
+      userPoolId: userPoolClient.UserPoolId,
+    });
+  });
+
   it("create tokens with username, password and admin user password auth flow", async () => {
     mockTokenGenerator.generate.mockResolvedValue({
       AccessToken: "access",

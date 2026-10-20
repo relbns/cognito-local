@@ -209,6 +209,12 @@ export interface UserPoolService {
   removeUserFromGroup(ctx: Context, group: Group, user: User): Promise<void>;
   saveGroup(ctx: Context, group: Group): Promise<void>;
   saveUser(ctx: Context, user: User): Promise<void>;
+  /** Applies `update` to the stored record, so changes made since `user` was loaded are kept. */
+  updateUser(
+    ctx: Context,
+    user: User,
+    update: (latest: User) => User,
+  ): Promise<User>;
   storeRefreshToken(
     ctx: Context,
     refreshToken: string,
@@ -425,6 +431,18 @@ export class UserPoolServiceImpl implements UserPoolService {
     await this.dataStore.set<User>(ctx, ["Users", user.Username], user);
   }
 
+  public async updateUser(
+    ctx: Context,
+    user: User,
+    update: (latest: User) => User,
+  ): Promise<User> {
+    const latest =
+      (await this.dataStore.get<User>(ctx, ["Users", user.Username])) ?? user;
+    const updated = update(latest);
+    await this.saveUser(ctx, updated);
+    return updated;
+  }
+
   async listGroups(ctx: Context): Promise<readonly Group[]> {
     ctx.logger.debug("UserPoolServiceImpl.listGroups");
     const groups = await this.dataStore.get<Record<string, Group>>(
@@ -529,9 +547,8 @@ export class UserPoolServiceImpl implements UserPoolService {
       "UserPoolServiceImpl.storeRefreshToken",
     );
 
-    await this.saveUser(
-      ctx,
-      withRefreshToken(user, refreshToken, this.clock.get()),
+    await this.updateUser(ctx, user, (latest) =>
+      withRefreshToken(latest, refreshToken, this.clock.get()),
     );
   }
 }

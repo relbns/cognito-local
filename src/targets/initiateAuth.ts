@@ -85,10 +85,10 @@ const smsMfaChallenge = async (
     },
   );
 
-  await userPool.saveUser(ctx, {
-    ...user,
+  await userPool.updateUser(ctx, user, (latest) => ({
+    ...latest,
     MFACode: code,
-  });
+  }));
 
   return {
     ChallengeName: "SMS_MFA",

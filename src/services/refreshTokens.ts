@@ -24,19 +24,17 @@ export const refreshTokens = async (
   const now = services.clock.get();
   const originJti = typeof claims.jti === "string" ? claims.jti : undefined;
   if (originJti && !isTokenOriginActive(user, originJti, now)) {
-    user = withTokenOrigin(
-      user,
-      {
-        Jti: originJti,
-        ClientId: client.ClientId,
-        ExpiresAt:
-          typeof claims.exp === "number"
-            ? claims.exp
-            : Math.floor(now.getTime() / 1000),
-      },
-      now,
+    const origin = {
+      Jti: originJti,
+      ClientId: client.ClientId,
+      ExpiresAt:
+        typeof claims.exp === "number"
+          ? claims.exp
+          : Math.floor(now.getTime() / 1000),
+    };
+    user = await userPool.updateUser(ctx, user, (latest) =>
+      withTokenOrigin(latest, origin, now),
     );
-    await userPool.saveUser(ctx, user);
   }
 
   const scopes =

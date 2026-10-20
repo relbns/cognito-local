@@ -63,11 +63,11 @@ export const ResendConfirmationCode =
       deliveryDetails,
     );
 
-    await userPool.saveUser(ctx, {
-      ...user,
+    await userPool.updateUser(ctx, user, (latest) => ({
+      ...latest,
       ConfirmationCode: code,
       UserLastModifiedDate: clock.get(),
-    });
+    }));
 
     return {
       CodeDeliveryDetails: deliveryDetails,
