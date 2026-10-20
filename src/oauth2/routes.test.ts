@@ -563,14 +563,16 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       expect(res.text).toContain('name="password"');
     });
 
-    it("returns 501 for a configured federated identity provider", async () => {
+    it("redirects a configured federated identity provider to the mock IdP", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
         .query({ ...backendAuthorizeQuery, identity_provider: "Google" });
-      expect(res.status).toBe(501);
-      expect(res.text).toContain("Google");
-      expect(res.text).not.toContain('name="password"');
+      expect(res.status).toBe(302);
+      const location = new URL(res.header.location, "http://emulator");
+      expect(location.pathname).toBe("/mock-idp/Google/authorize");
+      expect(location.searchParams.get("state")).toBeTruthy();
+      expect(location.searchParams.get("state")).not.toBe("s1");
     });
 
     it("redirects invalid_request for an identity provider not enabled for the client", async () => {

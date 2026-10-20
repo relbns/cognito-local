@@ -5,6 +5,7 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import type { StringValue, UnitAnyCase } from "ms";
 import * as uuid from "uuid";
 import PrivateKey from "../keys/cognitoLocal.private.json";
+import { identitiesClaim } from "../oauth2/federation";
 import type { AppClient } from "./appClient";
 import type { Clock } from "./clock";
 import type { Context } from "./context";
@@ -60,8 +61,46 @@ const RESERVED_CLAIMS = [
 
 type RawToken = Record<
   string,
-  string | number | boolean | undefined | readonly string[]
+  string | number | boolean | undefined | readonly string[] | object
 >;
+
+const STANDARD_ID_TOKEN_CLAIMS = [
+  "name",
+  "given_name",
+  "family_name",
+  "middle_name",
+  "nickname",
+  "preferred_username",
+  "profile",
+  "picture",
+  "website",
+  "gender",
+  "birthdate",
+  "zoneinfo",
+  "locale",
+  "updated_at",
+  "phone_number",
+];
+
+function standardClaims(user: User): RawToken {
+  const claims: RawToken = {};
+  for (const name of STANDARD_ID_TOKEN_CLAIMS) {
+    const value = attributeValue(name, user.Attributes);
+    if (value !== undefined) claims[name] = value;
+  }
+  const phoneVerified = attributeValue(
+    "phone_number_verified",
+    user.Attributes,
+  );
+  if (phoneVerified !== undefined) {
+    claims.phone_number_verified = phoneVerified === "true";
+  }
+  const address = attributeValue("address", user.Attributes);
+  if (address !== undefined) claims.address = { formatted: address };
+  const identities = identitiesClaim(user.Attributes);
+  if (identities) claims.identities = identities;
+  return claims;
+}
 
 const applyTokenOverrides = (
   token: RawToken,
@@ -174,12 +213,12 @@ export class JwtTokenGenerator implements TokenGenerator {
       username: user.Username,
     };
     let idToken: RawToken = {
+      ...standardClaims(user),
       "cognito:username": user.Username,
       auth_time: authTime,
       email: attributeValue("email", user.Attributes),
-      email_verified: Boolean(
-        attributeValue("email_verified", user.Attributes) ?? false,
-      ),
+      email_verified:
+        attributeValue("email_verified", user.Attributes) === "true",
       event_id: eventId,
       iat: authTime,
       jti: uuid.v4(),

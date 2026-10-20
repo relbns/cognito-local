@@ -3,6 +3,13 @@ import type {
   AdminLinkProviderForUserResponse,
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { UserNotFoundError } from "../errors";
+import {
+  COGNITO_SUBJECT,
+  type FederatedIdentity,
+  identitiesOf,
+  identityProvidersOf,
+  newIdentity,
+} from "../oauth2/federation";
 import type { Services } from "../services";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -31,27 +38,43 @@ export const AdminLinkProviderForUser =
 
     const providerName = req.SourceUser?.ProviderName ?? "";
     const providerValue = req.SourceUser?.ProviderAttributeValue ?? "";
+    const attributeName =
+      req.SourceUser?.ProviderAttributeName ?? COGNITO_SUBJECT;
+    const provider = identityProvidersOf(userPool.options).find(
+      (p) => p.ProviderName === providerName,
+    ) ?? { ProviderName: providerName, ProviderType: providerName };
 
-    const updatedAttributes = attributesAppend(
-      user.Attributes,
-      attribute(
-        `identities`,
-        JSON.stringify([
-          {
-            providerName,
-            providerType: providerName,
-            userId: providerValue,
-            primary: false,
-            dateCreated: clock.get().getTime(),
-          },
-        ]),
+    const now = clock.get();
+    const identities: FederatedIdentity[] = [
+      ...identitiesOf(user.Attributes).filter(
+        (identity) =>
+          !(
+            identity.providerName === providerName &&
+            String(identity.userId) === providerValue
+          ),
       ),
+      newIdentity(provider, providerValue, false, now),
+    ];
+    const links = (user.ProviderLinks ?? []).filter(
+      (link) =>
+        !(
+          link.providerName === providerName &&
+          link.attributeName === attributeName &&
+          link.attributeValue === providerValue
+        ),
     );
 
     await userPool.saveUser(ctx, {
       ...user,
-      Attributes: updatedAttributes,
-      UserLastModifiedDate: clock.get(),
+      Attributes: attributesAppend(
+        user.Attributes,
+        attribute("identities", JSON.stringify(identities)),
+      ),
+      ProviderLinks: [
+        ...links,
+        { providerName, attributeName, attributeValue: providerValue },
+      ],
+      UserLastModifiedDate: now,
     });
 
     return {};

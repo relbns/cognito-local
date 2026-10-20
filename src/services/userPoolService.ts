@@ -128,6 +128,15 @@ export interface User {
     Verified: boolean;
     FriendlyDeviceName?: string;
   };
+
+  // Federated identities linked by AdminLinkProviderForUser. Internal only.
+  ProviderLinks?: ProviderLink[];
+}
+
+export interface ProviderLink {
+  providerName: string;
+  attributeName: string;
+  attributeValue: string;
 }
 
 export interface Group {

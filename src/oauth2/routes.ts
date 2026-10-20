@@ -6,36 +6,22 @@ import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
 import { attributeValue } from "../services/userPoolService";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
+import { sendAuthorizationResponse } from "./authorizationResponse";
+import { type IdentityProviderConfig, identityProvidersOf } from "./federation";
+import { attachFederationRoutes, beginFederation } from "./federationRoutes";
+import { FederationStore } from "./federationStore";
+import { escapeHtml, hiddenInput } from "./html";
 import {
   type AuthorizeParams,
   buildErrorRedirect,
   COGNITO_PROVIDER,
   decideAuthorize,
-  type FederatedProvider,
   includesIdToken,
   isClientAuthenticated,
   parseClientCredentials,
   parseScopes,
 } from "./oauthRequest";
 import { verifyS256 } from "./pkce";
-
-// Escape untrusted values before interpolating them into HTML attribute
-// contexts. Prevents reflected XSS via query params echoed into the login form
-// (e.g. state/scope, which are attacker-controllable).
-function escapeHtml(value: string | undefined): string {
-  if (!value) return "";
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-const hiddenInput = (name: string, value: string | undefined) =>
-  value === undefined
-    ? ""
-    : `  <input type="hidden" name="${name}" value="${escapeHtml(value)}" />\n`;
 
 const LOGIN_FORM = (params: {
   clientId: string;
@@ -56,15 +42,6 @@ ${hiddenInput("client_id", params.clientId)}${hiddenInput("redirect_uri", params
   <label>Password: <input type="password" name="password" /></label><br />
   <button type="submit">Sign in</button>
 </form>
-</body>
-</html>`;
-
-const FEDERATION_NOT_IMPLEMENTED = (providerName: string) => `<!DOCTYPE html>
-<html>
-<head><title>Federation not implemented</title></head>
-<body>
-<h1>Federated sign-in is not implemented</h1>
-<p>The identity provider <strong>${escapeHtml(providerName)}</strong> is configured for this app client, but cognito-local cannot redirect to third-party identity providers yet.</p>
 </body>
 </html>`;
 
@@ -97,7 +74,7 @@ async function listFederatedProviders(
   services: Services,
   ctx: Context,
   params: AuthorizeParams,
-): Promise<FederatedProvider[]> {
+): Promise<IdentityProviderConfig[]> {
   const wantsFederation =
     (params.identity_provider &&
       params.identity_provider !== COGNITO_PROVIDER) ||
@@ -107,10 +84,7 @@ async function listFederatedProviders(
     ctx,
     params.client_id,
   );
-  const options = userPool.options as { _identityProviders?: unknown };
-  return Array.isArray(options._identityProviders)
-    ? (options._identityProviders as FederatedProvider[])
-    : [];
+  return identityProvidersOf(userPool.options);
 }
 
 function refreshTokenScopes(refreshToken: string): string[] {
@@ -123,13 +97,16 @@ export function attachOAuth2Routes(
   app: Application,
   services: Services,
   codeStore: AuthorizationCodeStore,
+  federationStore: FederationStore = new FederationStore(),
 ): void {
+  attachFederationRoutes(app, services, codeStore, federationStore);
+
   app.get("/oauth2/authorize", async (req: Request, res: Response) => {
     const params = req.query as AuthorizeParams;
     const ctx: Context = { logger: req.log };
 
     const appClient = await findAppClient(services, ctx, params.client_id);
-    let providers: FederatedProvider[] = [];
+    let providers: IdentityProviderConfig[] = [];
     try {
       providers = await listFederatedProviders(services, ctx, params);
     } catch {
@@ -149,11 +126,22 @@ export function attachOAuth2Routes(
             params.state,
           ),
         );
-      case "federated":
-        return res
-          .status(501)
-          .type("text/html")
-          .send(FEDERATION_NOT_IMPLEMENTED(decision.providerName));
+      case "federated": {
+        const provider = providers.find(
+          (p) => p.ProviderName === decision.providerName,
+        );
+        if (!appClient || !provider) {
+          return badRequest(res, "Invalid identity provider");
+        }
+        return beginFederation(req, res, federationStore, {
+          clientId: appClient.ClientId,
+          userPoolId: appClient.UserPoolId,
+          redirectUri: params.redirect_uri ?? "",
+          state: params.state,
+          provider,
+          flow: decision,
+        });
+      }
       case "login":
         return res
           .status(200)
@@ -239,45 +227,14 @@ export function attachOAuth2Routes(
       return;
     }
 
-    const redirectUrl = new URL(redirect_uri ?? "");
-
-    if (decision.responseType === "token") {
-      const userGroups = await userPool.listUserGroupMembership(ctx, user);
-      const tokens = await services.tokenGenerator.generate(
-        ctx,
-        user,
-        userGroups,
-        appClient,
-        undefined,
-        "HostedAuth",
-        decision.scopes,
-      );
-      const fragment = new URLSearchParams();
-      if (includesIdToken(decision.scopes)) {
-        fragment.set("id_token", tokens.IdToken);
-      }
-      fragment.set("access_token", tokens.AccessToken);
-      fragment.set("token_type", "bearer");
-      fragment.set("expires_in", "3600");
-      if (state) fragment.set("state", state);
-      redirectUrl.hash = fragment.toString();
-      return res.redirect(redirectUrl.toString());
-    }
-
-    const code = codeStore.create({
-      clientId: client_id,
-      userPoolId: userPool.options.Id,
-      username: user.Username,
+    return sendAuthorizationResponse(ctx, res, services, codeStore, {
+      appClient,
+      userPool,
+      user,
       redirectUri: redirect_uri ?? "",
-      codeChallenge: decision.codeChallenge,
-      scope: decision.scopes.join(" "),
-      state: state ?? undefined,
+      state,
+      flow: decision,
     });
-
-    redirectUrl.searchParams.set("code", code);
-    if (state) redirectUrl.searchParams.set("state", state);
-
-    res.redirect(redirectUrl.toString());
   });
 
   app.post("/oauth2/token", async (req: Request, res: Response) => {

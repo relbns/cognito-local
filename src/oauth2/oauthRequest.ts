@@ -22,17 +22,20 @@ export interface FederatedProvider {
 
 export type ResponseType = "code" | "token";
 
+export interface AuthorizeFlow {
+  responseType: ResponseType;
+  scopes: string[];
+  codeChallenge: string | undefined;
+  codeChallengeMethod: string | undefined;
+}
+
+type FederatedTarget = { kind: "federated"; providerName: string };
+
 export type AuthorizeDecision =
   | { kind: "reject"; error: string; description: string }
   | { kind: "redirectError"; error: string; description: string }
-  | { kind: "federated"; providerName: string }
-  | {
-      kind: "login";
-      responseType: ResponseType;
-      scopes: string[];
-      codeChallenge: string | undefined;
-      codeChallengeMethod: string | undefined;
-    };
+  | (FederatedTarget & AuthorizeFlow)
+  | ({ kind: "login" } & AuthorizeFlow);
 
 export const parseScopes = (scope: string | undefined): string[] => [
   ...new Set((scope ?? "").split(/[\s+]+/).filter(Boolean)),
@@ -73,7 +76,7 @@ function decideProvider(
   params: AuthorizeParams,
   appClient: AppClient,
   providers: readonly FederatedProvider[],
-): AuthorizeDecision | null {
+): AuthorizeDecision | FederatedTarget | null {
   const { identity_provider, idp_identifier } = params;
   const supported = appClient.SupportedIdentityProviders ?? [];
 
@@ -168,16 +171,20 @@ export function decideAuthorize(
   if ("kind" in scopeDecision) return scopeDecision;
 
   const providerDecision = decideProvider(params, appClient, providers);
-  if (providerDecision) return providerDecision;
+  if (providerDecision && providerDecision.kind !== "federated") {
+    return providerDecision;
+  }
 
   const usesPkce = responseType === "code" && Boolean(code_challenge);
-  return {
-    kind: "login",
+  const authorizeFlow: AuthorizeFlow = {
     responseType,
     scopes: scopeDecision.scopes,
     codeChallenge: usesPkce ? code_challenge : undefined,
     codeChallengeMethod: usesPkce ? code_challenge_method : undefined,
   };
+  return providerDecision
+    ? { ...providerDecision, ...authorizeFlow }
+    : { kind: "login", ...authorizeFlow };
 }
 
 export function buildErrorRedirect(
