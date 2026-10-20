@@ -41,6 +41,9 @@ export interface Config {
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
 const hostname = process.env.HOST ?? "localhost";
+const issuerHost = ["0.0.0.0", "::", "[::]"].includes(hostname)
+  ? "localhost"
+  : hostname;
 const adminUIEnabled = !["0", "false", "off"].includes(
   (process.env.COGNITO_LOCAL_ADMIN_UI ?? "").toLowerCase(),
 );
@@ -58,7 +61,7 @@ export const DefaultConfig: Config = {
     UsernameAttributes: ["email"],
   },
   TokenConfig: {
-    IssuerDomain: `http://${hostname}:${port}`,
+    IssuerDomain: `http://${issuerHost}:${port}`,
   },
   AuthSessionConfig: {
     AuthSessionValidity: DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,
