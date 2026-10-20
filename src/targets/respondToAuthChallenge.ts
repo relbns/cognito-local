@@ -280,7 +280,7 @@ export const RespondToAuthChallenge =
       );
     }
 
-    if (triggers.enabled("PostAuthentication")) {
+    if (triggers.enabled("PostAuthentication", userPool.options.Id)) {
       await triggers.postAuthentication(ctx, {
         clientId: req.ClientId,
         clientMetadata: req.ClientMetadata,

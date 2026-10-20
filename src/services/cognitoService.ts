@@ -268,6 +268,8 @@ export interface CognitoService {
     userPoolId: string,
   ): Promise<readonly AppClient[]>;
   listUserPools(ctx: Context): Promise<readonly UserPool[]>;
+  /** Synchronous read of a loaded pool's options, for hot paths that cannot await. */
+  peekUserPool(userPoolId: string): UserPool | undefined;
 }
 
 export interface CognitoServiceFactory {
@@ -414,6 +416,10 @@ export class CognitoServiceImpl implements CognitoService {
     }
 
     return Promise.resolve(this.userPools.map((x) => x.options));
+  }
+
+  public peekUserPool(userPoolId: string): UserPool | undefined {
+    return this.userPools?.find((x) => x.options.Id === userPoolId)?.options;
   }
 
   public async init(ctx: Context) {

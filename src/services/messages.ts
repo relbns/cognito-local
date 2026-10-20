@@ -57,7 +57,7 @@ export class MessagesService implements Messages {
     deliveryDetails: DeliveryDetails,
   ): Promise<void> {
     if (
-      this.triggers.enabled("CustomEmailSender") &&
+      this.triggers.enabled("CustomEmailSender", userPoolId) &&
       source !== "Authentication"
     ) {
       return this.customDelivery(
@@ -93,7 +93,7 @@ export class MessagesService implements Messages {
     code: string,
     clientMetadata: Record<string, string> | undefined,
   ): Promise<Message> {
-    if (this.triggers.enabled("CustomMessage")) {
+    if (this.triggers.enabled("CustomMessage", userPoolId)) {
       const message = await this.triggers.customMessage(ctx, {
         clientId: clientId ?? AWS_ADMIN_CLIENT_ID,
         clientMetadata,

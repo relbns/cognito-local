@@ -4,6 +4,7 @@ import { DEFAULT_CODE_LOG_SIZE } from "../services/codeLog";
 import type { Context } from "../services/context";
 import type { KMSConfig } from "../services/crypto";
 import type { DataStoreFactory } from "../services/dataStore/factory";
+import { DEFAULT_FILE_TRIGGER_TIMEOUT_MS } from "../services/fileTrigger";
 import type { FunctionConfig } from "../services/lambda";
 import type { TokenConfig } from "../services/tokenGenerator";
 import type { UserPool } from "../services/userPoolService";
@@ -27,6 +28,13 @@ export interface PasswordPolicyConfig {
   Enforce: boolean;
 }
 
+export interface FileTriggerConfig {
+  /** How long a file: trigger may run before it fails, like a Lambda timeout. */
+  TimeoutMs: number;
+  /** Reload a trigger module when its file changes. */
+  HotReload: boolean;
+}
+
 export interface Config {
   LambdaClient: AWS.Lambda.ClientConfiguration;
   TriggerFunctions: FunctionConfig;
@@ -37,6 +45,7 @@ export interface Config {
   AuthSessionConfig: AuthSessionConfig;
   AdminUIConfig: AdminUIConfig;
   PasswordPolicyConfig: PasswordPolicyConfig;
+  FileTriggerConfig: FileTriggerConfig;
 }
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
@@ -69,6 +78,10 @@ export const DefaultConfig: Config = {
   },
   PasswordPolicyConfig: {
     Enforce: true,
+  },
+  FileTriggerConfig: {
+    TimeoutMs: DEFAULT_FILE_TRIGGER_TIMEOUT_MS,
+    HotReload: true,
   },
   KMSConfig: {
     credentials: {

@@ -20,6 +20,12 @@ import {
   UserLambdaValidationError,
 } from "../errors";
 import type { Context } from "./context";
+import {
+  FileTriggerError,
+  FileTriggerInvoker,
+  isFileTarget,
+  parseFileTarget,
+} from "./fileTrigger";
 
 type CognitoUserPoolEvent =
   | CreateAuthChallengeTriggerEvent
@@ -199,8 +205,37 @@ interface VerifyAuthChallengeResponseEvent extends EventCommonParameters {
   privateChallengeParameters?: Record<string, string>;
 }
 
+export type PoolLambdaConfigLookup = (
+  userPoolId: string,
+) => Record<string, unknown> | undefined;
+
+export interface LambdaServiceOptions {
+  /** Returns the LambdaConfig of a user pool; its file: entries take precedence over FunctionConfig. */
+  poolLambdaConfig?: PoolLambdaConfigLookup;
+  /** Resolves relative file: targets in FunctionConfig. */
+  baseDir?: string;
+  files?: FileTriggerInvoker;
+}
+
+const poolTarget = (
+  lambdaConfig: Record<string, unknown> | undefined,
+  trigger: keyof FunctionConfig,
+): string | undefined => {
+  if (!lambdaConfig) return undefined;
+  const entry =
+    lambdaConfig[trigger] ??
+    (trigger === "PreTokenGeneration"
+      ? lambdaConfig.PreTokenGenerationConfig
+      : undefined);
+  const value =
+    entry && typeof entry === "object"
+      ? (entry as { LambdaArn?: unknown }).LambdaArn
+      : entry;
+  return isFileTarget(value) ? value : undefined;
+};
+
 export interface Lambda {
-  enabled(lambda: keyof FunctionConfig): boolean;
+  enabled(lambda: keyof FunctionConfig, userPoolId?: string): boolean;
   invoke(
     ctx: Context,
     lambda: "DefineAuthChallenge",
@@ -256,14 +291,32 @@ export interface Lambda {
 export class LambdaService implements Lambda {
   private readonly config: FunctionConfig;
   private readonly lambdaClient: LambdaClient;
+  private readonly options: LambdaServiceOptions;
+  private readonly files: FileTriggerInvoker;
 
-  public constructor(config: FunctionConfig, lambdaClient: LambdaClient) {
+  public constructor(
+    config: FunctionConfig,
+    lambdaClient: LambdaClient,
+    options: LambdaServiceOptions = {},
+  ) {
     this.config = config;
     this.lambdaClient = lambdaClient;
+    this.options = options;
+    this.files = options.files ?? new FileTriggerInvoker();
   }
 
-  public enabled(lambda: keyof FunctionConfig): boolean {
-    return !!this.config[lambda];
+  private target(
+    trigger: keyof FunctionConfig,
+    userPoolId: string | undefined,
+  ): string | undefined {
+    const fromPool = userPoolId
+      ? poolTarget(this.options.poolLambdaConfig?.(userPoolId), trigger)
+      : undefined;
+    return fromPool ?? this.config[trigger];
+  }
+
+  public enabled(lambda: keyof FunctionConfig, userPoolId?: string): boolean {
+    return !!this.target(lambda, userPoolId);
   }
 
   public async invoke(
@@ -281,12 +334,16 @@ export class LambdaService implements Lambda {
       | UserMigrationEvent
       | VerifyAuthChallengeResponseEvent,
   ) {
-    const functionName = this.config[trigger];
+    const functionName = this.target(trigger, event.userPoolId);
     if (!functionName) {
       throw new Error(`${trigger} trigger not configured`);
     }
 
     const lambdaEvent = this.createLambdaEvent(event);
+
+    if (isFileTarget(functionName)) {
+      return this.invokeFile(ctx, trigger, functionName, lambdaEvent);
+    }
 
     ctx.logger.debug(
       {
@@ -336,6 +393,57 @@ export class LambdaService implements Lambda {
 
       throw new UserLambdaValidationError(result.FunctionError);
     }
+  }
+
+  private async invokeFile(
+    ctx: Context,
+    trigger: keyof FunctionConfig,
+    functionName: string,
+    lambdaEvent: CognitoUserPoolEvent,
+  ) {
+    const target = parseFileTarget(functionName, this.options.baseDir);
+    ctx.logger.debug(
+      { target, event: JSON.stringify(lambdaEvent, undefined, 2) },
+      `Invoking local trigger ${target.file}#${target.exportName}`,
+    );
+    let result: unknown;
+    try {
+      result = await this.files.invoke(
+        target,
+        trigger,
+        JSON.parse(JSON.stringify(lambdaEvent)),
+      );
+    } catch (e) {
+      ctx.logger.error(e, `Local ${trigger} trigger failed`);
+      if (e instanceof FileTriggerError && e.kind === "handler") {
+        throw new UserLambdaValidationError(
+          `${trigger} failed with error ${e.message}.`,
+        );
+      }
+      if (e instanceof FileTriggerError && e.kind === "timeout") {
+        throw new UnexpectedLambdaExceptionError(
+          `${trigger} invocation failed due to error ${e.message}.`,
+        );
+      }
+      throw new UnexpectedLambdaExceptionError(
+        `${trigger} invocation failed due to error ${(e as Error).message}`,
+      );
+    }
+
+    let response: unknown;
+    try {
+      response = JSON.parse(JSON.stringify(result ?? null))?.response;
+    } catch {
+      response = undefined;
+    }
+    if (!response || typeof response !== "object") {
+      ctx.logger.error(
+        { result },
+        `Local ${trigger} trigger did not return the event with a response object`,
+      );
+      throw new InvalidLambdaResponseError();
+    }
+    return response;
   }
 
   private createLambdaEvent(

@@ -1,3 +1,4 @@
+import path from "node:path";
 import * as AWS from "aws-sdk";
 import type pino from "pino";
 import {
@@ -12,6 +13,7 @@ import { RecordingAuthSessions, RecordingMessages } from "../services/codeLog";
 import { CognitoServiceFactoryImpl } from "../services/cognitoService";
 import { CryptoService } from "../services/crypto";
 import { StormDBDataStoreFactory } from "../services/dataStore/stormDb";
+import { FileTriggerInvoker } from "../services/fileTrigger";
 import { ConsoleMessageSender } from "../services/messageDelivery/consoleMessageSender";
 import { MessageDeliveryService } from "../services/messageDelivery/messageDelivery";
 import type { MessageSender } from "../services/messageDelivery/messageSender";
@@ -59,6 +61,17 @@ export const createDefaultServer = async (
     new LambdaService(
       config.TriggerFunctions,
       new AWS.Lambda(config.LambdaClient),
+      {
+        baseDir: path.resolve(configDirectory),
+        poolLambdaConfig: (userPoolId) =>
+          cognitoClient.peekUserPool(userPoolId)?.LambdaConfig as
+            | Record<string, unknown>
+            | undefined,
+        files: new FileTriggerInvoker({
+          timeoutMs: config.FileTriggerConfig.TimeoutMs,
+          hotReload: config.FileTriggerConfig.HotReload,
+        }),
+      },
     ),
     new CryptoService(config.KMSConfig),
   );

@@ -49,7 +49,10 @@ const adminUserPasswordAuthFlow = async (
   const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
   let user = await userPool.getUserByUsername(ctx, req.AuthParameters.USERNAME);
 
-  if (!user && services.triggers.enabled("UserMigration")) {
+  if (
+    !user &&
+    services.triggers.enabled("UserMigration", userPool.options.Id)
+  ) {
     // https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-migrate-user.html
     //
     // Amazon Cognito invokes [the User Migration] trigger when a user does not exist in the user pool at the time of

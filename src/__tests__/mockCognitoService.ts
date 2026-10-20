@@ -13,6 +13,7 @@ export const newMockCognitoService = (
   getUserPoolForClientId: vi.fn().mockResolvedValue(userPoolClient),
   listAppClients: vi.fn(),
   listUserPools: vi.fn(),
+  peekUserPool: vi.fn(),
 });
 
 export const newMockCognitoServiceFactory = (

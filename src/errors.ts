@@ -73,10 +73,10 @@ export class GroupNotFoundError extends ResourceNotFoundError {
 }
 
 export class UnexpectedLambdaExceptionError extends CognitoError {
-  public constructor() {
+  public constructor(message?: string) {
     super(
       "UnexpectedLambdaExceptionException",
-      "Unexpected error when invoking lambda",
+      message ?? "Unexpected error when invoking lambda",
     );
   }
 }
