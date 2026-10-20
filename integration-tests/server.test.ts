@@ -10,6 +10,8 @@ import {
   UnsupportedError,
   UsernameExistsError,
 } from "../src/errors";
+import { Router } from "../src/server/Router";
+import type { Services } from "../src/services";
 
 describe("HTTP server", () => {
   describe("/", () => {
@@ -55,7 +57,28 @@ describe("HTTP server", () => {
         expect(response.header["x-amzn-requestid"]).toMatch(/^[0-9a-f-]{36}$/);
       });
 
-      it("converts UnsupportedErrors from within a target route to a 500 error", async () => {
+      it("answers an unknown operation with a 400 UnknownOperationException", async () => {
+        const server = createServer(
+          Router({} as Services),
+          MockLogger as any,
+          {},
+        );
+
+        const response = await supertest(server.application)
+          .post("/")
+          .set(
+            "x-amz-target",
+            "AWSCognitoIdentityProviderService.NoSuchOperation",
+          );
+
+        expect(response.status).toEqual(400);
+        expect(response.body).toEqual({
+          __type: "UnknownOperationException",
+          message: 'Unsupported x-amz-target header "NoSuchOperation"',
+        });
+      });
+
+      it("converts UnsupportedErrors from within a target route to a 400 error, which SDKs do not retry", async () => {
         const route = vi
           .fn()
           .mockRejectedValue(new UnsupportedError("integration test"));
@@ -67,7 +90,7 @@ describe("HTTP server", () => {
           .post("/")
           .set("x-amz-target", "prefix.valid");
 
-        expect(response.status).toEqual(500);
+        expect(response.status).toEqual(400);
         expect(response.body).toEqual({
           __type: "CognitoLocal#Unsupported",
           message: "Cognito Local unsupported feature: integration test",

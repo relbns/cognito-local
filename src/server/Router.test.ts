@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TestContext } from "../__tests__/testContext";
-import { UnsupportedError } from "../errors";
+import { UnknownOperationError } from "../errors";
 import type { Services } from "../services";
 import { Targets } from "../targets/targets";
 import { Router } from "./Router";
@@ -11,7 +11,7 @@ describe("Router", () => {
     const route = Router(services)("invalid");
 
     await expect(route(TestContext, null as any)).rejects.toEqual(
-      new UnsupportedError('Unsupported x-amz-target header "invalid"'),
+      new UnknownOperationError('Unsupported x-amz-target header "invalid"'),
     );
   });
 

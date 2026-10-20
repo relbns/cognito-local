@@ -119,3 +119,9 @@ export class InvalidParameterError extends CognitoError {
     super("InvalidParameterException", message);
   }
 }
+
+export class UnknownOperationError extends CognitoError {
+  public constructor(message: string) {
+    super("UnknownOperationException", message);
+  }
+}
