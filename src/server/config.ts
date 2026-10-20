@@ -1,4 +1,5 @@
 import mergeWith from "lodash.mergewith";
+import { DEFAULT_AUTH_SESSION_VALIDITY_MINUTES } from "../services/authSessions";
 import type { Context } from "../services/context";
 import type { KMSConfig } from "../services/crypto";
 import type { DataStoreFactory } from "../services/dataStore/factory";
@@ -12,6 +13,10 @@ export type UserPoolDefaults = Omit<
   "Id" | "CreationDate" | "LastModifiedDate"
 >;
 
+export interface AuthSessionConfig {
+  AuthSessionValidity: number;
+}
+
 export interface Config {
   LambdaClient: AWS.Lambda.ClientConfiguration;
   TriggerFunctions: FunctionConfig;
@@ -19,6 +24,7 @@ export interface Config {
   KMSConfig?: AWS.KMS.ClientConfiguration & KMSConfig;
   ServerConfig: ServerOptions;
   TokenConfig: TokenConfig;
+  AuthSessionConfig: AuthSessionConfig;
 }
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
@@ -38,6 +44,9 @@ export const DefaultConfig: Config = {
   },
   TokenConfig: {
     IssuerDomain: `http://${hostname}:${port}`,
+  },
+  AuthSessionConfig: {
+    AuthSessionValidity: DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,
   },
   KMSConfig: {
     credentials: {

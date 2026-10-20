@@ -12,6 +12,10 @@ import {
   UnsupportedError,
 } from "../errors";
 import type { Services } from "../services";
+import {
+  isCustomAuthSession,
+  respondToCustomAuthChallenge,
+} from "../services/customAuth";
 import { verify as verifyTotp } from "../services/totp";
 import {
   attributeValue,
@@ -27,7 +31,13 @@ export type RespondToAuthChallengeTarget = Target<
 
 type RespondToAuthChallengeService = Pick<
   Services,
-  "clock" | "cognito" | "messages" | "otp" | "triggers" | "tokenGenerator"
+  | "authSessions"
+  | "clock"
+  | "cognito"
+  | "messages"
+  | "otp"
+  | "triggers"
+  | "tokenGenerator"
 >;
 
 const sendSmsMfaChallenge = async (
@@ -108,6 +118,22 @@ export const RespondToAuthChallenge =
     );
     if (!user || !userPoolClient) {
       throw new NotAuthorizedError();
+    }
+
+    if (
+      req.ChallengeName === "CUSTOM_CHALLENGE" ||
+      (req.ChallengeName === "PASSWORD_VERIFIER" &&
+        isCustomAuthSession(services, req.Session))
+    ) {
+      return respondToCustomAuthChallenge(ctx, services, {
+        userPool,
+        user,
+        client: userPoolClient,
+        sessionId: req.Session,
+        challengeName: req.ChallengeName,
+        challengeResponses: req.ChallengeResponses,
+        clientMetadata: req.ClientMetadata,
+      });
     }
 
     if (req.ChallengeName === "SELECT_MFA_TYPE") {
@@ -241,25 +267,6 @@ export const RespondToAuthChallenge =
         PreferredMfaSetting: "SOFTWARE_TOKEN_MFA",
         UserLastModifiedDate: clock.get(),
       });
-    } else if (req.ChallengeName === "CUSTOM_CHALLENGE") {
-      if (!triggers.enabled("VerifyAuthChallengeResponse")) {
-        throw new UnsupportedError(
-          "CUSTOM_CHALLENGE requires VerifyAuthChallengeResponse trigger",
-        );
-      }
-
-      const verifyResult = await triggers.verifyAuthChallengeResponse(ctx, {
-        clientId: req.ClientId,
-        userAttributes: user.Attributes,
-        username: user.Username,
-        userPoolId: userPool.options.Id,
-        challengeAnswer: req.ChallengeResponses.ANSWER ?? "",
-        clientMetadata: req.ClientMetadata,
-      });
-
-      if (!verifyResult.answerCorrect) {
-        throw new CodeMismatchError();
-      }
     } else {
       throw new UnsupportedError(
         `respondToAuthChallenge with ChallengeName=${req.ChallengeName}`,

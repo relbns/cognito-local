@@ -2,6 +2,7 @@ import * as AWS from "aws-sdk";
 import type pino from "pino";
 import {
   DateClock,
+  InMemoryAuthSessions,
   LambdaService,
   MessagesService,
   TriggersService,
@@ -72,6 +73,10 @@ export const createDefaultServer = async (
   }
 
   const services = {
+    authSessions: new InMemoryAuthSessions(
+      clock,
+      config.AuthSessionConfig.AuthSessionValidity,
+    ),
     clock,
     cognito: cognitoClient,
     config,

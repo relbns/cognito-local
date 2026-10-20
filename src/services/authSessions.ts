@@ -1,0 +1,85 @@
+import { v4 } from "uuid";
+import { NotAuthorizedError } from "../errors";
+import type { Clock } from "./clock";
+
+export const DEFAULT_AUTH_SESSION_VALIDITY_MINUTES = 3;
+
+export interface ChallengeResult {
+  challengeName: string;
+  challengeResult: boolean;
+  challengeMetadata?: string;
+}
+
+export interface PendingChallenge {
+  challengeName: string;
+  privateChallengeParameters: Record<string, string>;
+  challengeMetadata?: string;
+}
+
+export interface AuthSession {
+  userPoolId: string;
+  clientId: string;
+  username: string;
+  clientMetadata?: Record<string, string>;
+  history: ChallengeResult[];
+  pendingChallenge: PendingChallenge;
+}
+
+export interface AuthSessions {
+  create(session: AuthSession): string;
+  peek(sessionId: string): AuthSession | undefined;
+  take(sessionId: string): AuthSession;
+}
+
+interface StoredSession {
+  session: AuthSession;
+  expiresAt: number;
+}
+
+export class InMemoryAuthSessions implements AuthSessions {
+  private readonly sessions = new Map<string, StoredSession>();
+
+  public constructor(
+    private readonly clock: Clock,
+    private readonly validityMinutes = DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,
+  ) {}
+
+  public create(session: AuthSession): string {
+    this.evictExpired();
+    const id = v4();
+    this.sessions.set(id, {
+      session,
+      expiresAt: this.clock.get().getTime() + this.validityMinutes * 60_000,
+    });
+    return id;
+  }
+
+  public peek(sessionId: string): AuthSession | undefined {
+    const stored = this.sessions.get(sessionId);
+    if (!stored || stored.expiresAt <= this.clock.get().getTime()) {
+      return undefined;
+    }
+    return stored.session;
+  }
+
+  public take(sessionId: string): AuthSession {
+    const stored = this.sessions.get(sessionId);
+    this.sessions.delete(sessionId);
+    if (!stored) {
+      throw new NotAuthorizedError("Invalid session for the user.");
+    }
+    if (stored.expiresAt <= this.clock.get().getTime()) {
+      throw new NotAuthorizedError(
+        "Invalid session for the user, session is expired.",
+      );
+    }
+    return stored.session;
+  }
+
+  private evictExpired() {
+    const now = this.clock.get().getTime();
+    for (const [id, stored] of this.sessions) {
+      if (stored.expiresAt <= now) this.sessions.delete(id);
+    }
+  }
+}

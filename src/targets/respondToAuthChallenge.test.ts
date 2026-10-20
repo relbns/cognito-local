@@ -20,7 +20,12 @@ import {
   InvalidParameterError,
   NotAuthorizedError,
 } from "../errors";
-import type { Messages, Triggers, UserPoolService } from "../services";
+import {
+  InMemoryAuthSessions,
+  type Messages,
+  type Triggers,
+  type UserPoolService,
+} from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import { generateSecret, generate as genTotp } from "../services/totp";
 import {
@@ -38,6 +43,7 @@ describe("RespondToAuthChallenge target", () => {
   let mockMessages: MockedObject<Messages>;
   let mockOtp: Mock<() => string>;
   let clock: ClockFake;
+  let authSessions: InMemoryAuthSessions;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -53,7 +59,9 @@ describe("RespondToAuthChallenge target", () => {
     const mockCognitoService = newMockCognitoService(mockUserPoolService);
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
 
+    authSessions = new InMemoryAuthSessions(clock);
     respondToAuthChallenge = RespondToAuthChallenge({
+      authSessions,
       clock,
       cognito: mockCognitoService,
       messages: mockMessages,
@@ -472,6 +480,262 @@ describe("RespondToAuthChallenge target", () => {
           },
         }),
       ).rejects.toBeInstanceOf(InvalidParameterError);
+    });
+  });
+  describe("CUSTOM_CHALLENGE challenge", () => {
+    const user = TDB.user();
+    const tokens = {
+      AccessToken: "access",
+      IdToken: "id",
+      RefreshToken: "refresh",
+    };
+
+    const seedSession = (
+      history: {
+        challengeName: string;
+        challengeResult: boolean;
+        challengeMetadata?: string;
+      }[] = [],
+    ) =>
+      authSessions.create({
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        username: user.Username,
+        history,
+        pendingChallenge: {
+          challengeName: "CUSTOM_CHALLENGE",
+          privateChallengeParameters: { secretLoginCode: "123456" },
+          challengeMetadata: "CODE-123456",
+        },
+      });
+
+    const respond = (session: string, answer: string) =>
+      respondToAuthChallenge(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        ChallengeName: "CUSTOM_CHALLENGE",
+        ChallengeResponses: { USERNAME: user.Username, ANSWER: answer },
+        Session: session,
+        ClientMetadata: { client: "metadata" },
+      });
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+      mockTokenGenerator.generate.mockResolvedValue(tokens);
+      mockTriggers.enabled.mockImplementation(
+        (name) => name !== "PostAuthentication",
+      );
+      mockTriggers.defineAuthChallenge.mockImplementation(
+        async (_ctx, { session }) => {
+          const last = session.at(-1);
+          if (session.length >= 3 && last?.challengeResult === false) {
+            return {
+              challengeName: "",
+              issueTokens: false,
+              failAuthentication: true,
+            };
+          }
+          if (last?.challengeResult === true) {
+            return {
+              challengeName: "",
+              issueTokens: true,
+              failAuthentication: false,
+            };
+          }
+          return {
+            challengeName: "CUSTOM_CHALLENGE",
+            issueTokens: false,
+            failAuthentication: false,
+          };
+        },
+      );
+      mockTriggers.createAuthChallenge.mockImplementation(
+        async (_ctx, { session }) => {
+          const code =
+            session.at(-1)?.challengeMetadata?.replace("CODE-", "") ?? "123456";
+          return {
+            publicChallengeParameters: { hint: "code" },
+            privateChallengeParameters: { secretLoginCode: code },
+            challengeMetadata: `CODE-${code}`,
+          };
+        },
+      );
+      mockTriggers.verifyAuthChallengeResponse.mockImplementation(
+        async (_ctx, { challengeAnswer, privateChallengeParameters }) => ({
+          answerCorrect:
+            challengeAnswer === privateChallengeParameters?.secretLoginCode,
+        }),
+      );
+    });
+
+    it("issues tokens for a correct answer and passes privateChallengeParameters to Verify", async () => {
+      const output = await respond(seedSession(), "123456");
+
+      expect(output.AuthenticationResult).toEqual(tokens);
+      expect(mockTriggers.verifyAuthChallengeResponse).toHaveBeenCalledWith(
+        TestContext,
+        {
+          clientId: userPoolClient.ClientId,
+          userAttributes: user.Attributes,
+          username: user.Username,
+          userPoolId: userPoolClient.UserPoolId,
+          challengeAnswer: "123456",
+          privateChallengeParameters: { secretLoginCode: "123456" },
+          clientMetadata: { client: "metadata" },
+        },
+      );
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          session: [
+            {
+              challengeName: "CUSTOM_CHALLENGE",
+              challengeResult: true,
+              challengeMetadata: "CODE-123456",
+            },
+          ],
+        }),
+      );
+      expect(mockUserPoolService.storeRefreshToken).toHaveBeenCalledWith(
+        TestContext,
+        "refresh",
+        user,
+      );
+    });
+
+    it("returns a new challenge after a wrong answer, then issues tokens on the next round", async () => {
+      const first = await respond(seedSession(), "000000");
+
+      expect(first.AuthenticationResult).toBeUndefined();
+      expect(first.ChallengeName).toEqual("CUSTOM_CHALLENGE");
+      expect(first.ChallengeParameters).toEqual({
+        hint: "code",
+        USERNAME: user.Username,
+        USER_ID_FOR_SRP: user.Username,
+      });
+      expect(first.Session).toBeDefined();
+      expect(mockTriggers.createAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          challengeName: "CUSTOM_CHALLENGE",
+          session: [
+            {
+              challengeName: "CUSTOM_CHALLENGE",
+              challengeResult: false,
+              challengeMetadata: "CODE-123456",
+            },
+          ],
+        }),
+      );
+
+      const second = await respond(first.Session as string, "123456");
+
+      expect(second.AuthenticationResult).toEqual(tokens);
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenLastCalledWith(
+        TestContext,
+        expect.objectContaining({
+          session: [
+            {
+              challengeName: "CUSTOM_CHALLENGE",
+              challengeResult: false,
+              challengeMetadata: "CODE-123456",
+            },
+            {
+              challengeName: "CUSTOM_CHALLENGE",
+              challengeResult: true,
+              challengeMetadata: "CODE-123456",
+            },
+          ],
+        }),
+      );
+    });
+
+    it("throws NotAuthorized when Define fails authentication after three wrong answers", async () => {
+      const first = await respond(seedSession(), "bad");
+      const second = await respond(first.Session as string, "bad");
+
+      await expect(respond(second.Session as string, "bad")).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledTimes(3);
+      expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
+    });
+
+    it("throws NotAuthorized for an unknown session", async () => {
+      await expect(respond("unknown", "123456")).rejects.toEqual(
+        new NotAuthorizedError("Invalid session for the user."),
+      );
+      expect(mockTriggers.verifyAuthChallengeResponse).not.toHaveBeenCalled();
+    });
+
+    it("throws NotAuthorized for an expired session", async () => {
+      const session = seedSession();
+      clock.advanceBy(3 * 60_000);
+
+      await expect(respond(session, "123456")).rejects.toEqual(
+        new NotAuthorizedError(
+          "Invalid session for the user, session is expired.",
+        ),
+      );
+    });
+
+    it("does not accept the same session twice", async () => {
+      const session = seedSession();
+      await respond(session, "000000");
+
+      await expect(respond(session, "123456")).rejects.toBeInstanceOf(
+        NotAuthorizedError,
+      );
+    });
+
+    it("rejects a session that belongs to another user", async () => {
+      const session = seedSession();
+      mockUserPoolService.getUserByUsername.mockResolvedValue(TDB.user());
+
+      await expect(respond(session, "123456")).rejects.toEqual(
+        new NotAuthorizedError("Invalid session for the user."),
+      );
+    });
+
+    it("continues into the custom challenge after PASSWORD_VERIFIER in a CUSTOM_AUTH session", async () => {
+      mockTriggers.defineAuthChallenge.mockResolvedValueOnce({
+        challengeName: "CUSTOM_CHALLENGE",
+        issueTokens: false,
+        failAuthentication: false,
+      });
+      const session = authSessions.create({
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        username: user.Username,
+        history: [{ challengeName: "SRP_A", challengeResult: true }],
+        pendingChallenge: {
+          challengeName: "PASSWORD_VERIFIER",
+          privateChallengeParameters: {},
+        },
+      });
+
+      const output = await respondToAuthChallenge(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        ChallengeName: "PASSWORD_VERIFIER",
+        ChallengeResponses: {
+          USERNAME: user.Username,
+          PASSWORD_CLAIM_SIGNATURE: "signature",
+          PASSWORD_CLAIM_SECRET_BLOCK: "block",
+          TIMESTAMP: "now",
+        },
+        Session: session,
+      });
+
+      expect(output.ChallengeName).toEqual("CUSTOM_CHALLENGE");
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          session: [
+            { challengeName: "SRP_A", challengeResult: true },
+            { challengeName: "PASSWORD_VERIFIER", challengeResult: true },
+          ],
+        }),
+      );
     });
   });
 });

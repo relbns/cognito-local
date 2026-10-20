@@ -11,6 +11,10 @@ import {
   UnsupportedError,
 } from "../errors";
 import type { Services } from "../services";
+import {
+  isCustomAuthSession,
+  respondToCustomAuthChallenge,
+} from "../services/customAuth";
 import { verify as verifyTotp } from "../services/totp";
 import type { Target } from "./Target";
 
@@ -21,17 +25,15 @@ export type AdminRespondToAuthChallengeTarget = Target<
 
 type AdminRespondToAuthChallengeServices = Pick<
   Services,
-  "clock" | "cognito" | "triggers" | "tokenGenerator"
+  "authSessions" | "clock" | "cognito" | "triggers" | "tokenGenerator"
 >;
 
 export const AdminRespondToAuthChallenge =
-  ({
-    clock,
-    cognito,
-    triggers,
-    tokenGenerator,
-  }: AdminRespondToAuthChallengeServices): AdminRespondToAuthChallengeTarget =>
+  (
+    services: AdminRespondToAuthChallengeServices,
+  ): AdminRespondToAuthChallengeTarget =>
   async (ctx, req) => {
+    const { clock, cognito, triggers, tokenGenerator } = services;
     if (!req.ChallengeResponses) {
       throw new InvalidParameterError(
         "Missing required parameter challenge responses",
@@ -53,6 +55,22 @@ export const AdminRespondToAuthChallenge =
     );
     if (!user || !userPoolClient) {
       throw new NotAuthorizedError();
+    }
+
+    if (
+      req.ChallengeName === "CUSTOM_CHALLENGE" ||
+      (req.ChallengeName === "PASSWORD_VERIFIER" &&
+        isCustomAuthSession(services, req.Session))
+    ) {
+      return respondToCustomAuthChallenge(ctx, services, {
+        userPool,
+        user,
+        client: userPoolClient,
+        sessionId: req.Session,
+        challengeName: req.ChallengeName,
+        challengeResponses: req.ChallengeResponses,
+        clientMetadata: req.ClientMetadata,
+      });
     }
 
     if (req.ChallengeName === "SMS_MFA") {
@@ -140,25 +158,6 @@ export const AdminRespondToAuthChallenge =
         PreferredMfaSetting: "SOFTWARE_TOKEN_MFA",
         UserLastModifiedDate: clock.get(),
       });
-    } else if (req.ChallengeName === "CUSTOM_CHALLENGE") {
-      if (!triggers.enabled("VerifyAuthChallengeResponse")) {
-        throw new UnsupportedError(
-          "CUSTOM_CHALLENGE requires VerifyAuthChallengeResponse trigger",
-        );
-      }
-
-      const verifyResult = await triggers.verifyAuthChallengeResponse(ctx, {
-        clientId: req.ClientId,
-        userAttributes: user.Attributes,
-        username: user.Username,
-        userPoolId: req.UserPoolId,
-        challengeAnswer: req.ChallengeResponses.ANSWER ?? "",
-        clientMetadata: req.ClientMetadata,
-      });
-
-      if (!verifyResult.answerCorrect) {
-        throw new CodeMismatchError();
-      }
     } else {
       throw new UnsupportedError(
         `adminRespondToAuthChallenge with ChallengeName=${req.ChallengeName}`,

@@ -11,7 +11,11 @@ import {
   InvalidParameterError,
   NotAuthorizedError,
 } from "../errors";
-import type { Triggers, UserPoolService } from "../services";
+import {
+  InMemoryAuthSessions,
+  type Triggers,
+  type UserPoolService,
+} from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import { generateSecret, generate as genTotp } from "../services/totp";
 import {
@@ -27,6 +31,7 @@ describe("AdminRespondToAuthChallenge target", () => {
   let mockTriggers: MockedObject<Triggers>;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let clock: ClockFake;
+  let authSessions: InMemoryAuthSessions;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -40,7 +45,9 @@ describe("AdminRespondToAuthChallenge target", () => {
     const mockCognitoService = newMockCognitoService(mockUserPoolService);
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
 
+    authSessions = new InMemoryAuthSessions(clock);
     adminRespondToAuthChallenge = AdminRespondToAuthChallenge({
+      authSessions,
       clock,
       cognito: mockCognitoService,
       tokenGenerator: mockTokenGenerator,
@@ -244,6 +251,64 @@ describe("AdminRespondToAuthChallenge target", () => {
       });
 
       expect(output.AuthenticationResult?.AccessToken).toEqual("access");
+    });
+  });
+  describe("CUSTOM_CHALLENGE challenge", () => {
+    it("retries after a wrong answer and issues tokens on the correct one", async () => {
+      const user = TDB.user();
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+      mockTokenGenerator.generate.mockResolvedValue({
+        AccessToken: "access",
+        IdToken: "id",
+        RefreshToken: "refresh",
+      });
+      mockTriggers.enabled.mockImplementation(
+        (name) => name !== "PostAuthentication",
+      );
+      mockTriggers.defineAuthChallenge.mockImplementation(
+        async (_ctx, { session }) => ({
+          challengeName: "CUSTOM_CHALLENGE",
+          issueTokens: session.at(-1)?.challengeResult === true,
+          failAuthentication: false,
+        }),
+      );
+      mockTriggers.createAuthChallenge.mockResolvedValue({
+        publicChallengeParameters: {},
+        privateChallengeParameters: { secretLoginCode: "123456" },
+        challengeMetadata: "CODE-123456",
+      });
+      mockTriggers.verifyAuthChallengeResponse.mockImplementation(
+        async (_ctx, { challengeAnswer, privateChallengeParameters }) => ({
+          answerCorrect:
+            challengeAnswer === privateChallengeParameters?.secretLoginCode,
+        }),
+      );
+      const session = authSessions.create({
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        username: user.Username,
+        history: [],
+        pendingChallenge: {
+          challengeName: "CUSTOM_CHALLENGE",
+          privateChallengeParameters: { secretLoginCode: "123456" },
+          challengeMetadata: "CODE-123456",
+        },
+      });
+      const respond = (Session: string, ANSWER: string) =>
+        adminRespondToAuthChallenge(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          UserPoolId: userPoolClient.UserPoolId,
+          ChallengeName: "CUSTOM_CHALLENGE",
+          ChallengeResponses: { USERNAME: user.Username, ANSWER },
+          Session,
+        });
+
+      const first = await respond(session, "000000");
+      expect(first.ChallengeName).toEqual("CUSTOM_CHALLENGE");
+
+      const second = await respond(first.Session as string, "123456");
+      expect(second.AuthenticationResult?.IdToken).toEqual("id");
     });
   });
 });

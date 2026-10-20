@@ -1,4 +1,3 @@
-import * as crypto from "node:crypto";
 import type {
   DeliveryMediumType,
   InitiateAuthRequest,
@@ -17,6 +16,10 @@ import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
 import {
+  passwordVerifierChallengeParameters,
+  startCustomAuth,
+} from "../services/customAuth";
+import {
   attributesToRecord,
   attributeValue,
   type MFAOption,
@@ -31,7 +34,12 @@ export type InitiateAuthTarget = Target<
 
 type InitiateAuthServices = Pick<
   Services,
-  "cognito" | "messages" | "otp" | "tokenGenerator" | "triggers"
+  | "authSessions"
+  | "cognito"
+  | "messages"
+  | "otp"
+  | "tokenGenerator"
+  | "triggers"
 >;
 
 const smsMfaChallenge = async (
@@ -376,19 +384,9 @@ const userSrpAuthFlow = async (
   // Simplified SRP: return fake SRP_B, SALT, SECRET_BLOCK
   // The emulator doesn't perform real SRP math — PASSWORD_VERIFIER
   // response handler will verify the password directly.
-  const salt = crypto.randomBytes(16).toString("hex");
-  const srpB = crypto.randomBytes(128).toString("hex");
-  const secretBlock = crypto.randomBytes(64).toString("base64");
-
   return {
     ChallengeName: "PASSWORD_VERIFIER",
-    ChallengeParameters: {
-      SALT: salt,
-      SRP_B: srpB,
-      SECRET_BLOCK: secretBlock,
-      USER_ID_FOR_SRP: user.Username,
-      USERNAME: user.Username,
-    },
+    ChallengeParameters: passwordVerifierChallengeParameters(user),
     Session: v4(),
   };
 };
@@ -400,12 +398,6 @@ const customAuthFlow = async (
   userPoolClient: AppClient,
   services: InitiateAuthServices,
 ): Promise<InitiateAuthResponse> => {
-  if (!services.triggers.enabled("DefineAuthChallenge")) {
-    throw new UnsupportedError(
-      "CUSTOM_AUTH requires DefineAuthChallenge trigger",
-    );
-  }
-
   if (!req.AuthParameters?.USERNAME) {
     throw new InvalidParameterError("Missing required parameter USERNAME");
   }
@@ -418,59 +410,13 @@ const customAuthFlow = async (
     throw new NotAuthorizedError();
   }
 
-  const defineResult = await services.triggers.defineAuthChallenge(ctx, {
-    clientId: req.ClientId,
-    userAttributes: user.Attributes,
-    username: user.Username,
-    userPoolId: userPool.options.Id,
-    session: [],
+  return startCustomAuth(ctx, services, {
+    userPool,
+    user,
+    client: userPoolClient,
+    authParameters: req.AuthParameters,
     clientMetadata: req.ClientMetadata,
   });
-
-  if (defineResult.failAuthentication) {
-    throw new NotAuthorizedError();
-  }
-
-  if (defineResult.issueTokens) {
-    const userGroups = await userPool.listUserGroupMembership(ctx, user);
-    const tokens = await services.tokenGenerator.generate(
-      ctx,
-      user,
-      userGroups,
-      userPoolClient,
-      req.ClientMetadata,
-      "Authentication",
-    );
-    await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
-    return {
-      AuthenticationResult: tokens,
-    };
-  }
-
-  if (!services.triggers.enabled("CreateAuthChallenge")) {
-    throw new UnsupportedError(
-      "CUSTOM_AUTH requires CreateAuthChallenge trigger",
-    );
-  }
-
-  const challengeResult = await services.triggers.createAuthChallenge(ctx, {
-    clientId: req.ClientId,
-    userAttributes: user.Attributes,
-    username: user.Username,
-    userPoolId: userPool.options.Id,
-    challengeName: defineResult.challengeName ?? "CUSTOM_CHALLENGE",
-    session: [],
-    clientMetadata: req.ClientMetadata,
-  });
-
-  return {
-    ChallengeName: "CUSTOM_CHALLENGE",
-    ChallengeParameters: {
-      ...challengeResult.publicChallengeParameters,
-      USER_ID_FOR_SRP: user.Username,
-    },
-    Session: v4(),
-  };
 };
 
 export const InitiateAuth =

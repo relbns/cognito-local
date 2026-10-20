@@ -5,7 +5,13 @@ import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import type { CognitoService, Triggers, UserPoolService } from "../services";
+import {
+  type CognitoService,
+  DateClock,
+  InMemoryAuthSessions,
+  type Triggers,
+  type UserPoolService,
+} from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import {
   AdminInitiateAuth,
@@ -19,6 +25,7 @@ describe("AdminInitiateAuth target", () => {
   let mockTokenGenerator: MockedObject<TokenGenerator>;
   let mockTriggers: MockedObject<Triggers>;
   let mockUserPoolService: MockedObject<UserPoolService>;
+  let authSessions: InMemoryAuthSessions;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -29,7 +36,9 @@ describe("AdminInitiateAuth target", () => {
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
     mockTriggers = newMockTriggers();
     mockTokenGenerator = newMockTokenGenerator();
+    authSessions = new InMemoryAuthSessions(new DateClock());
     adminInitiateAuth = AdminInitiateAuth({
+      authSessions,
       triggers: mockTriggers,
       cognito: mockCognitoService,
       tokenGenerator: mockTokenGenerator,
@@ -244,5 +253,36 @@ describe("AdminInitiateAuth target", () => {
       },
       "RefreshTokens",
     );
+  });
+  it("starts a CUSTOM_AUTH session with the Create round", async () => {
+    const existingUser = TDB.user();
+    mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
+    mockTriggers.enabled.mockReturnValue(true);
+    mockTriggers.defineAuthChallenge.mockResolvedValue({
+      challengeName: "CUSTOM_CHALLENGE",
+      issueTokens: false,
+      failAuthentication: false,
+    });
+    mockTriggers.createAuthChallenge.mockResolvedValue({
+      publicChallengeParameters: {},
+      privateChallengeParameters: { secretLoginCode: "123456" },
+      challengeMetadata: "CODE-123456",
+    });
+
+    const response = await adminInitiateAuth(TestContext, {
+      AuthFlow: "CUSTOM_AUTH",
+      ClientId: userPoolClient.ClientId,
+      UserPoolId: userPoolClient.UserPoolId,
+      AuthParameters: { USERNAME: existingUser.Username },
+    });
+
+    expect(response.ChallengeName).toEqual("CUSTOM_CHALLENGE");
+    expect(
+      authSessions.peek(response.Session as string)?.pendingChallenge,
+    ).toEqual({
+      challengeName: "CUSTOM_CHALLENGE",
+      privateChallengeParameters: { secretLoginCode: "123456" },
+      challengeMetadata: "CODE-123456",
+    });
   });
 });

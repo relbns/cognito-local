@@ -55,7 +55,7 @@ aws --endpoint http://localhost:9229 cognito-idp create-user-pool --pool-name My
 | Auth flows | InitiateAuth, AdminInitiateAuth, RespondToAuthChallenge, AdminRespondToAuthChallenge |
 | SRP auth | USER_SRP_AUTH, PASSWORD_VERIFIER (simplified -- verifies password directly) |
 | Password auth | USER_PASSWORD_AUTH |
-| Custom auth | CUSTOM_AUTH with DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse triggers |
+| Custom auth | CUSTOM_AUTH with DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse triggers; multi-round sessions with challenge history, retries after a wrong answer, SRP_A + PASSWORD_VERIFIER before the custom challenge |
 | Refresh tokens | GetTokensFromRefreshToken, REFRESH_TOKEN / REFRESH_TOKEN_AUTH |
 | Sign-up | SignUp, ConfirmSignUp, ResendConfirmationCode |
 | Password reset | ForgotPassword, ConfirmForgotPassword, AdminResetUserPassword |
@@ -155,6 +155,7 @@ mkdir -p .cognito && echo '{}' > .cognito/config.json
 | `ServerConfig.cert` | string | -- | Path to TLS cert |
 | `ServerConfig.key` | string | -- | Path to TLS key |
 | `TokenConfig.IssuerDomain` | string | `http://localhost:9229` | JWT issuer domain |
+| `AuthSessionConfig.AuthSessionValidity` | number | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid (kept in memory, lost on restart) |
 | `LambdaClient.endpoint` | string | -- | Local Lambda endpoint (e.g. serverless-offline) |
 | `LambdaClient.region` | string | `local` | Lambda region |
 | `TriggerFunctions` | object | `{}` | Trigger-to-function mapping |

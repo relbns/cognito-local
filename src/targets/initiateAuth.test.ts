@@ -7,6 +7,7 @@ import {
   type MockedObject,
   vi,
 } from "vitest";
+import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
@@ -21,7 +22,12 @@ import {
   NotAuthorizedError,
   PasswordResetRequiredError,
 } from "../errors";
-import type { Messages, Triggers, UserPoolService } from "../services";
+import {
+  InMemoryAuthSessions,
+  type Messages,
+  type Triggers,
+  type UserPoolService,
+} from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import { attributesToRecord, type User } from "../services/userPoolService";
 import { InitiateAuth, type InitiateAuthTarget } from "./initiateAuth";
@@ -33,6 +39,8 @@ describe("InitiateAuth target", () => {
   let mockOtp: Mock<() => string>;
   let mockTriggers: MockedObject<Triggers>;
   let mockTokenGenerator: MockedObject<TokenGenerator>;
+  let authSessions: InMemoryAuthSessions;
+  let clock: ClockFake;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -43,11 +51,14 @@ describe("InitiateAuth target", () => {
     mockOtp = vi.fn().mockReturnValue("123456");
     mockTriggers = newMockTriggers();
     mockTokenGenerator = newMockTokenGenerator();
+    clock = new ClockFake(new Date());
+    authSessions = new InMemoryAuthSessions(clock);
 
     const mockCognitoService = newMockCognitoService(mockUserPoolService);
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
 
     initiateAuth = InitiateAuth({
+      authSessions,
       cognito: mockCognitoService,
       messages: mockMessages,
       otp: mockOtp,
@@ -692,6 +703,137 @@ describe("InitiateAuth target", () => {
         undefined,
         "RefreshTokens",
       );
+    });
+  });
+  describe("CUSTOM_AUTH auth flow", () => {
+    const user = TDB.user();
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockTriggers.enabled.mockReturnValue(true);
+      mockTriggers.createAuthChallenge.mockResolvedValue({
+        publicChallengeParameters: { email: "e@example.com" },
+        privateChallengeParameters: { secretLoginCode: "123456" },
+        challengeMetadata: "CODE-123456",
+      });
+    });
+
+    it("runs Define then Create and stores the round in a session", async () => {
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "CUSTOM_CHALLENGE",
+        issueTokens: false,
+        failAuthentication: false,
+      });
+
+      const output = await initiateAuth(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        AuthFlow: "CUSTOM_AUTH",
+        AuthParameters: { USERNAME: user.Username },
+        ClientMetadata: { client: "metadata" },
+      });
+
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        {
+          clientId: userPoolClient.ClientId,
+          userAttributes: user.Attributes,
+          username: user.Username,
+          userPoolId: userPoolClient.UserPoolId,
+          session: [],
+          clientMetadata: { client: "metadata" },
+        },
+      );
+      expect(mockTriggers.createAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          challengeName: "CUSTOM_CHALLENGE",
+          session: [],
+        }),
+      );
+      expect(output.ChallengeName).toEqual("CUSTOM_CHALLENGE");
+      expect(output.ChallengeParameters).toEqual({
+        email: "e@example.com",
+        USERNAME: user.Username,
+        USER_ID_FOR_SRP: user.Username,
+      });
+      expect(authSessions.peek(output.Session as string)).toEqual({
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        username: user.Username,
+        clientMetadata: { client: "metadata" },
+        history: [],
+        pendingChallenge: {
+          challengeName: "CUSTOM_CHALLENGE",
+          privateChallengeParameters: { secretLoginCode: "123456" },
+          challengeMetadata: "CODE-123456",
+        },
+      });
+    });
+
+    it("issues tokens when Define says so without a challenge", async () => {
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "",
+        issueTokens: true,
+        failAuthentication: false,
+      });
+      mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+      mockTokenGenerator.generate.mockResolvedValue({
+        AccessToken: "access",
+        IdToken: "id",
+        RefreshToken: "refresh",
+      });
+
+      const output = await initiateAuth(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        AuthFlow: "CUSTOM_AUTH",
+        AuthParameters: { USERNAME: user.Username },
+      });
+
+      expect(output.AuthenticationResult?.IdToken).toEqual("id");
+      expect(mockTriggers.createAuthChallenge).not.toHaveBeenCalled();
+    });
+
+    it("throws NotAuthorized when Define fails authentication", async () => {
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "",
+        issueTokens: false,
+        failAuthentication: true,
+      });
+
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: "CUSTOM_AUTH",
+          AuthParameters: { USERNAME: user.Username },
+        }),
+      ).rejects.toBeInstanceOf(NotAuthorizedError);
+    });
+
+    it("starts the history with SRP_A and returns PASSWORD_VERIFIER when Define asks for it", async () => {
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "PASSWORD_VERIFIER",
+        issueTokens: false,
+        failAuthentication: false,
+      });
+
+      const output = await initiateAuth(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        AuthFlow: "CUSTOM_AUTH",
+        AuthParameters: { USERNAME: user.Username, SRP_A: "srp-a" },
+      });
+
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          session: [{ challengeName: "SRP_A", challengeResult: true }],
+        }),
+      );
+      expect(output.ChallengeName).toEqual("PASSWORD_VERIFIER");
+      expect(output.ChallengeParameters?.USERNAME).toEqual(user.Username);
+      expect(
+        authSessions.peek(output.Session as string)?.pendingChallenge
+          .challengeName,
+      ).toEqual("PASSWORD_VERIFIER");
     });
   });
 });

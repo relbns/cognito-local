@@ -12,6 +12,8 @@ import { Router } from "../../src/server/Router";
 import {
   type Clock,
   DateClock,
+  InMemoryAuthSessions,
+  type Lambda,
   MessagesService,
   TriggersService,
 } from "../../src/services";
@@ -39,7 +41,8 @@ export const withCognitoSdk =
     {
       logger = MockLogger as any,
       clock = new DateClock(),
-    }: { logger?: Logger; clock?: Clock } = {},
+      lambda,
+    }: { logger?: Logger; clock?: Clock; lambda?: () => Lambda } = {},
   ) =>
   () => {
     let dataDirectory: string;
@@ -63,7 +66,7 @@ export const withCognitoSdk =
       const triggers = new TriggersService(
         clock,
         cognitoClient,
-        {
+        lambda?.() ?? {
           enabled: vi.fn().mockReturnValue(false),
           invoke: vi.fn(),
         },
@@ -72,6 +75,7 @@ export const withCognitoSdk =
 
       fakeMessageDeliveryService = new FakeMessageDeliveryService();
       const services = {
+        authSessions: new InMemoryAuthSessions(clock),
         clock,
         cognito: cognitoClient,
         config: DefaultConfig,
