@@ -58,7 +58,7 @@ const issueTokens = async (
   round: CustomAuthRound,
 ): Promise<CustomAuthResponse> => {
   const { userPool, user, client } = round;
-  if (services.triggers.enabled("PostAuthentication")) {
+  if (services.triggers.enabled("PostAuthentication", userPool.options.Id)) {
     await services.triggers.postAuthentication(ctx, {
       clientId: client.ClientId,
       clientMetadata: round.postAuthenticationClientMetadata,
@@ -124,7 +124,9 @@ const runCustomAuthRound = async (
       `CUSTOM_AUTH with DefineAuthChallenge challengeName=${challengeName}`,
     );
   }
-  if (!services.triggers.enabled("CreateAuthChallenge")) {
+  if (
+    !services.triggers.enabled("CreateAuthChallenge", round.userPool.options.Id)
+  ) {
     throw new UnsupportedError(
       "CUSTOM_AUTH requires CreateAuthChallenge trigger",
     );
@@ -167,7 +169,7 @@ export const startCustomAuth = async (
     clientMetadata?: Record<string, string>;
   },
 ): Promise<CustomAuthResponse> => {
-  if (!services.triggers.enabled("DefineAuthChallenge")) {
+  if (!services.triggers.enabled("DefineAuthChallenge", userPool.options.Id)) {
     throw new UnsupportedError(
       "CUSTOM_AUTH requires DefineAuthChallenge trigger",
     );
@@ -241,7 +243,12 @@ export const respondToCustomAuthChallenge = async (
     return runCustomAuthRound(ctx, services, round);
   }
 
-  if (!services.triggers.enabled("VerifyAuthChallengeResponse")) {
+  if (
+    !services.triggers.enabled(
+      "VerifyAuthChallengeResponse",
+      userPool.options.Id,
+    )
+  ) {
     throw new UnsupportedError(
       "CUSTOM_CHALLENGE requires VerifyAuthChallengeResponse trigger",
     );

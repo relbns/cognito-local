@@ -61,6 +61,7 @@ export const poolsPage = (
 ) => html`
 <h1>User pools</h1>
 <p class="sub">Everything the emulator has stored, read straight from its data directory.</p>
+<p><a class="badge" href="${adminUrl("api", "export")}?download=1" download>Export as seed</a> <span class="muted">A seed file that re-creates these pools, clients, identity providers, groups and users (passwords are not exported).</span></p>
 <div class="panel">
   ${
     pools.length

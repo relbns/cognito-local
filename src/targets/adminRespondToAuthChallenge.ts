@@ -172,7 +172,7 @@ export const AdminRespondToAuthChallenge =
       );
     }
 
-    if (triggers.enabled("PostAuthentication")) {
+    if (triggers.enabled("PostAuthentication", req.UserPoolId)) {
       await triggers.postAuthentication(ctx, {
         clientId: req.ClientId,
         clientMetadata: req.ClientMetadata,

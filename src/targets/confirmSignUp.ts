@@ -69,7 +69,7 @@ export const ConfirmSignUp =
 
     await userPool.saveUser(ctx, updatedUser);
 
-    if (triggers.enabled("PostConfirmation")) {
+    if (triggers.enabled("PostConfirmation", userPool.options.Id)) {
       await triggers.postConfirmation(ctx, {
         clientId: req.ClientId,
         clientMetadata: req.ClientMetadata,

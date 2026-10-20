@@ -1,0 +1,35 @@
+{
+  "$comment": "Passwordless sign-in with CUSTOM_AUTH: a one-time code per sign-in from three local trigger files. The code is shown in the admin UI at /_admin/codes and printed by the CreateAuthChallenge trigger.",
+  "Version": 1,
+  "UserPools": [
+    {
+      "Id": "local_OtpExample",
+      "PoolName": "otp-example",
+      "UsernameAttributes": ["email"],
+      "LambdaConfig": {
+        "DefineAuthChallenge": "file:./triggers/define-auth-challenge.js",
+        "CreateAuthChallenge": "file:./triggers/create-auth-challenge.mjs",
+        "VerifyAuthChallengeResponse": "file:./triggers/verify-auth-challenge-response.js#handler"
+      },
+      "Clients": [
+        {
+          "ClientId": "otpexampleclient0000000001",
+          "ClientName": "otp-web",
+          "ExplicitAuthFlows": ["ALLOW_CUSTOM_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+        }
+      ],
+      "Groups": [{ "GroupName": "members" }],
+      "Users": [
+        {
+          "Username": "alice@example.test",
+          "UserAttributes": [
+            { "Name": "sub", "Value": "00000000-0000-4000-8000-0000000000a1" },
+            { "Name": "email_verified", "Value": "true" },
+            { "Name": "given_name", "Value": "Alice" }
+          ],
+          "Groups": ["members"]
+        }
+      ]
+    }
+  ]
+}

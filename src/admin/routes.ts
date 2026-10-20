@@ -2,6 +2,16 @@ import bodyParser from "body-parser";
 import express, { type Request, type Response } from "express";
 import { CognitoError, ResourceNotFoundError } from "../errors";
 import PublicKey from "../keys/cognitoLocal.public.json";
+import {
+  applySeed,
+  exportSeed,
+  formatSeedResult,
+  SeedApplyError,
+  SeedValidationError,
+  summarizeSeedResult,
+} from "../seed";
+import { resolveSeedFileTargets } from "../seed/load";
+import { assertValidSeed } from "../seed/validate";
 import type { Router } from "../server/Router";
 import type { Services } from "../services";
 import type { CodeLogEntry } from "../services/codeLog";
@@ -11,6 +21,7 @@ import {
   type User,
   type UserPoolService,
 } from "../services/userPoolService";
+import { createCallbackRouter } from "./callback";
 import { adminUrl, type Flash, layout, type SafeHtml, withQuery } from "./html";
 import { inspectToken } from "./tokens";
 import {
@@ -37,7 +48,7 @@ const flashOf = (req: Request): Flash => ({
 const send = (
   res: Response,
   title: string,
-  active: "pools" | "codes" | "tokens",
+  active: "pools" | "codes" | "tokens" | "callback",
   body: SafeHtml,
   flash?: Flash,
   status = 200,
@@ -616,6 +627,58 @@ export const createAdminRouter = (
   };
   admin.get("/tokens", page(tokens));
   admin.post("/tokens", page(tokens));
+
+  admin.use("/callback", createCallbackRouter(services));
+
+  admin.get("/api/status", async (req, res) => {
+    const ctx = ctxOf(req);
+    const pools = await services.cognito.listUserPools(ctx);
+    res.set("Cache-Control", "no-store").json({
+      running: true,
+      pools: pools.length,
+      issuerDomain: services.config.TokenConfig?.IssuerDomain,
+    });
+  });
+
+  admin.get("/api/export", async (req, res) => {
+    const seed = await exportSeed(ctxOf(req), services);
+    if (str(req.query.download)) {
+      res.attachment("cognito-local.seed.json");
+    }
+    res
+      .set("Cache-Control", "no-store")
+      .type("json")
+      .send(`${JSON.stringify(seed, null, 2)}\n`);
+  });
+
+  admin.post("/api/seed", express.json({ limit: "20mb" }), async (req, res) => {
+    const source = str(req.query.source) || "request body";
+    try {
+      const body: unknown = req.body;
+      assertValidSeed(body, source);
+      const seed = resolveSeedFileTargets(
+        body,
+        str(req.query.baseDir) || process.cwd(),
+        source,
+      );
+      const result = await applySeed(ctxOf(req), services, seed, source);
+      res.json({
+        ...result,
+        summary: summarizeSeedResult(result),
+        lines: formatSeedResult(result),
+      });
+    } catch (e) {
+      if (e instanceof SeedValidationError) {
+        res.status(400).json({ error: e.message, issues: e.issues });
+        return;
+      }
+      if (e instanceof SeedApplyError) {
+        res.status(400).json({ error: e.message, path: e.path });
+        return;
+      }
+      res.status(500).json({ error: (e as Error)?.message ?? String(e) });
+    }
+  });
 
   return admin;
 };

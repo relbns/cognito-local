@@ -1,0 +1,106 @@
+{
+  "$comment": "A user pool with a password policy, a custom attribute, a public and a confidential app client, a resource server, groups and users. Apply with: cognito-local start --seed examples/seed.basic.json",
+  "Version": 1,
+  "UserPools": [
+    {
+      "Id": "local_Example1",
+      "PoolName": "example",
+      "UsernameAttributes": ["email"],
+      "AutoVerifiedAttributes": ["email"],
+      "Policies": {
+        "PasswordPolicy": {
+          "MinimumLength": 8,
+          "RequireUppercase": true,
+          "RequireLowercase": true,
+          "RequireNumbers": true,
+          "RequireSymbols": false
+        }
+      },
+      "Schema": [
+        {
+          "Name": "tenant_id",
+          "AttributeDataType": "String",
+          "Mutable": true
+        }
+      ],
+      "ResourceServers": [
+        {
+          "Identifier": "https://api.example.test",
+          "Name": "Example API",
+          "Scopes": [
+            { "ScopeName": "read", "ScopeDescription": "Read access" },
+            { "ScopeName": "write", "ScopeDescription": "Write access" }
+          ]
+        }
+      ],
+      "Clients": [
+        {
+          "ClientId": "examplewebclient0000000001",
+          "ClientName": "web",
+          "ExplicitAuthFlows": [
+            "ALLOW_USER_PASSWORD_AUTH",
+            "ALLOW_USER_SRP_AUTH",
+            "ALLOW_REFRESH_TOKEN_AUTH"
+          ],
+          "AllowedOAuthFlowsUserPoolClient": true,
+          "AllowedOAuthFlows": ["code"],
+          "AllowedOAuthScopes": ["openid", "email", "profile"],
+          "SupportedIdentityProviders": ["COGNITO"],
+          "CallbackURLs": [
+            "http://localhost:3000/callback",
+            "http://localhost:9229/_admin/callback"
+          ],
+          "LogoutURLs": ["http://localhost:3000/"]
+        },
+        {
+          "ClientId": "examplebackendclient000001",
+          "ClientName": "backend",
+          "ClientSecret": "examplebackendsecret0000000000000000000000000000001",
+          "ExplicitAuthFlows": [
+            "ALLOW_ADMIN_USER_PASSWORD_AUTH",
+            "ALLOW_REFRESH_TOKEN_AUTH"
+          ],
+          "AllowedOAuthScopes": [
+            "https://api.example.test/read",
+            "https://api.example.test/write"
+          ]
+        }
+      ],
+      "Groups": [
+        { "GroupName": "admins", "Description": "Administrators", "Precedence": 1 },
+        { "GroupName": "members", "Description": "Everyone else", "Precedence": 10 }
+      ],
+      "Users": [
+        {
+          "Username": "admin@example.test",
+          "Password": "Passw0rdAdmin",
+          "UserAttributes": [
+            { "Name": "sub", "Value": "00000000-0000-4000-8000-000000000001" },
+            { "Name": "email_verified", "Value": "true" },
+            { "Name": "name", "Value": "Example Admin" },
+            { "Name": "custom:tenant_id", "Value": "tenant-a" }
+          ],
+          "Groups": ["admins", "members"]
+        },
+        {
+          "Username": "jane@example.test",
+          "TemporaryPassword": "TempPassw0rd",
+          "UserAttributes": [
+            { "Name": "sub", "Value": "00000000-0000-4000-8000-000000000002" },
+            { "Name": "email_verified", "Value": "true" },
+            { "Name": "custom:tenant_id", "Value": "tenant-a" }
+          ],
+          "Groups": ["members"]
+        },
+        {
+          "Username": "pending@example.test",
+          "Password": "Passw0rdPending",
+          "UserStatus": "UNCONFIRMED",
+          "UserAttributes": [
+            { "Name": "sub", "Value": "00000000-0000-4000-8000-000000000003" }
+          ]
+        }
+      ]
+    }
+  ]
+}

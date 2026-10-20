@@ -42,7 +42,7 @@ async function signInExisting(
   };
   await userPool.saveUser(ctx, updated);
 
-  if (triggers.enabled("PostAuthentication")) {
+  if (triggers.enabled("PostAuthentication", userPool.options.Id)) {
     await triggers.postAuthentication(ctx, {
       clientId: appClient.ClientId,
       clientMetadata: undefined,
@@ -104,7 +104,7 @@ export async function federatedSignIn(
   }
 
   let attributes = mapped;
-  if (triggers.enabled("PreSignUp")) {
+  if (triggers.enabled("PreSignUp", userPool.options.Id)) {
     const response = await triggers.preSignUp(ctx, {
       clientId: appClient.ClientId,
       clientMetadata: undefined,
@@ -165,7 +165,7 @@ export async function federatedSignIn(
   };
   await userPool.saveUser(ctx, user);
 
-  if (triggers.enabled("PostConfirmation")) {
+  if (triggers.enabled("PostConfirmation", userPool.options.Id)) {
     await triggers.postConfirmation(ctx, {
       clientId: appClient.ClientId,
       clientMetadata: undefined,

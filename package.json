@@ -1,12 +1,16 @@
 {
-  "name": "cognito-local",
+  "name": "@relbns/cognito-local",
   "version": "0.0.0-development",
+  "description": "A local emulator of Amazon Cognito User Pools, with a seed file, local triggers and a CLI",
   "license": "MIT",
-  "bin": "lib/bin/start.js",
+  "bin": {
+    "cognito-local": "lib/bin/cli.js"
+  },
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
-    "lib"
+    "lib",
+    "examples"
   ],
   "scripts": {
     "build": "rm -rf lib && tsc --emitDeclarationOnly --project tsconfig.build.json && esbuild $(find src -name '*.ts' ! -name '*.test.ts' ! -path '*/__tests__/*') --outdir=lib --platform=node --target=node22 --format=cjs && cp -r src/keys lib/keys",
@@ -18,7 +22,8 @@
     "type-check": "tsc --target es2019 --esModuleInterop --resolveJsonModule --noEmit",
     "check:vendor-terms": "node scripts/check-no-vendor-terms.mjs",
     "semantic-release": "semantic-release",
-    "prepare": "husky install"
+    "prepare": "node scripts/prepare.js",
+    "cli": "tsx src/bin/cli.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1153.0",
@@ -88,11 +93,11 @@
     "README.md": "markdown-toc -i --bullets=- --maxdepth=3"
   },
   "engines": {
-    "node": ">=12"
+    "node": ">=18.3"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jagregory/cognito-local.git"
+    "url": "https://github.com/relbns/cognito-local.git"
   },
   "release": {
     "branches": [

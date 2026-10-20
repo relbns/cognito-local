@@ -72,6 +72,20 @@ docker run --rm -p 9229:9229 -v cognito-data:/app/.cognito ghcr.io/relbns/cognit
 
 The container runs as the unprivileged `node` user, listens on `0.0.0.0:9229`, keeps its data and `config.json` in the `/app/.cognito` volume, and reports health on `/health`. The admin UI is at `http://localhost:9229/_admin`. Tokens are issued for `http://localhost:9229` by default; set `TokenConfig.IssuerDomain` in `config.json` when clients reach the emulator under another name (for example `http://cognito:9229` on a Compose network).
 
+## CLI, seed files and local triggers
+
+`cognito-local` is one command with `start`, `seed`, `export`, `reset` and `status`, flags for everything and `--json` output, so scripts and agents can drive it:
+
+```bash
+npx github:relbns/cognito-local start --port 9229 --data .cognito --seed examples/seed.custom-auth-otp.json
+npx github:relbns/cognito-local status --json
+```
+
+- **Seed files** declare user pools, app clients (with pinned ids and secrets), identity providers, resource servers, groups and users with AWS API field names. They are applied at startup (`--seed`, `COGNITO_LOCAL_SEED`) or with `cognito-local seed`, idempotently, and validated with the file and field path of every problem. **Export as seed** in the admin UI, `GET /_admin/api/export` and `cognito-local export` write the current state back as a seed (passwords excluded). See [docs/seed-files.md](docs/seed-files.md).
+- **Local triggers**: `"LambdaConfig": { "DefineAuthChallenge": "file:./triggers/define.js#handler" }` runs a CommonJS or ES module handler in-process with the AWS event shape, async or callback style, with a timeout, Cognito-style errors and hot reload. See [docs/local-triggers.md](docs/local-triggers.md).
+- **OAuth callback page** at `/_admin/callback` (a dev tool, not a Cognito feature): builds an authorize URL for a client and identity provider, receives the code, exchanges it at `/oauth2/token` and decodes the tokens. See [docs/oauth-callback.md](docs/oauth-callback.md).
+- Examples: [examples/seed.basic.json](examples/seed.basic.json), [examples/seed.custom-auth-otp.json](examples/seed.custom-auth-otp.json) with [examples/triggers](examples/triggers), [examples/seed.federation.json](examples/seed.federation.json). Commands, flags, environment variables and exit codes: [docs/cli.md](docs/cli.md).
+
 ## Configuration added by this fork
 
 | Key | Default | Meaning |
@@ -80,6 +94,7 @@ The container runs as the unprivileged `node` user, listens on `0.0.0.0:9229`, k
 | `AdminUIConfig.Enabled` | `true` | Serve the admin UI at `/_admin` and record codes |
 | `AdminUIConfig.CodeLogSize` | `100` | How many recent codes the admin UI keeps |
 | `COGNITO_LOCAL_ADMIN_UI` (env) | on | `false`, `0` or `off` disables the admin UI |
+| `PasswordPolicyConfig.Enforce` | `true` | Enforce each pool's `PasswordPolicy` (AWS default when unset); `false` restores the old lenient behaviour |
 
 ## Not supported yet
 
@@ -88,7 +103,8 @@ The container runs as the unprivileged `node` user, listens on `0.0.0.0:9229`, k
 - CUSTOM_AUTH sessions and the admin UI code log are in memory and are lost on restart (users, pools and clients persist).
 - The admin UI has no authentication. Anyone who can reach the port can read users, codes and client secrets. Do not expose it beyond your machine.
 - The built-in login page is a plain form without Cognito's styling.
-- A user auto-confirmed by a PreSignUp trigger is still sent a sign-up code, and a phone-only `SignUp` fails when `AutoVerifiedAttributes` does not include `phone_number`.
+- Access tokens are not verified on token-authorised calls, so a token still works after `GlobalSignOut` or expiry, and refresh tokens never expire.
+- `SECRET_HASH` is not checked, the `USER_AUTH` flow is not supported, and SRP proofs are not verified.
 
 ## Credits
 

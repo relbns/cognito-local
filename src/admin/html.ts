@@ -112,7 +112,7 @@ tick();setInterval(tick,1000);
 var ar=document.getElementById('autorefresh');if(ar){var k='cognito-local-admin-autorefresh';try{ar.checked=localStorage.getItem(k)==='1'}catch(_){}ar.addEventListener('change',function(){try{localStorage.setItem(k,ar.checked?'1':'0')}catch(_){}});setInterval(function(){if(ar.checked)location.reload()},3000)}
 `;
 
-export type NavSection = "pools" | "codes" | "tokens";
+export type NavSection = "pools" | "codes" | "tokens" | "callback";
 
 export interface Flash {
   ok?: string;
@@ -141,6 +141,7 @@ export const layout = (opts: {
     <a href="${ADMIN_UI_PATH}" class="${opts.active === "pools" ? "active" : ""}">User pools</a>
     <a href="${adminUrl("codes")}" class="${opts.active === "codes" ? "active" : ""}">Codes</a>
     <a href="${adminUrl("tokens")}" class="${opts.active === "tokens" ? "active" : ""}">Tokens</a>
+    <a href="${adminUrl("callback")}" class="${opts.active === "callback" ? "active" : ""}">OAuth callback</a>
   </nav>
   <span class="notice" title="Disable with AdminUIConfig.Enabled=false or COGNITO_LOCAL_ADMIN_UI=false">No authentication: local development only</span>
 </div></header>
