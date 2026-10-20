@@ -21,6 +21,7 @@ import {
   type User,
   type UserPoolService,
 } from "../services/userPoolService";
+import { createCallbackRouter } from "./callback";
 import { adminUrl, type Flash, layout, type SafeHtml, withQuery } from "./html";
 import { inspectToken } from "./tokens";
 import {
@@ -47,7 +48,7 @@ const flashOf = (req: Request): Flash => ({
 const send = (
   res: Response,
   title: string,
-  active: "pools" | "codes" | "tokens",
+  active: "pools" | "codes" | "tokens" | "callback",
   body: SafeHtml,
   flash?: Flash,
   status = 200,
@@ -626,6 +627,8 @@ export const createAdminRouter = (
   };
   admin.get("/tokens", page(tokens));
   admin.post("/tokens", page(tokens));
+
+  admin.use("/callback", createCallbackRouter(services));
 
   admin.get("/api/status", async (req, res) => {
     const ctx = ctxOf(req);
