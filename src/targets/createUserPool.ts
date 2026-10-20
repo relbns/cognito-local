@@ -7,6 +7,7 @@ import shortUUID from "short-uuid";
 import type { Services } from "../services";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import { normalizePasswordPolicy } from "../services/passwordPolicy";
+import type { UserPool } from "../services/userPoolService";
 import { userPoolToResponseObject } from "./responses";
 import type { Target } from "./Target";
 
@@ -32,7 +33,7 @@ type CreateUserPoolServices = Pick<Services, "clock" | "cognito">;
  * @param defaultAttributes Cognito's default Schema Attributes
  * @param requestSchema Schema provided by the caller
  */
-const createSchemaAttributes = (
+export const createSchemaAttributes = (
   defaultAttributes: SchemaAttributesListType,
   requestSchema: SchemaAttributesListType,
 ): SchemaAttributesListType => {
@@ -76,44 +77,56 @@ const createSchemaAttributes = (
   return [...overriddenAttributes, ...customAttributes];
 };
 
+export const userPoolArn = (userPoolId: string) =>
+  `arn:aws:cognito-idp:${REGION}:${ACCOUNT_ID}:userpool/${userPoolId}`;
+
+export const newUserPoolId = () => `${REGION}_${generator.new().slice(0, 8)}`;
+
+/** The pool settings CreateUserPool stores, without Id, Arn and dates. */
+export const userPoolSettingsFromRequest = (
+  req: CreateUserPoolRequest,
+): Omit<UserPool, "Id"> => ({
+  AccountRecoverySetting: req.AccountRecoverySetting,
+  AdminCreateUserConfig: req.AdminCreateUserConfig,
+  AliasAttributes: req.AliasAttributes,
+  AutoVerifiedAttributes: req.AutoVerifiedAttributes,
+  DeviceConfiguration: req.DeviceConfiguration,
+  EmailConfiguration: req.EmailConfiguration,
+  EmailVerificationMessage: req.EmailVerificationMessage,
+  EmailVerificationSubject: req.EmailVerificationSubject,
+  LambdaConfig: req.LambdaConfig,
+  MfaConfiguration: req.MfaConfiguration,
+  Name: req.PoolName,
+  Policies: req.Policies && {
+    ...req.Policies,
+    PasswordPolicy: normalizePasswordPolicy(req.Policies.PasswordPolicy),
+  },
+  SchemaAttributes: createSchemaAttributes(
+    USER_POOL_AWS_DEFAULTS.SchemaAttributes ?? [],
+    req.Schema ?? [],
+  ),
+  SmsAuthenticationMessage: req.SmsAuthenticationMessage,
+  SmsConfiguration: req.SmsConfiguration,
+  SmsVerificationMessage: req.SmsVerificationMessage,
+  UserAttributeUpdateSettings: req.UserAttributeUpdateSettings,
+  UserPoolAddOns: req.UserPoolAddOns,
+  UserPoolTags: req.UserPoolTags,
+  UsernameAttributes: req.UsernameAttributes,
+  UsernameConfiguration: req.UsernameConfiguration,
+  VerificationMessageTemplate: req.VerificationMessageTemplate,
+});
+
 export const CreateUserPool =
   ({ cognito, clock }: CreateUserPoolServices): CreateUserPoolTarget =>
   async (ctx, req) => {
     const now = clock.get();
-    const userPoolId = `${REGION}_${generator.new().slice(0, 8)}`;
+    const userPoolId = newUserPoolId();
     const userPool = await cognito.createUserPool(ctx, {
-      AccountRecoverySetting: req.AccountRecoverySetting,
-      AdminCreateUserConfig: req.AdminCreateUserConfig,
-      AliasAttributes: req.AliasAttributes,
-      Arn: `arn:aws:cognito-idp:${REGION}:${ACCOUNT_ID}:userpool/${userPoolId}`,
-      AutoVerifiedAttributes: req.AutoVerifiedAttributes,
+      ...userPoolSettingsFromRequest(req),
+      Arn: userPoolArn(userPoolId),
       CreationDate: now,
-      DeviceConfiguration: req.DeviceConfiguration,
-      EmailConfiguration: req.EmailConfiguration,
-      EmailVerificationMessage: req.EmailVerificationMessage,
-      EmailVerificationSubject: req.EmailVerificationSubject,
       Id: userPoolId,
-      LambdaConfig: req.LambdaConfig,
       LastModifiedDate: now,
-      MfaConfiguration: req.MfaConfiguration,
-      Name: req.PoolName,
-      Policies: req.Policies && {
-        ...req.Policies,
-        PasswordPolicy: normalizePasswordPolicy(req.Policies.PasswordPolicy),
-      },
-      SchemaAttributes: createSchemaAttributes(
-        USER_POOL_AWS_DEFAULTS.SchemaAttributes ?? [],
-        req.Schema ?? [],
-      ),
-      SmsAuthenticationMessage: req.SmsAuthenticationMessage,
-      SmsConfiguration: req.SmsConfiguration,
-      SmsVerificationMessage: req.SmsVerificationMessage,
-      UserAttributeUpdateSettings: req.UserAttributeUpdateSettings,
-      UserPoolAddOns: req.UserPoolAddOns,
-      UserPoolTags: req.UserPoolTags,
-      UsernameAttributes: req.UsernameAttributes,
-      UsernameConfiguration: req.UsernameConfiguration,
-      VerificationMessageTemplate: req.VerificationMessageTemplate,
     });
 
     return {

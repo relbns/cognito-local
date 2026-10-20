@@ -35,6 +35,12 @@ export interface FileTriggerConfig {
   HotReload: boolean;
 }
 
+export interface ConfigOverrides {
+  port?: number;
+  hostname?: string;
+  adminUi?: boolean;
+}
+
 export interface Config {
   LambdaClient: AWS.Lambda.ClientConfiguration;
   TriggerFunctions: FunctionConfig;
@@ -101,13 +107,14 @@ export const DefaultConfig: Config = {
 export const loadConfig = async (
   ctx: Context,
   dataStoreFactory: DataStoreFactory,
+  overrides: ConfigOverrides = {},
 ): Promise<Config> => {
   ctx.logger.debug("loadConfig");
   const dataStore = await dataStoreFactory.create(ctx, "config", {});
 
-  const config = await dataStore.getRoot<Config>(ctx);
+  const config = await dataStore.getRoot<Partial<Config>>(ctx);
 
-  return mergeWith(
+  const merged: Config = mergeWith(
     {},
     DefaultConfig,
     config ?? {},
@@ -117,4 +124,18 @@ export const loadConfig = async (
       }
     },
   );
+
+  if (overrides.port !== undefined) merged.ServerConfig.port = overrides.port;
+  if (overrides.hostname !== undefined) {
+    merged.ServerConfig.hostname = overrides.hostname;
+  }
+  if (overrides.adminUi !== undefined) {
+    merged.AdminUIConfig.Enabled = overrides.adminUi;
+  }
+  if (!config?.TokenConfig?.IssuerDomain) {
+    const proto = merged.ServerConfig.https ? "https" : "http";
+    merged.TokenConfig.IssuerDomain = `${proto}://${merged.ServerConfig.hostname}:${merged.ServerConfig.port}`;
+  }
+
+  return merged;
 };

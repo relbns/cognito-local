@@ -1,0 +1,63 @@
+{
+  "$comment": "Hosted login with two federated identity providers, Google and a generic OIDC provider, both served by the built-in mock IdP. Try it from /_admin/callback.",
+  "Version": 1,
+  "UserPools": [
+    {
+      "Id": "local_FedExample",
+      "PoolName": "federation-example",
+      "UsernameAttributes": ["email"],
+      "IdentityProviders": [
+        {
+          "ProviderName": "Google",
+          "ProviderType": "Google",
+          "ProviderDetails": {
+            "client_id": "example-google-client-id.apps.googleusercontent.com",
+            "client_secret": "example-google-client-secret",
+            "authorize_scopes": "openid email profile"
+          },
+          "AttributeMapping": {
+            "email": "email",
+            "email_verified": "email_verified",
+            "given_name": "given_name",
+            "family_name": "family_name",
+            "username": "sub"
+          }
+        },
+        {
+          "ProviderName": "ExampleOIDC",
+          "ProviderType": "OIDC",
+          "ProviderDetails": {
+            "client_id": "example-oidc-client",
+            "client_secret": "example-oidc-secret",
+            "attributes_request_method": "GET",
+            "oidc_issuer": "https://idp.example.test",
+            "authorize_scopes": "openid email profile"
+          },
+          "AttributeMapping": {
+            "email": "email",
+            "name": "name",
+            "username": "sub"
+          },
+          "IdpIdentifiers": ["example.test"]
+        }
+      ],
+      "Clients": [
+        {
+          "ClientId": "fedexamplewebclient0000001",
+          "ClientName": "web",
+          "ClientSecret": "fedexamplewebsecret00000000000000000000000000000001",
+          "ExplicitAuthFlows": ["ALLOW_REFRESH_TOKEN_AUTH"],
+          "AllowedOAuthFlowsUserPoolClient": true,
+          "AllowedOAuthFlows": ["code"],
+          "AllowedOAuthScopes": ["openid", "email", "profile"],
+          "SupportedIdentityProviders": ["COGNITO", "Google", "ExampleOIDC"],
+          "CallbackURLs": [
+            "http://localhost:3000/callback",
+            "http://localhost:9229/_admin/callback"
+          ],
+          "LogoutURLs": ["http://localhost:3000/"]
+        }
+      ]
+    }
+  ]
+}

@@ -101,4 +101,32 @@ describe("loadConfig", () => {
       },
     });
   });
+
+  it("applies command line overrides and derives the issuer from them", async () => {
+    const config = await loadConfig(TestContext, newMockDataStoreFactory(), {
+      port: 9330,
+      hostname: "127.0.0.1",
+      adminUi: false,
+    });
+
+    expect(config.ServerConfig).toMatchObject({
+      port: 9330,
+      hostname: "127.0.0.1",
+    });
+    expect(config.AdminUIConfig.Enabled).toBe(false);
+    expect(config.TokenConfig.IssuerDomain).toBe("http://127.0.0.1:9330");
+  });
+
+  it("keeps an issuer set in the config file", async () => {
+    const ds = newMockDataStore();
+    ds.getRoot.mockResolvedValue({
+      TokenConfig: { IssuerDomain: "https://issuer.example.test" },
+    });
+
+    const config = await loadConfig(TestContext, newMockDataStoreFactory(ds), {
+      port: 9330,
+    });
+
+    expect(config.TokenConfig.IssuerDomain).toBe("https://issuer.example.test");
+  });
 });
