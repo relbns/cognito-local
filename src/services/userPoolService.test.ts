@@ -147,6 +147,65 @@ describe("User Pool Service", () => {
     });
   });
 
+  describe("updateUser", () => {
+    const loaded = TDB.user({ Attributes: [{ Name: "name", Value: "Old" }] });
+    const stored = { ...loaded, Attributes: [{ Name: "name", Value: "New" }] };
+
+    const newPool = (ds: MockedObject<DataStore>) =>
+      new UserPoolServiceImpl(mockClientsDataStore, clock, ds, {
+        Id: "local",
+        UsernameAttributes: [],
+      });
+
+    it("applies the update to the stored record, not the loaded copy", async () => {
+      const ds = newMockDataStore();
+      ds.get.mockResolvedValue(stored);
+
+      const result = await newPool(ds).updateUser(
+        TestContext,
+        loaded,
+        (latest) => ({ ...latest, MFACode: "123456" }),
+      );
+
+      expect(ds.get).toHaveBeenCalledWith(TestContext, [
+        "Users",
+        loaded.Username,
+      ]);
+      expect(result).toEqual({ ...stored, MFACode: "123456" });
+      expect(ds.set).toHaveBeenCalledWith(
+        TestContext,
+        ["Users", loaded.Username],
+        result,
+      );
+    });
+
+    it("falls back to the given user when nothing is stored", async () => {
+      const ds = newMockDataStore();
+      ds.get.mockResolvedValue(null);
+
+      const result = await newPool(ds).updateUser(
+        TestContext,
+        loaded,
+        (latest) => ({ ...latest, MFACode: "123456" }),
+      );
+
+      expect(result).toEqual({ ...loaded, MFACode: "123456" });
+    });
+
+    it("storeRefreshToken keeps changes made to the stored record", async () => {
+      const ds = newMockDataStore();
+      ds.get.mockResolvedValue(stored);
+
+      await newPool(ds).storeRefreshToken(TestContext, "refresh", loaded);
+
+      expect(ds.set).toHaveBeenCalledWith(
+        TestContext,
+        ["Users", loaded.Username],
+        { ...stored, RefreshTokens: ["refresh"] },
+      );
+    });
+  });
+
   describe("deleteAppClient", () => {
     const appClient = TDB.appClient();
 

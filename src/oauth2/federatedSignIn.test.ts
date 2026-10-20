@@ -160,7 +160,9 @@ describe("federatedSignIn", () => {
         { Name: "name", Value: "Old Name" },
       ],
     });
-    userPool.getUserByUsername.mockResolvedValue(existing);
+    userPool.getUserByUsername.mockImplementation(
+      async () => saved.at(-1) ?? existing,
+    );
 
     const { user, outcome } = await signIn();
 
@@ -176,6 +178,43 @@ describe("federatedSignIn", () => {
         username: "Google_1234",
       }),
     );
+  });
+
+  it("returns the user as stored after PostAuthentication changed it", async () => {
+    triggers.enabled.mockImplementation(
+      (name) => name === "PostAuthentication",
+    );
+    const existing = TDB.user({
+      Username: "Google_1234",
+      UserStatus: "EXTERNAL_PROVIDER",
+    });
+    const changedByTrigger = TDB.user({
+      ...existing,
+      Attributes: [{ Name: "custom:tier", Value: "gold" }],
+    });
+    userPool.getUserByUsername
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce(changedByTrigger);
+
+    const { user } = await signIn();
+
+    expect(user).toEqual(changedByTrigger);
+  });
+
+  it("returns the user as stored after PostConfirmation changed it", async () => {
+    triggers.enabled.mockImplementation((name) => name === "PostConfirmation");
+    const changedByTrigger = TDB.user({
+      Username: "Google_1234",
+      Attributes: [{ Name: "custom:tier", Value: "gold" }],
+    });
+    userPool.getUserByUsername
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(changedByTrigger);
+
+    const { user, outcome } = await signIn();
+
+    expect(outcome).toBe("created");
+    expect(user).toEqual(changedByTrigger);
   });
 
   it("refuses a disabled federated user", async () => {

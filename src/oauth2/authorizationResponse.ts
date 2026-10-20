@@ -47,17 +47,13 @@ export async function sendAuthorizationResponse(
     );
     const claims = jwt.decode(tokens.AccessToken) as Token | null;
     if (claims?.origin_jti && claims.exp) {
-      await userPool.saveUser(
-        ctx,
-        withTokenOrigin(
-          user,
-          {
-            Jti: claims.origin_jti,
-            ClientId: appClient.ClientId,
-            ExpiresAt: claims.exp,
-          },
-          services.clock.get(),
-        ),
+      const origin = {
+        Jti: claims.origin_jti,
+        ClientId: appClient.ClientId,
+        ExpiresAt: claims.exp,
+      };
+      await userPool.updateUser(ctx, user, (latest) =>
+        withTokenOrigin(latest, origin, services.clock.get()),
       );
     }
     const fragment = new URLSearchParams();

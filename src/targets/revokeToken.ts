@@ -49,7 +49,9 @@ export const RevokeToken =
       throw new NotAuthorizedError();
     }
 
-    await userPool.saveUser(ctx, withRefreshTokenRevoked(user, req.Token));
+    await userPool.updateUser(ctx, user, (latest) =>
+      withRefreshTokenRevoked(latest, req.Token),
+    );
 
     return {};
   };

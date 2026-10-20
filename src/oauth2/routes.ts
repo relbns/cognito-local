@@ -492,10 +492,9 @@ export function attachOAuth2Routes(
     );
     const user = await userPool.getUserByRefreshToken(ctx, token);
     if (user) {
-      await userPool.saveUser(ctx, {
-        ...user,
-        ...withRefreshTokenRevoked(user, token),
-      });
+      await userPool.updateUser(ctx, user, (latest) =>
+        withRefreshTokenRevoked(latest, token),
+      );
     }
 
     return res.status(200).json({});

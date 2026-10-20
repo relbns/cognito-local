@@ -110,6 +110,18 @@ const adminUserPasswordAuthFlow = async (
     };
   }
 
+  if (services.triggers.enabled("PostAuthentication", userPool.options.Id)) {
+    await services.triggers.postAuthentication(ctx, {
+      clientId: req.ClientId,
+      // AdminInitiateAuth does not pass ClientMetadata to PostAuthentication (AdminInitiateAuth API reference).
+      clientMetadata: undefined,
+      source: "PostAuthentication_Authentication",
+      userAttributes: user.Attributes,
+      username: user.Username,
+      userPoolId: userPool.options.Id,
+    });
+  }
+
   const userGroups = await userPool.listUserGroupMembership(ctx, user);
 
   const tokens = await services.tokenGenerator.generate(
