@@ -1,4 +1,95 @@
-# Cognito Local
+# cognito-local (relbns fork)
+
+A local Amazon Cognito User Pool emulator. This fork of [jagregory/cognito-local](https://github.com/jagregory/cognito-local) adds what we needed to run a passwordless (CUSTOM_AUTH OTP) and hosted-login setup locally without AWS. Branch `main` holds all of it.
+
+## What this fork adds
+
+- **PR #468 integrated.** [jagregory/cognito-local#468](https://github.com/jagregory/cognito-local/pull/468) by [vipinkashyap](https://github.com/vipinkashyap) (full User Pool API coverage, OAuth2/OIDC endpoints, MFA, WebAuthn and more) merged on top of upstream 5.3.0, with Biome fixes.
+- **Stateful CUSTOM_AUTH.** `InitiateAuth` / `RespondToAuthChallenge` keep a real challenge session: the Define, Create and Verify triggers run as in Cognito, Define gets the session history, Verify gets the private challenge parameters, a wrong answer returns a new `Session`, and the session expires (`AuthSessionConfig.AuthSessionValidity`, 3 minutes by default).
+- **Cognito-compatible `/oauth2/authorize` and `/oauth2/token`.** `response_type` `code` or `token` in any case, optional PKCE, scopes checked against the client's `AllowedOAuthScopes` and returned in the `scope` claim, client secret by HTTP Basic or in the body (`invalid_client` otherwise), `identity_provider=COGNITO` shows the built-in login.
+- **Admin UI at `/_admin`.** User pools, app clients, users (create, confirm, set password, enable or disable, groups), a codes viewer with every sign-up, forgot-password, MFA and CUSTOM_AUTH code (including the OTP your `CreateAuthChallenge` trigger generated), a JSON feed of the same codes for test scripts, and a JWT decoder that verifies a token against the pool.
+
+## Quick start
+
+```bash
+git clone https://github.com/relbns/cognito-local.git
+cd cognito-local
+npm install
+npm start                      # http://localhost:9229, data in ./.cognito
+open http://localhost:9229/_admin
+```
+
+`npm run build && node lib/bin/start.js` runs the compiled server from any directory. Data and `config.json` live in `.cognito/` under the working directory.
+
+## Screenshots
+
+User pools, and a pool with its settings and app clients:
+
+![User pools](docs/images/admin-pools.png)
+![Pool detail](docs/images/admin-pool-detail.png)
+
+Users, and one user with attributes, groups and actions:
+
+![Users](docs/images/admin-users.png)
+![User detail](docs/images/admin-user-detail.png)
+
+Codes viewer: the open CUSTOM_AUTH session with its OTP and expiry, and recent codes:
+
+![Codes](docs/images/admin-codes.png)
+
+Tokens: a decoded id token, verified against the pool JWKS:
+
+![Tokens](docs/images/admin-tokens.png)
+
+The built-in login page served for `/oauth2/authorize?identity_provider=COGNITO&redirect_uri=...&response_type=CODE&client_id=...&scope=openid+email+profile+phone&state=...`:
+
+![Hosted login](docs/images/hosted-login.png)
+
+## Point an AWS SDK client at it
+
+No code change is needed: AWS SDKs that support service-specific endpoints (JavaScript v3, boto3, the AWS CLI v2) read it from the environment.
+
+```bash
+export AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER=http://localhost:9229
+export AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local
+```
+
+```js
+const client = new CognitoIdentityProviderClient({ region: "us-east-1" });
+```
+
+The OAuth2 endpoints are under `http://localhost:9229/oauth2` (`/authorize`, `/token`, `/userInfo`, `/revoke`) and the JWKS under `http://localhost:9229/<poolId>/.well-known/jwks.json`. To keep usernames free-form (no email or phone as username), set `"UserPoolDefaults": { "UsernameAttributes": [] }` in `.cognito/config.json`.
+
+## Configuration added by this fork
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `AuthSessionConfig.AuthSessionValidity` | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid |
+| `AdminUIConfig.Enabled` | `true` | Serve the admin UI at `/_admin` and record codes |
+| `AdminUIConfig.CodeLogSize` | `100` | How many recent codes the admin UI keeps |
+| `COGNITO_LOCAL_ADMIN_UI` (env) | on | `false`, `0` or `off` disables the admin UI |
+
+## Not supported yet
+
+- Federated identity providers: `/oauth2/authorize` with a configured Google, OIDC or SAML provider returns a 501 page instead of redirecting.
+- The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
+- CUSTOM_AUTH sessions and the admin UI code log are in memory and are lost on restart (users, pools and clients persist).
+- The admin UI has no authentication. Anyone who can reach the port can read users, codes and client secrets. Do not expose it beyond your machine.
+- The built-in login page is a plain form without Cognito's styling.
+- A user auto-confirmed by a PreSignUp trigger is still sent a sign-up code, and a phone-only `SignUp` fails when `AutoVerifiedAttributes` does not include `phone_number`.
+- `CreateGroup` with an existing group name replaces the group (dropping its members) instead of failing with `GroupExistsException`.
+
+## Credits
+
+Upstream: [jagregory/cognito-local](https://github.com/jagregory/cognito-local) by James Gregory and contributors. Full API coverage and the OAuth2/OIDC endpoints: [PR #468](https://github.com/jagregory/cognito-local/pull/468) by [vipinkashyap](https://github.com/vipinkashyap). MIT licensed, like upstream.
+
+---
+
+# Upstream README
+
+> Everything below is the README from PR #468 (vipinkashyap's rewrite of the upstream README), kept as it was apart from its title level. The fork's additions to it are the `/oauth2/authorize` and `/oauth2/token` rows, the Admin UI section and the `AuthSessionConfig` / `AdminUIConfig` / `COGNITO_LOCAL_ADMIN_UI` configuration rows.
+
+## Cognito Local
 
 **122 SDK targets + 7 OAuth2/OIDC endpoints = 100% AWS Cognito User Pool API coverage**
 
@@ -8,7 +99,6 @@ A local Amazon Cognito User Pool emulator for development and testing. Drop-in r
 
 > Fork of [jagregory/cognito-local](https://github.com/jagregory/cognito-local), upgraded from partial coverage to full API parity.
 
----
 
 ## Quick Start
 
