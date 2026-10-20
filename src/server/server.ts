@@ -7,6 +7,8 @@ import express from "express";
 import type { Logger } from "pino";
 import Pino from "pino-http";
 import * as uuid from "uuid";
+import { ADMIN_UI_PATH } from "../admin/html";
+import { createAdminRouter } from "../admin/routes";
 import { CognitoError, UnsupportedError } from "../errors";
 import PublicKey from "../keys/cognitoLocal.public.json";
 import { AuthorizationCodeStore } from "../oauth2/authorizationCodeStore";
@@ -26,6 +28,7 @@ export type ServerOptions = {
 export interface Server {
   // biome-ignore lint/suspicious/noExplicitAny: don't want to export express types
   application: any;
+  adminUiPath?: string;
   start(): Promise<http.Server | https.Server>;
 }
 
@@ -101,6 +104,11 @@ export const createServer = (
     attachOAuth2Routes(app, services, codeStore);
   }
 
+  const adminUiEnabled = !!services?.config.AdminUIConfig?.Enabled;
+  if (services && adminUiEnabled) {
+    app.use(ADMIN_UI_PATH, createAdminRouter(services, router));
+  }
+
   app.post("/", (req, res) => {
     const xAmzTarget = req.headers["x-amz-target"];
 
@@ -174,6 +182,7 @@ export const createServer = (
 
   return {
     application: app,
+    adminUiPath: adminUiEnabled ? ADMIN_UI_PATH : undefined,
     start() {
       const hostname = options.hostname;
       const port = options.port;

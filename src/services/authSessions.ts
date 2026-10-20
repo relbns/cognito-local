@@ -25,8 +25,15 @@ export interface AuthSession {
   pendingChallenge: PendingChallenge;
 }
 
+export interface ActiveAuthSession {
+  id: string;
+  expiresAt: Date;
+  session: AuthSession;
+}
+
 export interface AuthSessions {
   create(session: AuthSession): string;
+  list(): ActiveAuthSession[];
   peek(sessionId: string): AuthSession | undefined;
   take(sessionId: string): AuthSession;
 }
@@ -52,6 +59,17 @@ export class InMemoryAuthSessions implements AuthSessions {
       expiresAt: this.clock.get().getTime() + this.validityMinutes * 60_000,
     });
     return id;
+  }
+
+  public list(): ActiveAuthSession[] {
+    this.evictExpired();
+    return [...this.sessions.entries()]
+      .map(([id, stored]) => ({
+        id,
+        expiresAt: new Date(stored.expiresAt),
+        session: stored.session,
+      }))
+      .sort((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime());
   }
 
   public peek(sessionId: string): AuthSession | undefined {

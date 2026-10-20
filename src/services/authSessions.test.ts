@@ -50,4 +50,20 @@ describe("InMemoryAuthSessions", () => {
     clock.advanceBy(14 * 60_000);
     expect(sessions.take(id)).toEqual(session);
   });
+
+  it("lists active sessions newest first and drops expired ones", () => {
+    const clock = new ClockFake(new Date("2026-01-01T00:00:00Z"));
+    const sessions = new InMemoryAuthSessions(clock);
+    const first = sessions.create(session);
+    clock.advanceBy(60_000);
+    const second = sessions.create({ ...session, username: "other" });
+
+    expect(sessions.list().map((x) => x.id)).toEqual([second, first]);
+    expect(sessions.list()[0].expiresAt).toEqual(
+      new Date("2026-01-01T00:04:00Z"),
+    );
+
+    clock.advanceBy(2 * 60_000);
+    expect(sessions.list().map((x) => x.id)).toEqual([second]);
+  });
 });

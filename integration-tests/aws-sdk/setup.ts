@@ -13,10 +13,15 @@ import {
   type Clock,
   DateClock,
   InMemoryAuthSessions,
+  InMemoryCodeLog,
   type Lambda,
   MessagesService,
   TriggersService,
 } from "../../src/services";
+import {
+  RecordingAuthSessions,
+  RecordingMessages,
+} from "../../src/services/codeLog";
 import { CognitoServiceFactoryImpl } from "../../src/services/cognitoService";
 import { CryptoService } from "../../src/services/crypto";
 import type { DataStoreFactory } from "../../src/services/dataStore/factory";
@@ -74,12 +79,20 @@ export const withCognitoSdk =
       );
 
       fakeMessageDeliveryService = new FakeMessageDeliveryService();
+      const codeLog = new InMemoryCodeLog(clock);
       const services = {
-        authSessions: new InMemoryAuthSessions(clock),
+        authSessions: new RecordingAuthSessions(
+          new InMemoryAuthSessions(clock),
+          codeLog,
+        ),
         clock,
+        codeLog,
         cognito: cognitoClient,
         config: DefaultConfig,
-        messages: new MessagesService(triggers, fakeMessageDeliveryService),
+        messages: new RecordingMessages(
+          new MessagesService(triggers, fakeMessageDeliveryService),
+          codeLog,
+        ),
         otp,
         triggers,
         tokenGenerator: new JwtTokenGenerator(
