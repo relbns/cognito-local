@@ -1,7 +1,7 @@
 import type {
   UpdateUserPoolRequest,
   UpdateUserPoolResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
 import { normalizePasswordPolicy } from "../services/passwordPolicy";
 import type { UserPool } from "../services/userPoolService";

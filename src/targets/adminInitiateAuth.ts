@@ -1,7 +1,7 @@
 import type {
   AdminInitiateAuthRequest,
   AdminInitiateAuthResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { v4 } from "uuid";
 import {
   InvalidParameterError,
@@ -12,6 +12,7 @@ import {
 import type { Services } from "../services";
 import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
+import type { Present } from "../services/sdkTypes";
 import type { Target } from "./Target";
 
 export type AdminInitiateAuthTarget = Target<
@@ -27,7 +28,7 @@ type AdminInitiateAuthServices = Pick<
 const adminUserPasswordAuthFlow = async (
   ctx: Context,
   services: AdminInitiateAuthServices,
-  req: AdminInitiateAuthRequest,
+  req: Present<AdminInitiateAuthRequest>,
 ): Promise<AdminInitiateAuthResponse> => {
   if (!req.AuthParameters) {
     throw new InvalidParameterError(
@@ -133,7 +134,7 @@ const adminUserPasswordAuthFlow = async (
 const refreshTokenAuthFlow = async (
   ctx: Context,
   services: AdminInitiateAuthServices,
-  req: AdminInitiateAuthRequest,
+  req: Present<AdminInitiateAuthRequest>,
 ): Promise<AdminInitiateAuthResponse> => {
   if (!req.AuthParameters) {
     throw new InvalidParameterError(
@@ -187,7 +188,7 @@ const refreshTokenAuthFlow = async (
 const customAuthFlow = async (
   ctx: Context,
   services: AdminInitiateAuthServices,
-  req: AdminInitiateAuthRequest,
+  req: Present<AdminInitiateAuthRequest>,
 ): Promise<AdminInitiateAuthResponse> => {
   if (!req.AuthParameters?.USERNAME) {
     throw new InvalidParameterError("Missing required parameter USERNAME");

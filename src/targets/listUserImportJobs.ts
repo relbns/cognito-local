@@ -1,7 +1,7 @@
 import type {
   ListUserImportJobsRequest,
   ListUserImportJobsResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
 import { paginate } from "../services/pagination";
 import type { Target } from "./Target";

@@ -1,10 +1,11 @@
 import type {
   ConfirmForgotPasswordRequest,
   ConfirmForgotPasswordResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { CodeMismatchError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -39,7 +40,7 @@ export const ConfirmForgotPassword =
 
     assertPasswordConformsToPolicy(config, userPool.options, req.Password);
 
-    const updatedUser = {
+    const updatedUser: User = {
       ...user,
       UserLastModifiedDate: clock.get(),
       UserStatus: "CONFIRMED",

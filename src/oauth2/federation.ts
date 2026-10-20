@@ -1,4 +1,4 @@
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { Attribute } from "../services/sdkTypes";
 import {
   attribute,
   attributeValue,
@@ -77,7 +77,7 @@ export const federatedUsername = (providerName: string, userId: string) =>
 export function mapAttributes(
   provider: IdentityProviderConfig,
   claims: Claims,
-): AttributeListType {
+): Attribute[] {
   return Object.entries(provider.AttributeMapping ?? {})
     .filter(([poolAttribute]) => poolAttribute !== "username")
     .filter(([, idpAttribute]) => claims[idpAttribute] !== undefined)
@@ -110,11 +110,11 @@ export function parseIdentities(
   }
 }
 
-export const identitiesOf = (attributes: AttributeListType | undefined) =>
+export const identitiesOf = (attributes: Attribute[] | undefined) =>
   parseIdentities(attributeValue("identities", attributes));
 
 export function identitiesClaim(
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
 ): IdentityClaim[] | undefined {
   const identities = identitiesOf(attributes);
   if (identities.length === 0) return undefined;
@@ -161,7 +161,7 @@ export function linkMatches(
 export function findLinkedUser<
   T extends {
     Username: string;
-    Attributes: AttributeListType;
+    Attributes: Attribute[];
     ProviderLinks?: ProviderLink[];
   },
 >(

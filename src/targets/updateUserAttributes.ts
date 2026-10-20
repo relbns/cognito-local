@@ -1,7 +1,7 @@
 import type {
   UpdateUserAttributesRequest,
   UpdateUserAttributesResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import jwt from "jsonwebtoken";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
@@ -12,6 +12,7 @@ import {
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import type { Present } from "../services/sdkTypes";
 import type { Token } from "../services/tokenGenerator";
 import {
   attributesAppend,
@@ -27,7 +28,7 @@ const sendAttributeVerificationCode = async (
   userPool: UserPoolService,
   user: User,
   messages: Messages,
-  req: UpdateUserAttributesRequest,
+  req: Present<UpdateUserAttributesRequest>,
   code: string,
 ) => {
   const deliveryDetails = selectAppropriateDeliveryMethod(

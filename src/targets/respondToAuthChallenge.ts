@@ -2,7 +2,7 @@ import type {
   DeliveryMediumType,
   RespondToAuthChallengeRequest,
   RespondToAuthChallengeResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { v4 } from "uuid";
 import {
   CodeMismatchError,
@@ -17,6 +17,7 @@ import {
   respondToCustomAuthChallenge,
 } from "../services/customAuth";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import type { Present } from "../services/sdkTypes";
 import { verify as verifyTotp } from "../services/totp";
 import {
   attributeValue,
@@ -44,7 +45,7 @@ type RespondToAuthChallengeService = Pick<
 
 const sendSmsMfaChallenge = async (
   ctx: Parameters<RespondToAuthChallengeTarget>[0],
-  req: RespondToAuthChallengeRequest,
+  req: Present<RespondToAuthChallengeRequest>,
   user: User,
   userPoolId: string,
   services: RespondToAuthChallengeService,

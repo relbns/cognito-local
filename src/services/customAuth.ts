@@ -1,9 +1,5 @@
 import * as crypto from "node:crypto";
-import type {
-  AuthParametersType,
-  ChallengeResponsesType,
-  InitiateAuthResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { InitiateAuthResponse } from "@aws-sdk/client-cognito-identity-provider";
 import {
   InvalidParameterError,
   InvalidPasswordError,
@@ -165,7 +161,7 @@ export const startCustomAuth = async (
     userPool: UserPoolService;
     user: User;
     client: AppClient;
-    authParameters?: AuthParametersType;
+    authParameters?: Record<string, string>;
     clientMetadata?: Record<string, string>;
   },
 ): Promise<CustomAuthResponse> => {
@@ -208,7 +204,7 @@ export const respondToCustomAuthChallenge = async (
     client: AppClient;
     sessionId: string;
     challengeName: string;
-    challengeResponses: ChallengeResponsesType;
+    challengeResponses: Record<string, string>;
     clientMetadata?: Record<string, string>;
   },
 ): Promise<CustomAuthResponse> => {

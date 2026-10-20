@@ -1,6 +1,6 @@
+import type { TimeUnitsType } from "@aws-sdk/client-cognito-identity-provider";
 import type { StringMap } from "aws-lambda/trigger/cognito-user-pool-trigger/_common";
 import type { GroupOverrideDetails } from "aws-lambda/trigger/cognito-user-pool-trigger/pre-token-generation";
-import type { TimeUnitsType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import type { StringValue, UnitAnyCase } from "ms";
 import * as uuid from "uuid";

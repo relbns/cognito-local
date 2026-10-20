@@ -1,8 +1,8 @@
 import type {
   AdminCreateUserRequest,
   AdminCreateUserResponse,
-  DeliveryMediumListType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+  DeliveryMediumType,
+} from "@aws-sdk/client-cognito-identity-provider";
 import shortUUID from "short-uuid";
 import * as uuid from "uuid";
 import {
@@ -15,6 +15,7 @@ import { enforceAliasUniqueness } from "../services/aliases";
 import type { Context } from "../services/context";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import type { Present } from "../services/sdkTypes";
 import {
   attributesInclude,
   attributeValue,
@@ -38,7 +39,7 @@ type AdminCreateUserServices = Pick<
 >;
 
 const selectAppropriateDeliveryMethod = (
-  desiredDeliveryMediums: DeliveryMediumListType,
+  desiredDeliveryMediums: DeliveryMediumType[],
   user: User,
 ): DeliveryDetails | null => {
   if (desiredDeliveryMediums.includes("SMS")) {
@@ -68,7 +69,7 @@ const selectAppropriateDeliveryMethod = (
 
 const deliverWelcomeMessage = async (
   ctx: Context,
-  req: AdminCreateUserRequest,
+  req: Present<AdminCreateUserRequest>,
   temporaryPassword: string,
   user: User,
   messages: Messages,

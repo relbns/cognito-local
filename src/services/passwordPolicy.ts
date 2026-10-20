@@ -1,4 +1,4 @@
-import type { PasswordPolicyType } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { PasswordPolicyType } from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidPasswordError } from "../errors";
 import type { Config } from "../server/config";
 import type { UserPool } from "./userPoolService";

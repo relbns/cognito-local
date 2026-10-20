@@ -1,3 +1,4 @@
+import type { UserStatusType } from "@aws-sdk/client-cognito-identity-provider";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
@@ -56,7 +57,7 @@ describe("AdminConfirmSignUp target", () => {
     "something else",
   ])("throws if the user has status %s", async (status) => {
     const user = TDB.user({
-      UserStatus: status,
+      UserStatus: status as UserStatusType,
     });
 
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);

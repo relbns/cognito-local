@@ -1,7 +1,7 @@
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { AliasExistsError, UsernameExistsError } from "../errors";
 import type { Clock } from "./clock";
 import type { Context } from "./context";
+import type { Attribute } from "./sdkTypes";
 import {
   attribute,
   attributesAppend,
@@ -24,7 +24,7 @@ export interface AliasConflict {
 // Email and phone aliases only count once verified; preferred_username always counts.
 export const isActiveAlias = (
   attributeName: string,
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
 ): boolean => {
   if (!attributeValue(attributeName, attributes)) {
     return false;
@@ -33,9 +33,7 @@ export const isActiveAlias = (
   return !flag || attributeValue(flag, attributes) === "true";
 };
 
-export const aliasAttributesTouchedBy = (
-  attributes: AttributeListType,
-): string[] => {
+export const aliasAttributesTouchedBy = (attributes: Attribute[]): string[] => {
   const touched = new Set<string>();
   for (const { Name } of attributes) {
     const base = Name.replace(/_verified$/, "");
@@ -50,7 +48,7 @@ export const findAliasConflicts = async (
   ctx: Context,
   userPool: UserPoolService,
   username: string,
-  attributes: AttributeListType,
+  attributes: Attribute[],
   attributeNames?: readonly string[],
 ): Promise<AliasConflict[]> => {
   const inScope = (name: string) =>
@@ -111,7 +109,7 @@ export const enforceAliasUniqueness = async (
   userPool: UserPoolService,
   clock: Clock,
   username: string,
-  attributes: AttributeListType,
+  attributes: Attribute[],
   {
     attributeNames,
     forceAliasCreation = false,

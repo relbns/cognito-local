@@ -1,7 +1,7 @@
 import type {
   UpdateGroupRequest,
   UpdateGroupResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { GroupNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { groupToResponseObject } from "./responses";

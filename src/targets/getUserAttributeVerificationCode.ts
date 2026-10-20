@@ -1,12 +1,13 @@
 import type {
   GetUserAttributeVerificationCodeRequest,
   GetUserAttributeVerificationCodeResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import jwt from "jsonwebtoken";
 import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import type { Present } from "../services/sdkTypes";
 import type { Token } from "../services/tokenGenerator";
 import type { User } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -16,7 +17,7 @@ const sendAttributeVerificationCode = async (
   userPool: UserPoolService,
   user: User,
   messages: Messages,
-  req: GetUserAttributeVerificationCodeRequest,
+  req: Present<GetUserAttributeVerificationCodeRequest>,
   code: string,
 ) => {
   const deliveryDetails = selectAppropriateDeliveryMethod(

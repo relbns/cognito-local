@@ -1,9 +1,10 @@
 import type {
   AdminConfirmSignUpRequest,
   AdminConfirmSignUpResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { NotAuthorizedError } from "../errors";
 import type { Services } from "../services";
+import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -36,7 +37,7 @@ export const AdminConfirmSignUp =
       );
     }
 
-    const updatedUser = {
+    const updatedUser: User = {
       ...user,
       UserLastModifiedDate: clock.get(),
       UserStatus: "CONFIRMED",

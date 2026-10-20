@@ -1,9 +1,9 @@
 import type {
-  AttributeType,
   CreateUserPoolClientRequest,
   CreateUserPoolRequest,
   ResourceServerScopeType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
+import type { Attribute } from "../services/sdkTypes";
 
 export const SEED_VERSION = 1;
 
@@ -37,7 +37,7 @@ export interface SeedGroup {
 
 export interface SeedUser {
   Username: string;
-  UserAttributes?: AttributeType[];
+  UserAttributes?: Attribute[];
   /** Permanent password: the user starts CONFIRMED. Applied only when the user is created. */
   Password?: string;
   /** Temporary password: the user starts FORCE_CHANGE_PASSWORD. Applied only when the user is created. */

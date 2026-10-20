@@ -1,7 +1,7 @@
 import type {
   ForgotPasswordRequest,
   ForgotPasswordResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { UnsupportedError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";

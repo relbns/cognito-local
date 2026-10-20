@@ -1,13 +1,9 @@
 import type {
-  AttributeListType,
-  AttributeType,
-  MFAOptionListType,
-  SchemaAttributesListType,
-  StringType,
-  UserMFASettingListType,
+  MFAOptionType,
+  SchemaAttributeType,
   UserPoolType,
   UserStatusType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError } from "../errors";
 import type { AppClient } from "./appClient";
 import type { Clock } from "./clock";
@@ -15,6 +11,7 @@ import type { Context } from "./context";
 import type { DataStore } from "./dataStore/dataStore";
 import type { DataStoreFactory } from "./dataStore/factory";
 import { FilterConfig } from "./filter";
+import type { Attribute } from "./sdkTypes";
 
 export interface MFAOption {
   DeliveryMedium: "SMS";
@@ -24,12 +21,12 @@ export interface MFAOption {
 export const attribute = (
   name: string,
   value: string | undefined,
-): AttributeType => ({ Name: name, Value: value });
+): Attribute => ({ Name: name, Value: value });
 
 export const attributesIncludeMatch = (
   attributeName: string,
   attributeValue: string,
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
 ) =>
   !!(attributes ?? []).find(
     (x) => x.Name === attributeName && x.Value === attributeValue,
@@ -37,16 +34,16 @@ export const attributesIncludeMatch = (
 
 export const attributesInclude = (
   attributeName: string,
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
 ) => !!(attributes ?? []).find((x) => x.Name === attributeName);
 
 export const attributeValue = (
   attributeName: string | undefined,
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
 ) => (attributes ?? []).find((x) => x.Name === attributeName)?.Value;
 
 export const attributesToRecord = (
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
 ): Record<string, string> =>
   (attributes ?? []).reduce(
     (acc, attr) => {
@@ -60,15 +57,15 @@ export const attributesToRecord = (
 
 export const attributesFromRecord = (
   attributes: Record<string, string>,
-): AttributeListType =>
+): Attribute[] =>
   Object.entries(attributes)
     .map(([Name, Value]) => ({ Name, Value }))
     .sort((a, b) => a.Name.localeCompare(b.Name));
 
 export const attributesAppend = (
-  attributes: AttributeListType | undefined,
-  ...toAppend: AttributeListType
-): AttributeListType => {
+  attributes: Attribute[] | undefined,
+  ...toAppend: Attribute[]
+): Attribute[] => {
   const attributeSet = attributesToRecord(attributes);
 
   for (const attr of toAppend) {
@@ -83,24 +80,23 @@ export const attributesAppend = (
 };
 
 export const attributesRemove = (
-  attributes: AttributeListType | undefined,
+  attributes: Attribute[] | undefined,
   ...toRemove: readonly string[]
-): AttributeListType =>
-  attributes?.filter((x) => !toRemove.includes(x.Name)) ?? [];
+): Attribute[] => attributes?.filter((x) => !toRemove.includes(x.Name)) ?? [];
 
 export const customAttributes = (
-  attributes: AttributeListType | undefined,
-): AttributeListType =>
+  attributes: Attribute[] | undefined,
+): Attribute[] =>
   (attributes ?? []).filter((attr) => attr.Name.startsWith("custom:"));
 
 export interface User {
-  Attributes: AttributeListType;
+  Attributes: Attribute[];
   Enabled: boolean;
-  MFAOptions?: MFAOptionListType;
-  PreferredMfaSetting?: StringType;
+  MFAOptions?: MFAOptionType[];
+  PreferredMfaSetting?: string;
   UserCreateDate: Date;
   UserLastModifiedDate: Date;
-  UserMFASettingList?: UserMFASettingListType;
+  UserMFASettingList?: string[];
   Username: string;
   UserStatus: UserStatusType;
 
@@ -117,7 +113,7 @@ export interface User {
    * but have not yet been verified. This is used to track changes that require user verification
    * before they can be applied to the user.
    */
-  UnverifiedAttributeChanges?: AttributeListType;
+  UnverifiedAttributeChanges?: Attribute[];
 
   /**
    * SoftwareTokenMfaConfiguration stores the user's TOTP secret and verification
@@ -573,10 +569,10 @@ export class UserPoolServiceFactoryImpl implements UserPoolServiceFactory {
 }
 
 export const validatePermittedAttributeChanges = (
-  requestAttributes: AttributeListType,
-  schemaAttributes: SchemaAttributesListType,
+  requestAttributes: Attribute[],
+  schemaAttributes: SchemaAttributeType[],
   { admin = false }: { admin?: boolean } = {},
-): AttributeListType => {
+): Attribute[] => {
   for (const attr of requestAttributes) {
     const attrSchema = schemaAttributes.find((x) => x.Name === attr.Name);
     if (!attrSchema) {
@@ -618,8 +614,8 @@ export const validatePermittedAttributeChanges = (
 };
 
 export const defaultVerifiedAttributesIfModified = (
-  attributes: AttributeListType,
-): AttributeListType => {
+  attributes: Attribute[],
+): Attribute[] => {
   const attributesToSet = [...attributes];
   if (
     attributesInclude("email", attributes) &&
@@ -637,7 +633,7 @@ export const defaultVerifiedAttributesIfModified = (
 };
 
 export const hasUnverifiedContactAttributes = (
-  userAttributesToSet: AttributeListType | undefined,
+  userAttributesToSet: Attribute[] | undefined,
 ): boolean =>
   attributeValue("email_verified", userAttributesToSet) === "false" ||
   attributeValue("phone_number_verified", userAttributesToSet) === "false";
@@ -648,11 +644,11 @@ export const hasUnverifiedContactAttributes = (
  * - Delayed attributes that require verification before they can be set
  */
 export const splitImmediateAndDelayedAttributes = (
-  userAttributesToSet: AttributeListType,
+  userAttributesToSet: Attribute[],
   attributesRequireVerificationBeforeUpdate: readonly string[] | undefined,
-): [AttributeListType, AttributeListType] => {
-  const immediateAttributes: AttributeListType = [];
-  const delayedAttributes: AttributeListType = [];
+): [Attribute[], Attribute[]] => {
+  const immediateAttributes: Attribute[] = [];
+  const delayedAttributes: Attribute[] = [];
 
   for (const attr of userAttributesToSet) {
     if (attributesRequireVerificationBeforeUpdate?.includes(attr.Name)) {

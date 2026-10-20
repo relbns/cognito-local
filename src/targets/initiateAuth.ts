@@ -2,7 +2,7 @@ import type {
   DeliveryMediumType,
   InitiateAuthRequest,
   InitiateAuthResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { v4 } from "uuid";
 import {
   InvalidParameterError,
@@ -18,6 +18,7 @@ import {
   passwordVerifierChallengeParameters,
   startCustomAuth,
 } from "../services/customAuth";
+import type { Present } from "../services/sdkTypes";
 import {
   attributesToRecord,
   attributeValue,
@@ -44,7 +45,7 @@ type InitiateAuthServices = Pick<
 const smsMfaChallenge = async (
   ctx: Context,
   user: User,
-  req: InitiateAuthRequest,
+  req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   services: InitiateAuthServices,
 ): Promise<InitiateAuthResponse> => {
@@ -137,7 +138,7 @@ const enabledMfaMethods = (
 const verifyMfaChallenge = async (
   ctx: Context,
   user: User,
-  req: InitiateAuthRequest,
+  req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   services: InitiateAuthServices,
 ): Promise<InitiateAuthResponse> => {
@@ -166,7 +167,7 @@ const verifyMfaChallenge = async (
 const verifyPasswordChallenge = async (
   ctx: Context,
   user: User,
-  _req: InitiateAuthRequest,
+  _req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   userPoolClient: AppClient,
   services: InitiateAuthServices,
@@ -207,7 +208,7 @@ const newPasswordChallenge = (user: User): InitiateAuthResponse => ({
 
 const userPasswordAuthFlow = async (
   ctx: Context,
-  req: InitiateAuthRequest,
+  req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   userPoolClient: AppClient,
   services: InitiateAuthServices,
@@ -296,7 +297,7 @@ const userPasswordAuthFlow = async (
 
 const refreshTokenAuthFlow = async (
   ctx: Context,
-  req: InitiateAuthRequest,
+  req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   userPoolClient: AppClient,
   services: InitiateAuthServices,
@@ -351,7 +352,7 @@ const refreshTokenAuthFlow = async (
 
 const userSrpAuthFlow = async (
   ctx: Context,
-  req: InitiateAuthRequest,
+  req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   _userPoolClient: AppClient,
   _services: InitiateAuthServices,
@@ -395,7 +396,7 @@ const userSrpAuthFlow = async (
 
 const customAuthFlow = async (
   ctx: Context,
-  req: InitiateAuthRequest,
+  req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
   userPoolClient: AppClient,
   services: InitiateAuthServices,

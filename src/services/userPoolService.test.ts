@@ -1,4 +1,3 @@
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import {
@@ -9,6 +8,7 @@ import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import type { AppClient } from "./appClient";
 import type { DataStore } from "./dataStore/dataStore";
+import type { Attribute } from "./sdkTypes";
 import {
   attributesFromRecord,
   attributesInclude,
@@ -519,7 +519,7 @@ describe("User Pool Service", () => {
   });
 
   describe("attributes", () => {
-    const attributes: AttributeListType = [
+    const attributes: Attribute[] = [
       { Name: "email", Value: "example@example.com" },
       { Name: "sub", Value: "uuid" },
     ];

@@ -1,7 +1,7 @@
 import type {
   RevokeTokenRequest,
   RevokeTokenResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { NotAuthorizedError } from "../errors";
 import type { Services } from "../services";
 import type { Target } from "./Target";

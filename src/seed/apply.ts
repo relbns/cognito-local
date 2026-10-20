@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { CreateUserPoolRequest } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { CreateUserPoolRequest } from "@aws-sdk/client-cognito-identity-provider";
 import * as uuid from "uuid";
 import { CognitoError } from "../errors";
 import { COGNITO_PROVIDER } from "../oauth2/oauthRequest";
@@ -9,6 +9,7 @@ import { enforceAliasUniqueness } from "../services/aliases";
 import { type AppClient, newId } from "../services/appClient";
 import type { Context } from "../services/context";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import type { Present } from "../services/sdkTypes";
 import {
   attributesAppend,
   attributesInclude,
@@ -156,7 +157,7 @@ class SeedApplier {
       ),
     );
     const settings = userPoolSettingsFromRequest(
-      request as unknown as CreateUserPoolRequest,
+      request as unknown as Present<CreateUserPoolRequest>,
     ) as unknown as Record<string, unknown>;
     const desired: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(request)) {
@@ -196,7 +197,9 @@ class SeedApplier {
       if (!service) {
         const id = seedPool.Id ?? newUserPoolId();
         await this.services.cognito.createUserPool(this.ctx, {
-          ...userPoolSettingsFromRequest(seedPool as CreateUserPoolRequest),
+          ...userPoolSettingsFromRequest(
+            seedPool as unknown as Present<CreateUserPoolRequest>,
+          ),
           Arn: userPoolArn(id),
           CreationDate: now,
           Id: id,

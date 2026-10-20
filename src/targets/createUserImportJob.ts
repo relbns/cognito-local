@@ -1,7 +1,7 @@
 import type {
   CreateUserImportJobRequest,
   CreateUserImportJobResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import * as uuid from "uuid";
 import type { Services } from "../services";
 import type { Target } from "./Target";

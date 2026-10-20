@@ -1,12 +1,13 @@
 import type {
   CreateUserPoolRequest,
   CreateUserPoolResponse,
-  SchemaAttributesListType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+  SchemaAttributeType,
+} from "@aws-sdk/client-cognito-identity-provider";
 import shortUUID from "short-uuid";
 import type { Services } from "../services";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import { normalizePasswordPolicy } from "../services/passwordPolicy";
+import type { Present } from "../services/sdkTypes";
 import type { UserPool } from "../services/userPoolService";
 import { userPoolToResponseObject } from "./responses";
 import type { Target } from "./Target";
@@ -34,9 +35,9 @@ type CreateUserPoolServices = Pick<Services, "clock" | "cognito">;
  * @param requestSchema Schema provided by the caller
  */
 export const createSchemaAttributes = (
-  defaultAttributes: SchemaAttributesListType,
-  requestSchema: SchemaAttributesListType,
-): SchemaAttributesListType => {
+  defaultAttributes: SchemaAttributeType[],
+  requestSchema: SchemaAttributeType[],
+): SchemaAttributeType[] => {
   const overrides = Object.fromEntries(
     requestSchema.map((x) => [x.Name as string, x]),
   );
@@ -84,7 +85,7 @@ export const newUserPoolId = () => `${REGION}_${generator.new().slice(0, 8)}`;
 
 /** The pool settings CreateUserPool stores, without Id, Arn and dates. */
 export const userPoolSettingsFromRequest = (
-  req: CreateUserPoolRequest,
+  req: Present<CreateUserPoolRequest>,
 ): Omit<UserPool, "Id"> => ({
   AccountRecoverySetting: req.AccountRecoverySetting,
   AdminCreateUserConfig: req.AdminCreateUserConfig,
