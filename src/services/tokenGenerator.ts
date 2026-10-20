@@ -103,6 +103,7 @@ export interface TokenGenerator {
       | "HostedAuth"
       | "NewPasswordChallenge"
       | "RefreshTokens",
+    scopes?: readonly string[],
   ): Promise<Tokens>;
 }
 
@@ -153,6 +154,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       | "HostedAuth"
       | "NewPasswordChallenge"
       | "RefreshTokens",
+    scopes?: readonly string[],
   ): Promise<Tokens> {
     const eventId = uuid.v4();
     const authTime = Math.floor(this.clock.get().getTime() / 1000);
@@ -164,7 +166,9 @@ export class JwtTokenGenerator implements TokenGenerator {
       event_id: eventId,
       iat: authTime,
       jti: uuid.v4(),
-      scope: "aws.cognito.signin.user.admin", // TODO: scopes
+      scope: scopes?.length
+        ? scopes.join(" ")
+        : "aws.cognito.signin.user.admin",
       sub,
       token_use: "access",
       username: user.Username,
@@ -240,6 +244,7 @@ export class JwtTokenGenerator implements TokenGenerator {
           email: attributeValue("email", user.Attributes),
           iat: authTime,
           jti: uuid.v4(),
+          ...(scopes?.length ? { scope: scopes.join(" ") } : {}),
         },
         PrivateKey.pem,
         {

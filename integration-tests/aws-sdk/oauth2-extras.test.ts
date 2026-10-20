@@ -102,6 +102,7 @@ describe(
         redirect_uri: "http://localhost:9876",
         client_id: clientId,
         code_verifier: VERIFIER,
+        ...(clientSecret ? { client_secret: clientSecret } : {}),
       });
       const tokens = await tokenRes.json();
 
@@ -182,6 +183,7 @@ describe(
           GenerateSecret: true,
         });
         expect(clientSecret).toBeTruthy();
+        expect(tokens.refresh_token).toBeTruthy();
 
         // Without the secret → 401.
         const unauthed = await fetch(`${serverUrl()}/oauth2/revoke`, {

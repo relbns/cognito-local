@@ -7,7 +7,7 @@ export interface StoredCode {
   userPoolId: string;
   username: string;
   redirectUri: string;
-  codeChallenge: string;
+  codeChallenge: string | undefined;
   scope: string;
   state: string | undefined;
 }
