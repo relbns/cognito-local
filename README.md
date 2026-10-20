@@ -60,6 +60,18 @@ const client = new CognitoIdentityProviderClient({ region: "us-east-1" });
 
 The OAuth2 endpoints are under `http://localhost:9229/oauth2` (`/authorize`, `/token`, `/userInfo`, `/revoke`) and the JWKS under `http://localhost:9229/<poolId>/.well-known/jwks.json`. To keep usernames free-form (no email or phone as username), set `"UserPoolDefaults": { "UsernameAttributes": [] }` in `.cognito/config.json`.
 
+Tested with AWS SDK for JavaScript v2 and v3, boto3 and the AWS CLI v2: see [docs/sdk-compatibility.md](docs/sdk-compatibility.md) for versions, per-SDK settings and known gaps.
+
+## Docker image
+
+Multi-arch (`linux/amd64`, `linux/arm64`) images are published to GitHub Container Registry: `edge` from `main`, and `X.Y.Z` / `X.Y` / `X` / `latest` from `v*` tags.
+
+```bash
+docker run --rm -p 9229:9229 -v cognito-data:/app/.cognito ghcr.io/relbns/cognito-local:edge
+```
+
+The container runs as the unprivileged `node` user, listens on `0.0.0.0:9229`, keeps its data and `config.json` in the `/app/.cognito` volume, and reports health on `/health`. The admin UI is at `http://localhost:9229/_admin`. Tokens are issued for `http://localhost:9229` by default; set `TokenConfig.IssuerDomain` in `config.json` when clients reach the emulator under another name (for example `http://cognito:9229` on a Compose network).
+
 ## Configuration added by this fork
 
 | Key | Default | Meaning |
@@ -77,7 +89,6 @@ The OAuth2 endpoints are under `http://localhost:9229/oauth2` (`/authorize`, `/t
 - The admin UI has no authentication. Anyone who can reach the port can read users, codes and client secrets. Do not expose it beyond your machine.
 - The built-in login page is a plain form without Cognito's styling.
 - A user auto-confirmed by a PreSignUp trigger is still sent a sign-up code, and a phone-only `SignUp` fails when `AutoVerifiedAttributes` does not include `phone_number`.
-- `CreateGroup` with an existing group name replaces the group (dropping its members) instead of failing with `GroupExistsException`.
 
 ## Credits
 
