@@ -8,6 +8,7 @@ import {
   assertAuthSessionValidity,
   newId,
 } from "../services/appClient";
+import { assertTokenValidity } from "../services/tokenGenerator";
 import { appClientToResponseObject } from "./responses";
 import type { Target } from "./Target";
 
@@ -40,7 +41,7 @@ export const CreateUserPoolClient =
       ClientSecret: req.GenerateSecret ? newId() : undefined,
       CreationDate: clock.get(),
       DefaultRedirectURI: req.DefaultRedirectURI,
-      EnableTokenRevocation: req.EnableTokenRevocation,
+      EnableTokenRevocation: req.EnableTokenRevocation ?? true,
       ExplicitAuthFlows: req.ExplicitAuthFlows,
       IdTokenValidity: req.IdTokenValidity,
       LastModifiedDate: clock.get(),
@@ -51,13 +52,14 @@ export const CreateUserPoolClient =
       SupportedIdentityProviders: req.SupportedIdentityProviders,
       TokenValidityUnits: {
         AccessToken: req.TokenValidityUnits?.AccessToken ?? "hours",
-        IdToken: req.TokenValidityUnits?.IdToken ?? "minutes",
+        IdToken: req.TokenValidityUnits?.IdToken ?? "hours",
         RefreshToken: req.TokenValidityUnits?.RefreshToken ?? "days",
       },
       UserPoolId: req.UserPoolId,
       WriteAttributes: req.WriteAttributes,
     };
 
+    assertTokenValidity(appClient);
     await userPool.saveAppClient(ctx, appClient);
 
     return {

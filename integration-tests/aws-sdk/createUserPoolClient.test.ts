@@ -27,10 +27,11 @@ describe(
           ClientName: "test",
           CreationDate: expect.any(Date),
           LastModifiedDate: expect.any(Date),
+          EnableTokenRevocation: true,
           UserPoolId: userPoolId,
           TokenValidityUnits: {
             AccessToken: "hours",
-            IdToken: "minutes",
+            IdToken: "hours",
             RefreshToken: "days",
           },
         },

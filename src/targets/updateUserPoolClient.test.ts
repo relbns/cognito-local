@@ -44,7 +44,7 @@ describe("UpdateUserPoolClient target", () => {
       ClientId: existingAppClient.ClientId,
       UserPoolId: existingAppClient.UserPoolId,
       ClientName: "new client name",
-      AccessTokenValidity: 50,
+      AccessTokenValidity: 5,
     });
 
     expect(mockCognitoService.getAppClient).toHaveBeenCalledWith(
@@ -56,12 +56,12 @@ describe("UpdateUserPoolClient target", () => {
       TestContext,
       {
         ...existingAppClient,
-        AccessTokenValidity: 50,
+        AccessTokenValidity: 5,
         ClientName: "new client name",
         LastModifiedDate: newDate,
         TokenValidityUnits: {
           AccessToken: "hours",
-          IdToken: "minutes",
+          IdToken: "hours",
           RefreshToken: "days",
         },
       },
@@ -69,12 +69,12 @@ describe("UpdateUserPoolClient target", () => {
 
     expect(result.UserPoolClient).toEqual({
       ...existingAppClient,
-      AccessTokenValidity: 50,
+      AccessTokenValidity: 5,
       ClientName: "new client name",
       LastModifiedDate: newDate,
       TokenValidityUnits: {
         AccessToken: "hours",
-        IdToken: "minutes",
+        IdToken: "hours",
         RefreshToken: "days",
       },
     });

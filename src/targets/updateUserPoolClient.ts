@@ -8,6 +8,7 @@ import {
   type AppClient,
   assertAuthSessionValidity,
 } from "../services/appClient";
+import { assertTokenValidity } from "../services/tokenGenerator";
 import { appClientToResponseObject } from "./responses";
 import type { Target } from "./Target";
 
@@ -70,7 +71,7 @@ export const UpdateUserPoolClient =
         IdToken:
           req.TokenValidityUnits?.IdToken ??
           appClient.TokenValidityUnits?.IdToken ??
-          "minutes",
+          "hours",
         RefreshToken:
           req.TokenValidityUnits?.RefreshToken ??
           appClient.TokenValidityUnits?.RefreshToken ??
@@ -79,6 +80,7 @@ export const UpdateUserPoolClient =
       WriteAttributes: req.WriteAttributes ?? appClient.WriteAttributes,
     };
 
+    assertTokenValidity(updatedAppClient);
     await userPool.saveAppClient(ctx, updatedAppClient);
 
     return {
