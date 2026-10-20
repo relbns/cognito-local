@@ -320,6 +320,8 @@ export class CognitoServiceImpl implements CognitoService {
         USER_POOL_AWS_DEFAULTS,
         this.userPoolDefaultConfig,
         userPool,
+        (_objValue: unknown, srcValue: unknown) =>
+          Array.isArray(srcValue) ? srcValue : undefined,
       ),
     );
 

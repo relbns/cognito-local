@@ -64,6 +64,23 @@ describe("Cognito Service", () => {
     });
   });
 
+  it("lets a request's array replace the configured default", async () => {
+    const cognitoService = await factory.create(TestContext, {
+      UsernameAttributes: ["email"],
+    });
+
+    const defaulted = await cognitoService.createUserPool(TestContext, {
+      Id: "defaulted",
+    });
+    const freeForm = await cognitoService.createUserPool(TestContext, {
+      Id: "free-form",
+      UsernameAttributes: [],
+    });
+
+    expect(defaulted.UsernameAttributes).toEqual(["email"]);
+    expect(freeForm.UsernameAttributes).toEqual([]);
+  });
+
   it("lists multiple user pools", async () => {
     const cognitoService = await factory.create(TestContext, {});
 
