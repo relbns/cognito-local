@@ -11,8 +11,8 @@ Tested on 2026-10-20.
 
 | SDK | Version | How it is tested | Result |
 | --- | --- | --- | --- |
-| AWS SDK for JavaScript v2 (`aws-sdk`) | 2.1145.0 | `integration-tests/aws-sdk/`, 47 files, run by `npm test` | pass |
-| AWS SDK for JavaScript v3 (`@aws-sdk/client-cognito-identity-provider`) | 3.1153.0 | `integration-tests/sdk-v3/`, 12 tests, run by `npm test` | pass |
+| AWS SDK for JavaScript v2 (`aws-sdk`, dev dependency) | 2.1145.0 | `integration-tests/aws-sdk/`, 47 files, run by `npm test` | pass |
+| AWS SDK for JavaScript v3 (`@aws-sdk/client-cognito-identity-provider`) | 3.1153.0 | `integration-tests/sdk-v3/`, 13 tests, run by `npm test` | pass |
 | boto3 / botocore (Python 3.9) | 1.42.97 | `scripts/sdk-smoke/boto3_smoke.py`, 11 checks against a running emulator | pass |
 | AWS CLI v2 | 2.34.37 | `scripts/sdk-smoke/aws-cli-smoke.sh`, 6 checks against a running emulator | pass |
 
@@ -98,33 +98,24 @@ These apply to every SDK, since they are server behaviour:
   An unexpected internal error returns 500 with an empty body, which SDKs report as an unknown
   error.
 
-## Moving the emulator itself from aws-sdk v2 to v3
+## The emulator's own AWS SDK
 
-The emulator depends on `aws-sdk` v2, which reached end of support on 2025-09-08. Clients are not
-affected: the wire protocol is the same for every SDK. The question is maintenance and install size.
+The emulator runs on the AWS SDK for JavaScript v3. `aws-sdk` v2, which reached end of support on
+2025-09-08, is only a dev dependency, kept so the v2 integration suite keeps proving that v2 clients
+work. `npm ls aws-sdk --omit=dev` is empty. The v3 clients need Node.js 20 or later, so `engines` now
+says `>=20`.
 
-Where v2 is used today:
+| Use | Now |
+| --- | --- |
+| Request/response types | Model types from `@aws-sdk/client-cognito-identity-provider`. v3 types members AWS marks required as `T \| undefined`; `Present<T>` in `src/services/sdkTypes.ts` keeps the handlers' contract. Timestamps are still `Date` and still serialised as epoch seconds, so responses are byte-for-byte unchanged. |
+| Lambda trigger client | `Lambda` from `@aws-sdk/client-lambda` |
+| KMS for custom sender triggers | `@aws-crypto/client-node` 5.x with a v3 KMS client |
+| `callerContext.awsSdkVersion` in trigger events | `aws-sdk-unknown-unknown`, the value Cognito sends (was the bundled v2 version) |
+| `LambdaClient` / `KMSConfig` in `.cognito/config.json` | Mapped onto v3 client options, with a warning for every v2 key: see [aws-client-config.md](aws-client-config.md) |
 
-| Use | Where | Size of change |
-| --- | --- | --- |
-| Request/response types | `import type ... from "aws-sdk/clients/cognitoidentityserviceprovider"` in 120 files under `src/` | Mechanical. v3 exports the same `XxxRequest` / `XxxResponse` names. v2-only aliases such as `AttributeListType` become `AttributeType[]`. v3 types use string-literal unions and optional fields, so some narrowing will need touching up. |
-| Lambda trigger client | `new AWS.Lambda(config.LambdaClient)` in `src/server/defaults.ts`, `invoke().promise()` in `src/services/lambda.ts` | Small: `@aws-sdk/client-lambda` with `InvokeCommand`; the payload becomes a `Uint8Array`. |
-| KMS for custom sender triggers | `new KMS()` passed to `@aws-crypto/client-node` 3.x in `src/services/crypto.ts` | Small, with `@aws-crypto/client-node` 4.x, which takes a v3 KMS client. |
-| SDK version in trigger events | `aws-sdk/package.json` in `src/services/lambda.ts` (`callerContext.awsSdkVersion`) | Trivial: a constant. |
-| v2 client in tests | 47 files in `integration-tests/aws-sdk/` (`.promise()`, `error.code`) | None needed: keep `aws-sdk` as a dev dependency so v2 compatibility stays tested. |
+Size, measured on 2026-10-20 with `npm ci --omit=dev`: production `node_modules` went from 96 MB
+(of which `aws-sdk` was 74 MB) to 49 MB, and the bundled `start.js` in the Docker image from 19.8 MB
+to 5.0 MB.
 
-Risk: low at runtime (three call sites), medium in type churn. The one user-facing risk is
-`.cognito/config.json`: `LambdaClient` and `KMSConfig` are passed to the SDK constructors as given.
-The common keys (`endpoint`, `region`, `credentials`) mean the same in v3, but v2-only options
-(`sslEnabled`, `httpOptions`, `maxRetries`) would need mapping or a documented break.
-
-Gain: `aws-sdk` is 74 MB installed and the largest part of the Docker bundle; the v3 Cognito, Lambda
-and KMS clients are a few MB. Types for operations newer than the frozen v2 model (21 targets
-currently declare their own request/response interfaces, for example
-`GetTokensFromRefreshToken`) would come from the SDK.
-
-Recommendation: do it, in two separate changes. First swap the type imports (one mechanical
-commit, no behaviour change, verified by the type check). Then move Lambda and KMS to v3 clients
-with `@aws-crypto/client-node` 4.x, keeping the `LambdaClient` / `KMSConfig` keys and mapping the
-v2-only ones. Keep the v2 client in the test suite. Estimated effort: about a day, most of it the
-type pass.
+Newer v3 models also bring fields the v2 model never had, such as `AuthSessionValidity` on app
+clients, which the emulator now honours.
