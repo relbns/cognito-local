@@ -104,7 +104,9 @@ describe("ChangePassword target", () => {
         PreviousPassword: "abc-Aa1!",
         ProposedPassword: "def-Aa1!",
       }),
-    ).rejects.toEqual(new InvalidPasswordError());
+    ).rejects.toEqual(
+      new NotAuthorizedError("Incorrect username or password."),
+    );
 
     expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });

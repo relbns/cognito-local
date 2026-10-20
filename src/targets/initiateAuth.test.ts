@@ -18,7 +18,6 @@ import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
   InvalidParameterError,
-  InvalidPasswordError,
   NotAuthorizedError,
   PasswordResetRequiredError,
 } from "../errors";
@@ -93,7 +92,9 @@ describe("InitiateAuth target", () => {
             PASSWORD: "bad-password",
           },
         }),
-      ).rejects.toBeInstanceOf(InvalidPasswordError);
+      ).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
     });
 
     it("throws when user requires reset", async () => {
