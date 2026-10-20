@@ -35,7 +35,7 @@ describe(
           .adminSetUserPassword({
             Username: "abc",
             UserPoolId: userPoolId,
-            Password: "newPassword",
+            Password: "newPassword-Aa1",
             Permanent: true,
           })
           .promise();

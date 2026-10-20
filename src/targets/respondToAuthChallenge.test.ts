@@ -18,6 +18,7 @@ import * as TDB from "../__tests__/testDataBuilder";
 import {
   CodeMismatchError,
   InvalidParameterError,
+  InvalidPasswordError,
   NotAuthorizedError,
 } from "../errors";
 import {
@@ -274,6 +275,25 @@ describe("RespondToAuthChallenge target", () => {
       );
     });
 
+    it("rejects a new password that breaks the password policy", async () => {
+      await expect(
+        respondToAuthChallenge(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          ChallengeName: "NEW_PASSWORD_REQUIRED",
+          ChallengeResponses: {
+            USERNAME: user.Username,
+            NEW_PASSWORD: "newpass",
+          },
+          Session: "Session",
+        }),
+      ).rejects.toEqual(
+        new InvalidPasswordError(
+          "Password does not conform to policy: Password not long enough",
+        ),
+      );
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
     it("updates the user's password and status", async () => {
       const newDate = clock.advanceBy(1200);
 
@@ -282,14 +302,14 @@ describe("RespondToAuthChallenge target", () => {
         ChallengeName: "NEW_PASSWORD_REQUIRED",
         ChallengeResponses: {
           USERNAME: user.Username,
-          NEW_PASSWORD: "foo",
+          NEW_PASSWORD: "foo-Aa1!",
         },
         Session: "Session",
       });
 
       expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
         ...user,
-        Password: "foo",
+        Password: "foo-Aa1!",
         UserLastModifiedDate: newDate,
         UserStatus: "CONFIRMED",
       });
@@ -308,7 +328,7 @@ describe("RespondToAuthChallenge target", () => {
         ChallengeName: "NEW_PASSWORD_REQUIRED",
         ChallengeResponses: {
           USERNAME: user.Username,
-          NEW_PASSWORD: "foo",
+          NEW_PASSWORD: "foo-Aa1!",
         },
         Session: "Session",
         ClientMetadata: {
@@ -343,7 +363,7 @@ describe("RespondToAuthChallenge target", () => {
           ChallengeName: "NEW_PASSWORD_REQUIRED",
           ChallengeResponses: {
             USERNAME: user.Username,
-            NEW_PASSWORD: "foo",
+            NEW_PASSWORD: "foo-Aa1!",
           },
           Session: "Session",
         });

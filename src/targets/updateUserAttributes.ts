@@ -5,6 +5,10 @@ import type {
 import jwt from "jsonwebtoken";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
+import {
+  aliasAttributesTouchedBy,
+  enforceAliasUniqueness,
+} from "../services/aliases";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
@@ -109,6 +113,15 @@ export const UpdateUserAttributes =
       UnverifiedAttributeChanges:
         delayedAttributes.length > 0 ? delayedAttributes : undefined,
     };
+
+    await enforceAliasUniqueness(
+      ctx,
+      userPool,
+      clock,
+      updatedUser.Username,
+      attributesAppend(updatedUser.Attributes, ...delayedAttributes),
+      { attributeNames: aliasAttributesTouchedBy(req.UserAttributes) },
+    );
 
     await userPool.saveUser(ctx, updatedUser);
 

@@ -30,7 +30,7 @@ describe(
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           DesiredDeliveryMediums: ["EMAIL"],
         })
         .promise();
@@ -39,7 +39,7 @@ describe(
         .adminSetUserPassword({
           Username: "abc",
           UserPoolId: userPoolId,
-          Password: "def",
+          Password: "def-Aa1!",
           Permanent: true,
         })
         .promise();
@@ -62,7 +62,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "def",
+            PASSWORD: "def-Aa1!",
           },
           ClientId: upc.UserPoolClient?.ClientId as string,
         })

@@ -3,6 +3,7 @@ import type {
   UpdateUserPoolResponse,
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import type { Services } from "../services";
+import { normalizePasswordPolicy } from "../services/passwordPolicy";
 import type { UserPool } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -29,7 +30,10 @@ export const UpdateUserPool =
       EmailVerificationSubject: req.EmailVerificationSubject,
       LambdaConfig: req.LambdaConfig,
       MfaConfiguration: req.MfaConfiguration,
-      Policies: req.Policies,
+      Policies: req.Policies && {
+        ...req.Policies,
+        PasswordPolicy: normalizePasswordPolicy(req.Policies.PasswordPolicy),
+      },
       SmsAuthenticationMessage: req.SmsAuthenticationMessage,
       SmsConfiguration: req.SmsConfiguration,
       SmsVerificationMessage: req.SmsVerificationMessage,

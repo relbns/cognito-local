@@ -7,7 +7,11 @@ import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import {
+  AliasExistsError,
+  InvalidParameterError,
+  NotAuthorizedError,
+} from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { Messages, UserPoolService } from "../services";
 import {
@@ -401,6 +405,73 @@ describe("UpdateUserAttributes target", () => {
           expect(mockMessages.deliver).not.toHaveBeenCalled();
         });
       });
+    });
+  });
+
+  describe("alias uniqueness", () => {
+    beforeEach(() => {
+      mockUserPoolService.options.SchemaAttributes = [
+        { Name: "preferred_username", Mutable: true },
+        { Name: "email", Mutable: true },
+      ];
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ Username: "0000-0000", Attributes: [] }),
+      );
+    });
+
+    it("throws AliasExistsException for a preferred_username another user has", async () => {
+      mockUserPoolService.options.AliasAttributes = ["preferred_username"];
+      mockUserPoolService.listUsers.mockResolvedValue([
+        TDB.user({
+          Username: "other",
+          Attributes: [attribute("preferred_username", "jane")],
+        }),
+      ]);
+
+      await expect(
+        updateUserAttributes(TestContext, {
+          AccessToken: validToken,
+          UserAttributes: [attribute("preferred_username", "jane")],
+        }),
+      ).rejects.toEqual(new AliasExistsError("preferred_username"));
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
+    it("throws AliasExistsException for an email another user has as username attribute", async () => {
+      mockUserPoolService.options.UsernameAttributes = ["email"];
+      mockUserPoolService.listUsers.mockResolvedValue([
+        TDB.user({
+          Username: "other",
+          Attributes: [attribute("email", "taken@example.com")],
+        }),
+      ]);
+
+      await expect(
+        updateUserAttributes(TestContext, {
+          AccessToken: validToken,
+          UserAttributes: [attribute("email", "taken@example.com")],
+        }),
+      ).rejects.toEqual(new AliasExistsError("email"));
+    });
+
+    it("allows an email another user has verified as an alias, since the new value is unverified", async () => {
+      mockUserPoolService.options.AliasAttributes = ["email"];
+      mockUserPoolService.listUsers.mockResolvedValue([
+        TDB.user({
+          Username: "other",
+          Attributes: [
+            attribute("email", "taken@example.com"),
+            attribute("email_verified", "true"),
+          ],
+        }),
+      ]);
+
+      await updateUserAttributes(TestContext, {
+        AccessToken: validToken,
+        UserAttributes: [attribute("email", "taken@example.com")],
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalled();
     });
   });
 });

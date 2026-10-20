@@ -23,6 +23,10 @@ export interface AdminUIConfig {
   CodeLogSize: number;
 }
 
+export interface PasswordPolicyConfig {
+  Enforce: boolean;
+}
+
 export interface Config {
   LambdaClient: AWS.Lambda.ClientConfiguration;
   TriggerFunctions: FunctionConfig;
@@ -32,6 +36,7 @@ export interface Config {
   TokenConfig: TokenConfig;
   AuthSessionConfig: AuthSessionConfig;
   AdminUIConfig: AdminUIConfig;
+  PasswordPolicyConfig: PasswordPolicyConfig;
 }
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
@@ -61,6 +66,9 @@ export const DefaultConfig: Config = {
   AdminUIConfig: {
     Enabled: adminUIEnabled,
     CodeLogSize: DEFAULT_CODE_LOG_SIZE,
+  },
+  PasswordPolicyConfig: {
+    Enforce: true,
   },
   KMSConfig: {
     credentials: {

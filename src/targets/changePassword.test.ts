@@ -33,8 +33,8 @@ describe("ChangePassword target", () => {
     await expect(
       changePassword(TestContext, {
         AccessToken: "blah",
-        PreviousPassword: "abc",
-        ProposedPassword: "def",
+        PreviousPassword: "abc-Aa1!",
+        ProposedPassword: "def-Aa1!",
       }),
     ).rejects.toBeInstanceOf(InvalidParameterError);
 
@@ -65,8 +65,8 @@ describe("ChangePassword target", () => {
             keyid: "CognitoLocal",
           },
         ),
-        PreviousPassword: "abc",
-        ProposedPassword: "def",
+        PreviousPassword: "abc-Aa1!",
+        ProposedPassword: "def-Aa1!",
       }),
     ).rejects.toEqual(new NotAuthorizedError());
 
@@ -75,7 +75,7 @@ describe("ChangePassword target", () => {
 
   it("throws if previous password doesn't match", async () => {
     const user = TDB.user({
-      Password: "previous-password",
+      Password: "previous-password-Aa1",
     });
 
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
@@ -101,8 +101,8 @@ describe("ChangePassword target", () => {
             keyid: "CognitoLocal",
           },
         ),
-        PreviousPassword: "abc",
-        ProposedPassword: "def",
+        PreviousPassword: "abc-Aa1!",
+        ProposedPassword: "def-Aa1!",
       }),
     ).rejects.toEqual(new InvalidPasswordError());
 
@@ -111,7 +111,7 @@ describe("ChangePassword target", () => {
 
   it("updates the user's password if the previous password matches", async () => {
     const user = TDB.user({
-      Password: "previous-password",
+      Password: "previous-password-Aa1",
     });
 
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
@@ -136,14 +136,37 @@ describe("ChangePassword target", () => {
           keyid: "CognitoLocal",
         },
       ),
-      PreviousPassword: "previous-password",
-      ProposedPassword: "new-password",
+      PreviousPassword: "previous-password-Aa1",
+      ProposedPassword: "new-password-Aa1",
     });
 
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...user,
-      Password: "new-password",
+      Password: "new-password-Aa1",
       UserLastModifiedDate: currentDate,
     });
+  });
+
+  it("rejects a proposed password that breaks the password policy", async () => {
+    mockUserPoolService.getUserByUsername.mockResolvedValue(
+      TDB.user({ Password: "previous-password-Aa1" }),
+    );
+
+    await expect(
+      changePassword(TestContext, {
+        AccessToken: jwt.sign(
+          { sub: "0000-0000", client_id: "test", username: "0000-0000" },
+          PrivateKey.pem,
+          { algorithm: "RS256", keyid: "CognitoLocal" },
+        ),
+        PreviousPassword: "previous-password-Aa1",
+        ProposedPassword: "new-password",
+      }),
+    ).rejects.toEqual(
+      new InvalidPasswordError(
+        "Password does not conform to policy: Password must have uppercase characters",
+      ),
+    );
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });
 });

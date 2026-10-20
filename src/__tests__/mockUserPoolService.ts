@@ -19,7 +19,7 @@ export const newMockUserPoolService = (
   getUserByUsername: vi.fn(),
   listGroups: vi.fn(),
   listUserGroupMembership: vi.fn(),
-  listUsers: vi.fn(),
+  listUsers: vi.fn().mockResolvedValue([]),
   options: config,
   removeUserFromGroup: vi.fn(),
   saveAppClient: vi.fn(),

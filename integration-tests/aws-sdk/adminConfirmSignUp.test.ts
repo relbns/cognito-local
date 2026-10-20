@@ -26,7 +26,7 @@ describe(
           UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
           Username: "abc",
           ClientId: upc.UserPoolClient?.ClientId!,
-          Password: "def",
+          Password: "def-Aa1!",
         })
         .promise();
 

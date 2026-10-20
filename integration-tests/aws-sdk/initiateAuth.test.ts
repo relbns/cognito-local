@@ -32,7 +32,7 @@ describe(
             AuthFlow: "USER_PASSWORD_AUTH",
             AuthParameters: {
               USERNAME: "example@example.com",
-              PASSWORD: "def",
+              PASSWORD: "def-Aa1!",
             },
           })
           .promise(),
@@ -61,7 +61,7 @@ describe(
       const createUserResponse = await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -78,7 +78,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "def",
+            PASSWORD: "def-Aa1!",
           },
         })
         .promise();
@@ -114,7 +114,7 @@ describe(
       await client
         .signUp({
           ClientId: upc.UserPoolClient?.ClientId!,
-          Password: "def",
+          Password: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
         })
@@ -127,7 +127,7 @@ describe(
             AuthFlow: "USER_PASSWORD_AUTH",
             AuthParameters: {
               USERNAME: "abc",
-              PASSWORD: "def",
+              PASSWORD: "def-Aa1!",
             },
           })
           .promise(),
@@ -157,7 +157,7 @@ describe(
       const createUserResponse = await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -172,7 +172,7 @@ describe(
         .adminSetUserPassword({
           UserPoolId: userPoolId,
           Username: "abc",
-          Password: "def",
+          Password: "def-Aa1!",
           Permanent: true,
         })
         .promise();
@@ -183,7 +183,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "def",
+            PASSWORD: "def-Aa1!",
           },
         })
         .promise();
@@ -253,7 +253,7 @@ describe(
       const createUserResponse = await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -268,7 +268,7 @@ describe(
         .adminSetUserPassword({
           UserPoolId: userPoolId,
           Username: "abc",
-          Password: "def",
+          Password: "def-Aa1!",
           Permanent: true,
         })
         .promise();
@@ -279,7 +279,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "def",
+            PASSWORD: "def-Aa1!",
           },
         })
         .promise();
@@ -357,7 +357,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,

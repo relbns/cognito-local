@@ -22,8 +22,8 @@ export class UserNotFoundError extends CognitoError {
 }
 
 export class UsernameExistsError extends CognitoError {
-  public constructor() {
-    super("UsernameExistsException", "User already exists");
+  public constructor(message = "User already exists") {
+    super("UsernameExistsException", message);
   }
 }
 
@@ -43,8 +43,8 @@ export class ExpiredCodeError extends CognitoError {
 }
 
 export class InvalidPasswordError extends CognitoError {
-  public constructor() {
-    super("InvalidPasswordException", "Invalid password");
+  public constructor(message = "Invalid password") {
+    super("InvalidPasswordException", message);
   }
 }
 
@@ -97,10 +97,19 @@ export class InvalidLambdaResponseError extends CognitoError {
 }
 
 export class AliasExistsError extends CognitoError {
-  public constructor() {
+  public constructor(attributeName = "email") {
     super(
       "AliasExistsException",
-      "An account with the given email already exists.",
+      `An account with the given ${attributeName} already exists.`,
+    );
+  }
+}
+
+export class GroupExistsError extends CognitoError {
+  public constructor(groupName: string) {
+    super(
+      "GroupExistsException",
+      `A group with the name ${groupName} already exists.`,
     );
   }
 }

@@ -4,6 +4,7 @@ import type {
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { CodeMismatchError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -15,13 +16,15 @@ export type ConfirmForgotPasswordTarget = Target<
 type ConfirmForgotPasswordServices = Pick<
   Services,
   "cognito" | "clock" | "triggers"
->;
+> &
+  Partial<Pick<Services, "config">>;
 
 export const ConfirmForgotPassword =
   ({
     cognito,
     clock,
     triggers,
+    config,
   }: ConfirmForgotPasswordServices): ConfirmForgotPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
@@ -33,6 +36,8 @@ export const ConfirmForgotPassword =
     if (user.ConfirmationCode !== req.ConfirmationCode) {
       throw new CodeMismatchError();
     }
+
+    assertPasswordConformsToPolicy(config, userPool.options, req.Password);
 
     const updatedUser = {
       ...user,

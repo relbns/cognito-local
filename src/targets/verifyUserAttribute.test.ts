@@ -190,4 +190,53 @@ describe("VerifyUserAttribute target", () => {
       }),
     ).rejects.toEqual(new CodeMismatchError());
   });
+
+  it("moves a phone alias another user has verified, without AliasExistsException", async () => {
+    const phone = "+15555555555";
+    const other = TDB.user({
+      Username: "other",
+      Attributes: [
+        attribute("phone_number", phone),
+        attribute("phone_number_verified", "true"),
+      ],
+    });
+    const user = TDB.user({
+      Username: "0000-0000",
+      Attributes: [
+        attribute("phone_number", phone),
+        attribute("phone_number_verified", "false"),
+      ],
+      AttributeVerificationCode: "123456",
+    });
+    mockUserPoolService.options.AliasAttributes = ["phone_number"];
+    mockUserPoolService.listUsers.mockResolvedValue([other, user]);
+    mockUserPoolService.getUserByUsername.mockImplementation(
+      async (_, username) => (username === "other" ? other : user),
+    );
+
+    await verifyUserAttribute(TestContext, {
+      AccessToken: validToken,
+      AttributeName: "phone_number",
+      Code: "123456",
+    });
+
+    expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
+      ...other,
+      Attributes: attributesAppend(
+        other.Attributes,
+        attribute("phone_number_verified", "false"),
+      ),
+      UserLastModifiedDate: clock.get(),
+    });
+    expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+      TestContext,
+      expect.objectContaining({
+        Username: "0000-0000",
+        Attributes: attributesAppend(
+          user.Attributes,
+          attribute("phone_number_verified", "true"),
+        ),
+      }),
+    );
+  });
 });

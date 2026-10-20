@@ -4,7 +4,8 @@ import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { UserNotFoundError } from "../errors";
+import { InvalidPasswordError, UserNotFoundError } from "../errors";
+import { DefaultConfig } from "../server/config";
 import type { UserPoolService } from "../services";
 import {
   AdminSetUserPassword,
@@ -35,12 +36,12 @@ describe("AdminSetUser target", () => {
     await adminSetUserPassword(TestContext, {
       Username: existingUser.Username,
       UserPoolId: "test",
-      Password: "newPassword",
+      Password: "newPassword-Aa1",
     });
 
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...existingUser,
-      Password: "newPassword",
+      Password: "newPassword-Aa1",
       UserLastModifiedDate: newDate,
       UserStatus: "FORCE_CHANGE_PASSWORD",
     });
@@ -56,13 +57,13 @@ describe("AdminSetUser target", () => {
     await adminSetUserPassword(TestContext, {
       Username: existingUser.Username,
       UserPoolId: "test",
-      Password: "newPassword",
+      Password: "newPassword-Aa1",
       Permanent: false,
     });
 
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...existingUser,
-      Password: "newPassword",
+      Password: "newPassword-Aa1",
       UserLastModifiedDate: newDate,
       UserStatus: "FORCE_CHANGE_PASSWORD",
     });
@@ -78,13 +79,13 @@ describe("AdminSetUser target", () => {
     await adminSetUserPassword(TestContext, {
       Username: existingUser.Username,
       UserPoolId: "test",
-      Password: "newPassword",
+      Password: "newPassword-Aa1",
       Permanent: true,
     });
 
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...existingUser,
-      Password: "newPassword",
+      Password: "newPassword-Aa1",
       UserLastModifiedDate: newDate,
       UserStatus: "CONFIRMED",
     });
@@ -95,10 +96,46 @@ describe("AdminSetUser target", () => {
 
     await expect(
       adminSetUserPassword(TestContext, {
-        Password: "Password",
+        Password: "Password-Aa1",
         Username: "Username",
         UserPoolId: "test",
       }),
     ).rejects.toEqual(new UserNotFoundError("User does not exist"));
+  });
+
+  it("rejects a password that breaks the password policy", async () => {
+    mockUserPoolService.getUserByUsername.mockResolvedValue(TDB.user());
+
+    await expect(
+      adminSetUserPassword(TestContext, {
+        Username: "jane",
+        UserPoolId: "test",
+        Password: "Password1",
+        Permanent: true,
+      }),
+    ).rejects.toEqual(
+      new InvalidPasswordError(
+        "Password does not conform to policy: Password must have symbol characters",
+      ),
+    );
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+  });
+
+  it("accepts any password when enforcement is off in config", async () => {
+    mockUserPoolService.getUserByUsername.mockResolvedValue(TDB.user());
+    adminSetUserPassword = AdminSetUserPassword({
+      cognito: newMockCognitoService(mockUserPoolService),
+      clock,
+      config: { ...DefaultConfig, PasswordPolicyConfig: { Enforce: false } },
+    });
+
+    await adminSetUserPassword(TestContext, {
+      Username: "jane",
+      UserPoolId: "test",
+      Password: "x",
+      Permanent: true,
+    });
+
+    expect(mockUserPoolService.saveUser).toHaveBeenCalled();
   });
 });

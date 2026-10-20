@@ -5,7 +5,11 @@ import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import {
+  AliasExistsError,
+  InvalidParameterError,
+  NotAuthorizedError,
+} from "../errors";
 import type { Messages, UserPoolService } from "../services";
 import {
   attribute,
@@ -79,11 +83,9 @@ describe("AdminUpdateUserAttributes target", () => {
   });
 
   describe.each`
-    desc                                                         | attribute                  | expectedError
-    ${"an attribute not in the schema"}                          | ${"custom:missing"}        | ${"user.custom:missing: Attribute does not exist in the schema."}
-    ${"an attribute which isn't mutable in the schema"}          | ${"custom:immutable"}      | ${"user.custom:immutable: Attribute cannot be updated. (changing an immutable attribute)"}
-    ${"email_verified without an email attribute"}               | ${"email_verified"}        | ${"Email is required to verify/un-verify an email"}
-    ${"phone_number_verified without an phone_number attribute"} | ${"phone_number_verified"} | ${"Phone Number is required to verify/un-verify a phone number"}
+    desc                                                | attribute             | expectedError
+    ${"an attribute not in the schema"}                 | ${"custom:missing"}   | ${"user.custom:missing: Attribute does not exist in the schema."}
+    ${"an attribute which isn't mutable in the schema"} | ${"custom:immutable"} | ${"user.custom:immutable: Attribute cannot be updated. (changing an immutable attribute)"}
   `("req.UserAttributes contains $desc", ({ attribute, expectedError }) => {
     beforeEach(() => {
       mockUserPoolService.options.SchemaAttributes = [
@@ -310,6 +312,86 @@ describe("AdminUpdateUserAttributes target", () => {
           expect(mockMessages.deliver).not.toHaveBeenCalled();
         });
       });
+    });
+  });
+
+  it.each([
+    ["email_verified", "email", "example@example.com"],
+    ["phone_number_verified", "phone_number", "+15555555555"],
+  ])(
+    "marks the existing value verified when only %s is sent",
+    async (flag, name, value) => {
+      mockUserPoolService.options.SchemaAttributes = [
+        { Name: flag, Mutable: true },
+      ];
+      const user = TDB.user({
+        Attributes: [attribute(name, value), attribute(flag, "false")],
+      });
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+
+      await adminUpdateUserAttributes(TestContext, {
+        UserPoolId: "test",
+        UserAttributes: [attribute(flag, "true")],
+        Username: "abc",
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
+        ...user,
+        Attributes: attributesAppend(user.Attributes, attribute(flag, "true")),
+        UserLastModifiedDate: clock.get(),
+      });
+    },
+  );
+
+  describe("alias uniqueness", () => {
+    const phone = "+15555555555";
+    const otherUser = TDB.user({
+      Username: "other",
+      Attributes: [
+        attribute("phone_number", phone),
+        attribute("phone_number_verified", "true"),
+      ],
+    });
+
+    beforeEach(() => {
+      mockUserPoolService.options.AliasAttributes = ["phone_number"];
+      mockUserPoolService.options.SchemaAttributes = [
+        { Name: "phone_number", Mutable: true },
+        { Name: "phone_number_verified", Mutable: true },
+      ];
+      mockUserPoolService.listUsers.mockResolvedValue([otherUser]);
+    });
+
+    it("throws AliasExistsException when verifying a phone number that is another user's verified alias", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ Username: "abc", Attributes: [] }),
+      );
+
+      await expect(
+        adminUpdateUserAttributes(TestContext, {
+          UserPoolId: "test",
+          UserAttributes: [
+            attribute("phone_number", phone),
+            attribute("phone_number_verified", "true"),
+          ],
+          Username: "abc",
+        }),
+      ).rejects.toEqual(new AliasExistsError("phone_number"));
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
+    it("allows the same phone number while it stays unverified", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ Username: "abc", Attributes: [] }),
+      );
+
+      await adminUpdateUserAttributes(TestContext, {
+        UserPoolId: "test",
+        UserAttributes: [attribute("phone_number", phone)],
+        Username: "abc",
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalled();
     });
   });
 });

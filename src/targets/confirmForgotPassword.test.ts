@@ -5,7 +5,11 @@ import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { CodeMismatchError, UserNotFoundError } from "../errors";
+import {
+  CodeMismatchError,
+  InvalidPasswordError,
+  UserNotFoundError,
+} from "../errors";
 import type { Triggers, UserPoolService } from "../services";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import {
@@ -42,7 +46,7 @@ describe("ConfirmForgotPassword target", () => {
         ClientId: "clientId",
         Username: "janice",
         ConfirmationCode: "123456",
-        Password: "newPassword",
+        Password: "newPassword-Aa1",
       }),
     ).rejects.toBeInstanceOf(UserNotFoundError);
   });
@@ -60,7 +64,7 @@ describe("ConfirmForgotPassword target", () => {
         ClientId: "clientId",
         Username: "janice",
         ConfirmationCode: "123456",
-        Password: "newPassword",
+        Password: "newPassword-Aa1",
       }),
     ).rejects.toBeInstanceOf(CodeMismatchError);
   });
@@ -81,13 +85,13 @@ describe("ConfirmForgotPassword target", () => {
         ClientId: "clientId",
         Username: user.Username,
         ConfirmationCode: "456789",
-        Password: "newPassword",
+        Password: "newPassword-Aa1",
       });
 
       expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
         ...user,
         ConfirmationCode: undefined,
-        Password: "newPassword",
+        Password: "newPassword-Aa1",
         UserLastModifiedDate: newNow,
         UserStatus: "CONFIRMED",
       });
@@ -111,7 +115,7 @@ describe("ConfirmForgotPassword target", () => {
           },
           Username: user.Username,
           ConfirmationCode: "456789",
-          Password: "newPassword",
+          Password: "newPassword-Aa1",
         });
 
         expect(mockTriggers.postConfirmation).toHaveBeenCalledWith(
@@ -148,11 +152,31 @@ describe("ConfirmForgotPassword target", () => {
           ClientId: "clientId",
           Username: user.Username,
           ConfirmationCode: "456789",
-          Password: "newPassword",
+          Password: "newPassword-Aa1",
         });
 
         expect(mockTriggers.postConfirmation).not.toHaveBeenCalled();
       });
     });
+  });
+
+  it("rejects a new password that breaks the password policy", async () => {
+    mockUserPoolService.getUserByUsername.mockResolvedValue(
+      TDB.user({ ConfirmationCode: "456789" }),
+    );
+
+    await expect(
+      confirmForgotPassword(TestContext, {
+        ClientId: "clientId",
+        Username: "janice",
+        ConfirmationCode: "456789",
+        Password: "PASSWORD-1",
+      }),
+    ).rejects.toEqual(
+      new InvalidPasswordError(
+        "Password does not conform to policy: Password must have lowercase characters",
+      ),
+    );
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });
 });

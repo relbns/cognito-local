@@ -15,6 +15,7 @@ import {
   isCustomAuthSession,
   respondToCustomAuthChallenge,
 } from "../services/customAuth";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verify as verifyTotp } from "../services/totp";
 import type { Target } from "./Target";
 
@@ -26,7 +27,8 @@ export type AdminRespondToAuthChallengeTarget = Target<
 type AdminRespondToAuthChallengeServices = Pick<
   Services,
   "authSessions" | "clock" | "cognito" | "triggers" | "tokenGenerator"
->;
+> &
+  Partial<Pick<Services, "config">>;
 
 export const AdminRespondToAuthChallenge =
   (
@@ -104,6 +106,12 @@ export const AdminRespondToAuthChallenge =
           "Missing required parameter NEW_PASSWORD",
         );
       }
+
+      assertPasswordConformsToPolicy(
+        services.config,
+        userPool.options,
+        req.ChallengeResponses.NEW_PASSWORD,
+      );
 
       await userPool.saveUser(ctx, {
         ...user,

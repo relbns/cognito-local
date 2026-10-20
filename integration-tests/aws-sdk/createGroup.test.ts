@@ -71,6 +71,45 @@ describe(
           },
         });
       });
+
+      it("throws GroupExistsException for a duplicate name and keeps the members", async () => {
+        const client = Cognito();
+        const pool = await client
+          .createUserPool({ PoolName: "test" })
+          .promise();
+        const userPoolId = pool.UserPool?.Id!;
+        await client
+          .createGroup({ GroupName: "abc", UserPoolId: userPoolId })
+          .promise();
+        await client
+          .adminCreateUser({
+            UserPoolId: userPoolId,
+            Username: "jane@example.com",
+            MessageAction: "SUPPRESS",
+          })
+          .promise();
+        await client
+          .adminAddUserToGroup({
+            GroupName: "abc",
+            UserPoolId: userPoolId,
+            Username: "jane@example.com",
+          })
+          .promise();
+
+        await expect(
+          client
+            .createGroup({ GroupName: "abc", UserPoolId: userPoolId })
+            .promise(),
+        ).rejects.toMatchObject({
+          code: "GroupExistsException",
+          message: "A group with the name abc already exists.",
+        });
+
+        const members = await client
+          .listUsersInGroup({ GroupName: "abc", UserPoolId: userPoolId })
+          .promise();
+        expect(members.Users).toHaveLength(1);
+      });
     },
     {
       clock,

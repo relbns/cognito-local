@@ -26,7 +26,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -35,7 +35,7 @@ describe(
 
       await client
         .adminSetUserPassword({
-          Password: "firstPassword",
+          Password: "firstPassword-Aa1",
           Permanent: true,
           Username: "abc",
           UserPoolId: userPoolId,
@@ -49,7 +49,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "firstPassword",
+            PASSWORD: "firstPassword-Aa1",
           },
         })
         .promise();
@@ -58,8 +58,8 @@ describe(
       await client
         .changePassword({
           AccessToken: initAuthResponse.AuthenticationResult?.AccessToken!,
-          PreviousPassword: "firstPassword",
-          ProposedPassword: "secondPassword",
+          PreviousPassword: "firstPassword-Aa1",
+          ProposedPassword: "secondPassword-Aa1",
         })
         .promise();
 
@@ -71,7 +71,7 @@ describe(
             AuthFlow: "USER_PASSWORD_AUTH",
             AuthParameters: {
               USERNAME: "abc",
-              PASSWORD: "firstPassword",
+              PASSWORD: "firstPassword-Aa1",
             },
           })
           .promise(),
@@ -84,7 +84,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "secondPassword",
+            PASSWORD: "secondPassword-Aa1",
           },
         })
         .promise();
