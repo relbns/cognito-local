@@ -15,6 +15,7 @@ export const appClientToResponseObject = (
   AllowedOAuthFlowsUserPoolClient: appClient.AllowedOAuthFlowsUserPoolClient,
   AllowedOAuthScopes: appClient.AllowedOAuthScopes,
   AnalyticsConfiguration: appClient.AnalyticsConfiguration,
+  AuthSessionValidity: appClient.AuthSessionValidity,
   CallbackURLs: appClient.CallbackURLs,
   ClientId: appClient.ClientId,
   ClientName: appClient.ClientName,

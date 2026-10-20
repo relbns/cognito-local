@@ -59,6 +59,7 @@ const CLIENT_FIELDS = [
   "AnalyticsConfiguration",
   "PreventUserExistenceErrors",
   "EnableTokenRevocation",
+  "AuthSessionValidity",
 ] as const;
 
 const defined = <T extends object>(value: T): T =>

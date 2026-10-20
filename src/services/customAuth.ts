@@ -98,14 +98,17 @@ const runCustomAuthRound = async (
   const newSession = (
     pendingChallenge: Parameters<AuthSessions["create"]>[0]["pendingChallenge"],
   ) =>
-    services.authSessions.create({
-      userPoolId: round.userPool.options.Id,
-      clientId: round.client.ClientId,
-      username: round.user.Username,
-      clientMetadata: round.clientMetadata,
-      history: round.history,
-      pendingChallenge,
-    });
+    services.authSessions.create(
+      {
+        userPoolId: round.userPool.options.Id,
+        clientId: round.client.ClientId,
+        username: round.user.Username,
+        clientMetadata: round.clientMetadata,
+        history: round.history,
+        pendingChallenge,
+      },
+      round.client.AuthSessionValidity,
+    );
 
   if (challengeName === "PASSWORD_VERIFIER") {
     return {

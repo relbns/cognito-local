@@ -6,7 +6,11 @@ import { CognitoError } from "../errors";
 import { COGNITO_PROVIDER } from "../oauth2/oauthRequest";
 import type { Services } from "../services";
 import { enforceAliasUniqueness } from "../services/aliases";
-import { type AppClient, newId } from "../services/appClient";
+import {
+  type AppClient,
+  assertAuthSessionValidity,
+  newId,
+} from "../services/appClient";
 import type { Context } from "../services/context";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import type { Present } from "../services/sdkTypes";
@@ -379,6 +383,7 @@ class SeedApplier {
   private async applyClient(pool: UserPoolService, seedClient: SeedClient) {
     const poolId = pool.options.Id;
     const { ClientId, ClientSecret, GenerateSecret, ...fields } = seedClient;
+    assertAuthSessionValidity(fields.AuthSessionValidity);
 
     const knownProviders = [
       COGNITO_PROVIDER,

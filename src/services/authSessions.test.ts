@@ -51,6 +51,17 @@ describe("InMemoryAuthSessions", () => {
     expect(sessions.take(id)).toEqual(session);
   });
 
+  it("lets a session override the default validity", () => {
+    const clock = new ClockFake(new Date());
+    const sessions = new InMemoryAuthSessions(clock, 3);
+    const id = sessions.create(session, 10);
+
+    clock.advanceBy(10 * 60_000 - 1);
+    expect(sessions.peek(id)).toEqual(session);
+    clock.advanceBy(1);
+    expect(sessions.peek(id)).toBeUndefined();
+  });
+
   it("lists active sessions newest first and drops expired ones", () => {
     const clock = new ClockFake(new Date("2026-01-01T00:00:00Z"));
     const sessions = new InMemoryAuthSessions(clock);

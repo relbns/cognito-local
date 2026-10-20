@@ -80,6 +80,27 @@ describe("UpdateUserPoolClient target", () => {
     });
   });
 
+  it("updates AuthSessionValidity and keeps it when omitted", async () => {
+    const existingAppClient = TDB.appClient({
+      UserPoolId: "test",
+      AuthSessionValidity: 5,
+    });
+    mockCognitoService.getAppClient.mockResolvedValue(existingAppClient);
+
+    const kept = await updateUserPoolClient(TestContext, {
+      ClientId: existingAppClient.ClientId,
+      UserPoolId: existingAppClient.UserPoolId,
+    });
+    expect(kept.UserPoolClient?.AuthSessionValidity).toEqual(5);
+
+    const changed = await updateUserPoolClient(TestContext, {
+      ClientId: existingAppClient.ClientId,
+      UserPoolId: existingAppClient.UserPoolId,
+      AuthSessionValidity: 12,
+    });
+    expect(changed.UserPoolClient?.AuthSessionValidity).toEqual(12);
+  });
+
   it("throws if the user pool client doesn't exist", async () => {
     mockCognitoService.getAppClient.mockResolvedValue(null);
 

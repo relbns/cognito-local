@@ -6,6 +6,7 @@ import type {
   TokenValidityUnitsType,
 } from "@aws-sdk/client-cognito-identity-provider";
 import shortUUID from "short-uuid";
+import { InvalidParameterError } from "../errors";
 
 export interface AppClient {
   UserPoolId: string;
@@ -92,7 +93,29 @@ export interface AppClient {
    * Indicates whether token revocation is enabled for the user pool client. When you create a new user pool client, token revocation is enabled by default. For more information about revoking tokens, see RevokeToken.
    */
   EnableTokenRevocation?: boolean;
+  /** Minutes (3-15) an auth flow session stays valid; AuthSessionConfig.AuthSessionValidity when unset. */
+  AuthSessionValidity?: number;
 }
+
+export const AUTH_SESSION_VALIDITY_MIN = 3;
+export const AUTH_SESSION_VALIDITY_MAX = 15;
+
+export const assertAuthSessionValidity = (value: number | undefined): void => {
+  if (value === undefined) return;
+  const constraint =
+    value < AUTH_SESSION_VALIDITY_MIN
+      ? `greater than or equal to ${AUTH_SESSION_VALIDITY_MIN}`
+      : value > AUTH_SESSION_VALIDITY_MAX
+        ? `less than or equal to ${AUTH_SESSION_VALIDITY_MAX}`
+        : !Number.isInteger(value)
+          ? "an integer value"
+          : undefined;
+  if (constraint) {
+    throw new InvalidParameterError(
+      `1 validation error detected: Value '${value}' at 'authSessionValidity' failed to satisfy constraint: Member must have value ${constraint}`,
+    );
+  }
+};
 
 const generator = shortUUID("0123456789abcdefghijklmnopqrstuvwxyz");
 
