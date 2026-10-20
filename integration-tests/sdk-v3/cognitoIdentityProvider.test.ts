@@ -167,12 +167,13 @@ describe(
           }),
         );
 
-      it("parses timestamps and metadata on a describe call", async () => {
+      it("parses timestamps and the request id on a describe call", async () => {
         const { cognito, UserPoolId } = await setup();
         const pool = await cognito.send(
           new DescribeUserPoolCommand({ UserPoolId }),
         );
         expect(pool.$metadata.httpStatusCode).toBe(200);
+        expect(pool.$metadata.requestId).toMatch(/^[0-9a-f-]{36}$/);
         expect(pool.UserPool?.CreationDate).toBeInstanceOf(Date);
         expect(pool.UserPool?.Name).toBe("v3");
       });
@@ -399,6 +400,7 @@ describe(
           expect(e.name).toBe(name);
           expect(e.$fault).toBe("client");
           expect(e.$metadata.httpStatusCode).toBe(400);
+          expect(e.$metadata.requestId).toBeTruthy();
           expect(e.message).toBeTruthy();
         };
 
