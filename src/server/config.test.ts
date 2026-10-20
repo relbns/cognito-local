@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   newMockDataStore,
   newMockDataStoreFactory,
@@ -100,5 +100,26 @@ describe("loadConfig", () => {
         UsernameAttributes: [],
       },
     });
+  });
+});
+
+describe("DefaultConfig", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it.each([
+    ["0.0.0.0", "http://localhost:9300"],
+    ["::", "http://localhost:9300"],
+    ["cognito", "http://cognito:9300"],
+  ])("derives the issuer for HOST=%s", async (host, issuer) => {
+    vi.stubEnv("HOST", host);
+    vi.stubEnv("PORT", "9300");
+    vi.resetModules();
+    const { DefaultConfig: config } = await import("./config");
+
+    expect(config.ServerConfig.hostname).toBe(host);
+    expect(config.TokenConfig.IssuerDomain).toBe(issuer);
   });
 });

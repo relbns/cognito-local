@@ -203,7 +203,7 @@ export const SignUp =
         userStatus = "CONFIRMED";
       }
       const isEmailUsername =
-        config.UserPoolDefaults.UsernameAttributes?.includes("email");
+        userPool.options.UsernameAttributes?.includes("email");
       const hasEmailAttribute = attributesInclude("email", attributes);
 
       if (isEmailUsername && !hasEmailAttribute) {

@@ -202,7 +202,7 @@ describe("admin UI routes", () => {
         password: "Passw0rd!",
         permanent: "1",
         verified: "1",
-        attributes: "custom:context=42",
+        attributes: "custom:tier=gold",
       }).expect(303);
 
       expect(router).toHaveBeenNthCalledWith(1, "AdminCreateUser");
@@ -212,7 +212,7 @@ describe("admin UI routes", () => {
         UserAttributes: [
           { Name: "email", Value: "new@example.com" },
           { Name: "email_verified", Value: "true" },
-          { Name: "custom:context", Value: "42" },
+          { Name: "custom:tier", Value: "gold" },
         ],
         TemporaryPassword: "Passw0rd!",
         MessageAction: "SUPPRESS",

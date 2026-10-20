@@ -3,11 +3,7 @@ import type {
   ChangePasswordResponse,
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import jwt from "jsonwebtoken";
-import {
-  InvalidParameterError,
-  InvalidPasswordError,
-  NotAuthorizedError,
-} from "../errors";
+import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Services } from "../services";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import type { Token } from "../services/tokenGenerator";
@@ -40,7 +36,7 @@ export const ChangePassword =
     }
 
     if (req.PreviousPassword !== user.Password) {
-      throw new InvalidPasswordError();
+      throw new NotAuthorizedError("Incorrect username or password.");
     }
 
     assertPasswordConformsToPolicy(

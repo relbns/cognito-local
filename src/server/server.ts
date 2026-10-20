@@ -110,6 +110,7 @@ export const createServer = (
   }
 
   app.post("/", (req, res) => {
+    res.setHeader("x-amzn-RequestId", uuid.v4());
     const xAmzTarget = req.headers["x-amz-target"];
 
     if (!xAmzTarget) {
