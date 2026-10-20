@@ -52,7 +52,7 @@ describe("HTTP server", () => {
 
         expect(response.status).toEqual(200);
         expect(response.text).toEqual('{"ok":true}');
-        expect(response.headers["x-amzn-requestid"]).toMatch(/^[0-9a-f-]{36}$/);
+        expect(response.header["x-amzn-requestid"]).toMatch(/^[0-9a-f-]{36}$/);
       });
 
       it("converts UnsupportedErrors from within a target route to a 500 error", async () => {
