@@ -232,7 +232,7 @@ ${poolTabs(pool, "users", { users: opts.total, groups: opts.groupCount })}
       <label>Phone (E.164)<input name="phone_number" placeholder="+15555550100" /></label>
       <label>Password<input name="password" placeholder="generated if empty" /></label>
     </div>
-    <label style="margin-top:8px">Extra attributes, one <code>name=value</code> per line<textarea name="attributes" style="min-height:60px" placeholder="custom:context=42"></textarea></label>
+    <label style="margin-top:8px">Extra attributes, one <code>name=value</code> per line<textarea name="attributes" style="min-height:60px" placeholder="custom:tier=gold"></textarea></label>
     <div class="row" style="margin-top:8px">
       <label class="check"><input type="checkbox" name="permanent" value="1" checked /> Password is permanent (status CONFIRMED)</label>
       <label class="check"><input type="checkbox" name="verified" value="1" checked /> Mark email/phone verified</label>

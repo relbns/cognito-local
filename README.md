@@ -1,6 +1,6 @@
 # cognito-local (relbns fork)
 
-A local Amazon Cognito User Pool emulator. This fork of [jagregory/cognito-local](https://github.com/jagregory/cognito-local) adds what we needed to run a passwordless (CUSTOM_AUTH OTP) and hosted-login setup locally without AWS. Branch `main` holds all of it.
+A local Amazon Cognito User Pool emulator. This fork of [jagregory/cognito-local](https://github.com/jagregory/cognito-local) adds stateful CUSTOM_AUTH challenges, Cognito-compatible hosted-login endpoints, a mock federated IdP and an admin UI, so passwordless and hosted-login flows run locally without AWS. Branch `main` holds all of it.
 
 ## What this fork adds
 
@@ -71,7 +71,7 @@ The OAuth2 endpoints are under `http://localhost:9229/oauth2` (`/authorize`, `/t
 
 ## Not supported yet
 
-- Federated identity providers: `/oauth2/authorize` with a configured Google, OIDC or SAML provider returns a 501 page instead of redirecting.
+- Federated identity providers are emulated by a mock IdP page, without a real OIDC or SAML exchange: see [docs/federation.md](docs/federation.md).
 - The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
 - CUSTOM_AUTH sessions and the admin UI code log are in memory and are lost on restart (users, pools and clients persist).
 - The admin UI has no authentication. Anyone who can reach the port can read users, codes and client secrets. Do not expose it beyond your machine.

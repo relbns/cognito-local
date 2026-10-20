@@ -18,7 +18,7 @@ const client = TDB.appClient({
 });
 const providers = [
   { ProviderName: "Google" },
-  { ProviderName: "examplesaml", IdpIdentifiers: ["tam"] },
+  { ProviderName: "ExampleOIDC", IdpIdentifiers: ["example-oidc"] },
 ];
 const base = {
   client_id: "c1",
@@ -59,7 +59,7 @@ describe("decideAuthorize", () => {
     [{ scope: "openid admin" }, "invalid_scope"],
     [{ scope: "email" }, "invalid_scope"],
     [{ identity_provider: "Nope" }, "invalid_request"],
-    [{ identity_provider: "examplesaml" }, "invalid_request"],
+    [{ identity_provider: "ExampleOIDC" }, "invalid_request"],
   ])("redirects with an error for %o", (overrides, error) => {
     expect(
       decideAuthorize({ ...base, ...overrides }, client, providers),
@@ -118,14 +118,17 @@ describe("decideAuthorize", () => {
   });
 
   it("resolves idp_identifier through IdpIdentifiers", () => {
-    const withExampleSaml = { ...client, SupportedIdentityProviders: ["examplesaml"] };
+    const withExampleOidc = {
+      ...client,
+      SupportedIdentityProviders: ["ExampleOIDC"],
+    };
     expect(
       decideAuthorize(
-        { ...base, idp_identifier: "tam" },
-        withExampleSaml,
+        { ...base, idp_identifier: "example-oidc" },
+        withExampleOidc,
         providers,
       ),
-    ).toMatchObject({ kind: "federated", providerName: "examplesaml" });
+    ).toMatchObject({ kind: "federated", providerName: "ExampleOIDC" });
   });
 });
 

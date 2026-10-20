@@ -88,7 +88,7 @@ describe("federatedSignIn", () => {
 
   it("uses the OIDC issuer and the mapped username claim", async () => {
     const oidc: IdentityProviderConfig = {
-      ProviderName: "ExampleOidc",
+      ProviderName: "ExampleOIDC",
       ProviderType: "OIDC",
       ProviderDetails: { oidc_issuer: "https://idp.example.test" },
       AttributeMapping: { username: "oid", email: "mail" },
@@ -98,7 +98,7 @@ describe("federatedSignIn", () => {
       oid: "abc",
       mail: "a@b.c",
     });
-    expect(user.Username).toBe("ExampleOidc_abc");
+    expect(user.Username).toBe("ExampleOIDC_abc");
     expect(attributeValue("email", user.Attributes)).toBe("a@b.c");
     expect(
       JSON.parse(attributeValue("identities", user.Attributes) ?? "")[0].issuer,

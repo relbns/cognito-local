@@ -8,7 +8,7 @@ const CALLBACK = "http://localhost:9999/cb";
 const basicAuth = (id: string, secret: string) =>
   `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
 
-function backendAuthorizeUrl(
+function confidentialClientAuthorizeUrl(
   serverUrl: string,
   clientId: string,
   extra = "",
@@ -45,13 +45,13 @@ describe(
           AllowedOAuthScopes: ["email", "openid", "phone", "profile"],
           CallbackURLs: [CALLBACK],
           LogoutURLs: ["http://localhost:9999/out"],
-          SupportedIdentityProviders: ["COGNITO", "examplesaml"],
+          SupportedIdentityProviders: ["COGNITO", "ExampleOIDC"],
         })
         .promise();
       await client
         .createIdentityProvider({
           UserPoolId: userPoolId,
-          ProviderName: "examplesaml",
+          ProviderName: "ExampleOIDC",
           ProviderType: "OIDC",
           ProviderDetails: {
             client_id: "x",
@@ -116,9 +116,11 @@ describe(
       });
     }
 
-    it("completes the backend's code flow: upper-case CODE, no PKCE, Basic secret", async () => {
+    it("completes a confidential client's code flow: upper-case CODE, no PKCE, Basic secret", async () => {
       const { clientId, clientSecret } = await setup();
-      const redirect = await login(backendAuthorizeUrl(serverUrl(), clientId));
+      const redirect = await login(
+        confidentialClientAuthorizeUrl(serverUrl(), clientId),
+      );
       expect(redirect.searchParams.get("state")).toBe("s1");
       const code = redirect.searchParams.get("code")!;
 
@@ -156,7 +158,9 @@ describe(
 
     it("rejects a wrong or missing client secret with invalid_client", async () => {
       const { clientId } = await setup();
-      const redirect = await login(backendAuthorizeUrl(serverUrl(), clientId));
+      const redirect = await login(
+        confidentialClientAuthorizeUrl(serverUrl(), clientId),
+      );
       const body = {
         grant_type: "authorization_code",
         client_id: clientId,
@@ -186,13 +190,13 @@ describe(
       });
 
       const first = await login(
-        backendAuthorizeUrl(serverUrl(), clientId, pkce),
+        confidentialClientAuthorizeUrl(serverUrl(), clientId, pkce),
       );
       const noVerifier = await exchange(body(first.searchParams.get("code")!));
       expect((await noVerifier.json()).error).toBe("invalid_grant");
 
       const second = await login(
-        backendAuthorizeUrl(serverUrl(), clientId, pkce),
+        confidentialClientAuthorizeUrl(serverUrl(), clientId, pkce),
       );
       const ok = await exchange({
         ...body(second.searchParams.get("code")!),
@@ -217,7 +221,7 @@ describe(
     it("shows the login for identity_provider=COGNITO and the mock IdP for a federated IdP", async () => {
       const { clientId } = await setup();
       const cognito = await fetch(
-        backendAuthorizeUrl(
+        confidentialClientAuthorizeUrl(
           serverUrl(),
           clientId,
           "&identity_provider=COGNITO",
@@ -227,16 +231,16 @@ describe(
       expect(cognito.status).toBe(200);
 
       const federated = await fetch(
-        backendAuthorizeUrl(
+        confidentialClientAuthorizeUrl(
           serverUrl(),
           clientId,
-          "&identity_provider=examplesaml",
+          "&identity_provider=ExampleOIDC",
         ),
         { redirect: "manual" },
       );
       expect(federated.status).toBe(302);
       expect(federated.headers.get("location")).toMatch(
-        /^\/mock-idp\/examplesaml\/authorize\?/,
+        /^\/mock-idp\/ExampleOIDC\/authorize\?/,
       );
     });
 

@@ -515,7 +515,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       Id: "us-east-1_test",
       _identityProviders: [
         { ProviderName: "Google", ProviderType: "Google" },
-        { ProviderName: "examplesaml", ProviderType: "OIDC" },
+        { ProviderName: "ExampleOIDC", ProviderType: "OIDC" },
       ],
     } as any);
     mockUserPoolService.getUserByUsername.mockResolvedValue(
@@ -535,7 +535,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
     });
   });
 
-  const backendAuthorizeQuery = {
+  const confidentialClientQuery = {
     redirect_uri: "http://localhost:9999/cb",
     response_type: "CODE",
     client_id: "conf-client",
@@ -548,7 +548,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query(backendAuthorizeQuery);
+        .query(confidentialClientQuery);
       expect(res.status).toBe(200);
       expect(res.text).toContain('name="response_type" value="code"');
       expect(res.text).not.toContain('name="code_challenge"');
@@ -558,7 +558,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query({ ...backendAuthorizeQuery, identity_provider: "COGNITO" });
+        .query({ ...confidentialClientQuery, identity_provider: "COGNITO" });
       expect(res.status).toBe(200);
       expect(res.text).toContain('name="password"');
     });
@@ -567,7 +567,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query({ ...backendAuthorizeQuery, identity_provider: "Google" });
+        .query({ ...confidentialClientQuery, identity_provider: "Google" });
       expect(res.status).toBe(302);
       const location = new URL(res.header.location, "http://emulator");
       expect(location.pathname).toBe("/mock-idp/Google/authorize");
@@ -579,7 +579,10 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query({ ...backendAuthorizeQuery, identity_provider: "examplesaml" });
+        .query({
+          ...confidentialClientQuery,
+          identity_provider: "ExampleOIDC",
+        });
       expect(res.status).toBe(302);
       const location = new URL(res.header.location);
       expect(location.searchParams.get("error")).toBe("invalid_request");
@@ -593,7 +596,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query({ ...backendAuthorizeQuery, identity_provider: "Nope" });
+        .query({ ...confidentialClientQuery, identity_provider: "Nope" });
       expect(res.status).toBe(302);
       expect(
         new URL(res.header.location).searchParams.get("error_description"),
@@ -604,7 +607,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query({ ...backendAuthorizeQuery, scope: "openid admin:all" });
+        .query({ ...confidentialClientQuery, scope: "openid admin:all" });
       expect(res.status).toBe(302);
       expect(new URL(res.header.location).searchParams.get("error")).toBe(
         "invalid_scope",
@@ -615,7 +618,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app)
         .get("/oauth2/authorize")
-        .query({ ...backendAuthorizeQuery, response_type: "id_token" });
+        .query({ ...confidentialClientQuery, response_type: "id_token" });
       expect(res.status).toBe(302);
       expect(new URL(res.header.location).searchParams.get("error")).toBe(
         "unsupported_response_type",
@@ -630,7 +633,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/authorize")
         .type("form")
         .send({
-          ...backendAuthorizeQuery,
+          ...confidentialClientQuery,
           response_type: "code",
           username: "u1",
           password: "Pw1!",
@@ -649,7 +652,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/authorize")
         .type("form")
         .send({
-          ...backendAuthorizeQuery,
+          ...confidentialClientQuery,
           response_type: "token",
           scope: "openid email",
           username: "u1",
@@ -690,7 +693,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         ...overrides,
       });
 
-    const backendTokenBody = (code: string) => ({
+    const confidentialTokenBody = (code: string) => ({
       grant_type: "authorization_code",
       client_id: "conf-client",
       redirect_uri: "http://localhost:9999/cb",
@@ -703,7 +706,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
-        .send(backendTokenBody(codeFor(codeStore)));
+        .send(confidentialTokenBody(codeFor(codeStore)));
       expect(res.status).toBe(200);
       expect(res.body.id_token).toBe("id-token");
       expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
@@ -723,7 +726,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .type("form")
         .send({
-          ...backendTokenBody(codeFor(codeStore)),
+          ...confidentialTokenBody(codeFor(codeStore)),
           client_secret: "s3cret",
         });
       expect(res.status).toBe(200);
@@ -735,7 +738,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "wrong"))
         .type("form")
-        .send(backendTokenBody(codeFor(codeStore)));
+        .send(confidentialTokenBody(codeFor(codeStore)));
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("invalid_client");
     });
@@ -745,7 +748,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const res = await supertest(app)
         .post("/oauth2/token")
         .type("form")
-        .send(backendTokenBody(codeFor(codeStore)));
+        .send(confidentialTokenBody(codeFor(codeStore)));
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("invalid_client");
     });
@@ -756,7 +759,10 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
-        .send({ ...backendTokenBody(codeFor(codeStore)), client_id: "other" });
+        .send({
+          ...confidentialTokenBody(codeFor(codeStore)),
+          client_id: "other",
+        });
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("invalid_client");
     });
@@ -768,7 +774,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
-        .send(backendTokenBody(code));
+        .send(confidentialTokenBody(code));
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("invalid_grant");
     });
@@ -780,7 +786,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
-        .send({ ...backendTokenBody(code), code_verifier: VERIFIER });
+        .send({ ...confidentialTokenBody(code), code_verifier: VERIFIER });
       expect(res.status).toBe(200);
     });
 
@@ -793,7 +799,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
-        .send(backendTokenBody(code));
+        .send(confidentialTokenBody(code));
       expect(res.status).toBe(200);
       expect(res.body.id_token).toBeUndefined();
       expect(res.body.access_token).toBe("access-token");

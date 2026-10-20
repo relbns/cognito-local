@@ -4,14 +4,14 @@ import { LambdaService } from "../../src/services";
 import { withCognitoSdk } from "./setup";
 
 const PASSWORD = "Passw0rd!";
-const PHONE = "+972501234567";
+const PHONE = "+15555550100";
 
 const attr = (
   user: CognitoIdentityServiceProvider.AdminGetUserResponse,
   name: string,
 ) => user.UserAttributes?.find((a) => a.Name === name)?.Value;
 
-const freeFormUsernamePool = async (client: CognitoIdentityServiceProvider) => {
+const aliasPhonePool = async (client: CognitoIdentityServiceProvider) => {
   const pool = await client
     .createUserPool({
       PoolName: "test",
@@ -54,7 +54,7 @@ describe(
   withCognitoSdk((Cognito, { messageDelivery }) => {
     it("AdminCreateUser throws AliasExistsException for a verified phone another user has", async () => {
       const client = Cognito();
-      const { userPoolId } = await freeFormUsernamePool(client);
+      const { userPoolId } = await aliasPhonePool(client);
       await createVerifiedPhoneUser(client, userPoolId, "first");
 
       await expect(
@@ -67,7 +67,7 @@ describe(
 
     it("AdminCreateUser with ForceAliasCreation moves the alias", async () => {
       const client = Cognito();
-      const { userPoolId } = await freeFormUsernamePool(client);
+      const { userPoolId } = await aliasPhonePool(client);
       await createVerifiedPhoneUser(client, userPoolId, "first");
 
       await createVerifiedPhoneUser(client, userPoolId, "second", {
@@ -87,7 +87,7 @@ describe(
 
     it("SignUp accepts a duplicate phone, and verifying it with AdminUpdateUserAttributes throws AliasExistsException", async () => {
       const client = Cognito();
-      const { userPoolId, clientId } = await freeFormUsernamePool(client);
+      const { userPoolId, clientId } = await aliasPhonePool(client);
       await createVerifiedPhoneUser(client, userPoolId, "first");
 
       const signUp = await client
@@ -116,33 +116,33 @@ describe(
 
     it("AdminUpdateUserAttributes accepts email_verified on its own", async () => {
       const client = Cognito();
-      const { userPoolId } = await freeFormUsernamePool(client);
+      const { userPoolId } = await aliasPhonePool(client);
       await client
         .adminCreateUser({
           UserPoolId: userPoolId,
-          Username: "gov",
+          Username: "alex",
           MessageAction: "SUPPRESS",
-          UserAttributes: [{ Name: "email", Value: "gov@example.com" }],
+          UserAttributes: [{ Name: "email", Value: "alex@example.com" }],
         })
         .promise();
 
       await client
         .adminUpdateUserAttributes({
           UserPoolId: userPoolId,
-          Username: "gov",
+          Username: "alex",
           UserAttributes: [{ Name: "email_verified", Value: "true" }],
         })
         .promise();
 
       const user = await client
-        .adminGetUser({ UserPoolId: userPoolId, Username: "gov" })
+        .adminGetUser({ UserPoolId: userPoolId, Username: "alex" })
         .promise();
       expect(attr(user, "email_verified")).toEqual("true");
     });
 
     it("UpdateUserAttributes throws AliasExistsException for a taken preferred_username", async () => {
       const client = Cognito();
-      const { userPoolId, clientId } = await freeFormUsernamePool(client);
+      const { userPoolId, clientId } = await aliasPhonePool(client);
       await client
         .adminCreateUser({
           UserPoolId: userPoolId,
@@ -330,7 +330,7 @@ describe(
     (Cognito, { messageDelivery }) => {
       it("auto-confirms a phone-only visitor without sending a code, and moves the phone alias", async () => {
         const client = Cognito();
-        const { userPoolId, clientId } = await freeFormUsernamePool(client);
+        const { userPoolId, clientId } = await aliasPhonePool(client);
         const signUp = (username: string) =>
           client
             .signUp({
@@ -344,18 +344,18 @@ describe(
             })
             .promise();
 
-        const first = await signUp("otp_first");
+        const first = await signUp("phone-first");
         expect(first.UserConfirmed).toBe(true);
         expect(first.CodeDeliveryDetails).toBeUndefined();
         expect(messageDelivery().collectedMessages).toHaveLength(0);
 
-        await signUp("otp_second");
+        await signUp("phone-second");
 
         const firstUser = await client
-          .adminGetUser({ UserPoolId: userPoolId, Username: "otp_first" })
+          .adminGetUser({ UserPoolId: userPoolId, Username: "phone-first" })
           .promise();
         const secondUser = await client
-          .adminGetUser({ UserPoolId: userPoolId, Username: "otp_second" })
+          .adminGetUser({ UserPoolId: userPoolId, Username: "phone-second" })
           .promise();
         expect(attr(firstUser, "phone_number_verified")).toEqual("false");
         expect(secondUser.UserStatus).toEqual("CONFIRMED");

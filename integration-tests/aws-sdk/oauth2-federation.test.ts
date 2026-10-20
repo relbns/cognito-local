@@ -12,7 +12,7 @@ const basicAuth = (id: string, secret: string) =>
 
 async function setupPool(
   client: CognitoIdentityServiceProvider,
-  supported = ["COGNITO", "Google", "ExampleOidc"],
+  supported = ["COGNITO", "Google", "ExampleOIDC"],
 ) {
   const pool = await client.createUserPool({ PoolName: "fed" }).promise();
   const userPoolId = pool.UserPool!.Id!;
@@ -37,13 +37,13 @@ async function setupPool(
   await client
     .createIdentityProvider({
       UserPoolId: userPoolId,
-      ProviderName: "ExampleOidc",
+      ProviderName: "ExampleOIDC",
       ProviderType: "OIDC",
-      IdpIdentifiers: ["exampleoidc"],
+      IdpIdentifiers: ["example-oidc"],
       ProviderDetails: {
-        client_id: "exampleoidc-client",
-        client_secret: "exampleoidc-secret",
-        oidc_issuer: "https://login.exampleoidc.example",
+        client_id: "example-oidc-client",
+        client_secret: "example-oidc-secret",
+        oidc_issuer: "https://login.example.test",
         authorize_scopes: "openid email",
       },
       AttributeMapping: { email: "email", username: "sub" },
@@ -68,7 +68,11 @@ async function setupPool(
   };
 }
 
-function backendAuthorizeUrl(serverUrl: string, clientId: string, idp: string) {
+function hostedUiAuthorizeUrl(
+  serverUrl: string,
+  clientId: string,
+  idp: string,
+) {
   return (
     `${serverUrl}/oauth2/authorize?` +
     `identity_provider=${idp}&redirect_uri=${CALLBACK}&response_type=CODE` +
@@ -160,7 +164,7 @@ describe(
 
       const redirect = await federatedSignIn(
         serverUrl(),
-        backendAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+        hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
         "1234567890",
         GOOGLE_CLAIMS,
       );
@@ -206,7 +210,7 @@ describe(
     it("reuses the federated user on the second sign-in", async () => {
       const client = Cognito();
       const app = await setupPool(client);
-      const url = backendAuthorizeUrl(serverUrl(), app.clientId, "Google");
+      const url = hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google");
 
       const first = await exchange(
         serverUrl(),
@@ -266,7 +270,7 @@ describe(
         (
           await federatedSignIn(
             serverUrl(),
-            backendAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+            hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
             "777",
             GOOGLE_CLAIMS,
           )
@@ -293,22 +297,22 @@ describe(
       const client = Cognito();
       const app = await setupPool(client);
       const url =
-        `${serverUrl()}/oauth2/authorize?idp_identifier=exampleoidc&redirect_uri=${CALLBACK}` +
+        `${serverUrl()}/oauth2/authorize?idp_identifier=example-oidc&redirect_uri=${CALLBACK}` +
         `&response_type=code&client_id=${app.clientId}&scope=openid+email&state=s1`;
       const { html } = await openMockIdp(serverUrl(), url);
-      expect(html).toContain("https://login.exampleoidc.example/authorize");
+      expect(html).toContain("https://login.example.test/authorize");
 
       const idToken = await exchange(
         serverUrl(),
         app,
         (
-          await federatedSignIn(serverUrl(), url, "wbc-1", [
-            ["email", "r@exampleoidc.example"],
+          await federatedSignIn(serverUrl(), url, "oidc-1", [
+            ["email", "r@example.test"],
           ])
         ).searchParams.get("code")!,
       );
-      expect(idToken["cognito:username"]).toBe("ExampleOidc_wbc-1");
-      expect(idToken.identities[0].issuer).toBe("https://login.exampleoidc.example");
+      expect(idToken["cognito:username"]).toBe("ExampleOIDC_oidc-1");
+      expect(idToken.identities[0].issuer).toBe("https://login.example.test");
     });
 
     it("redirects the IdP error to the app with its state", async () => {
@@ -316,7 +320,7 @@ describe(
       const app = await setupPool(client);
       const { stateId } = await openMockIdp(
         serverUrl(),
-        backendAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+        hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
       );
       const redirect = await postIdpResponse(serverUrl(), [
         ["state", stateId],
@@ -336,7 +340,7 @@ describe(
       const client = Cognito();
       const app = await setupPool(client, ["COGNITO"]);
       const res = await fetch(
-        backendAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+        hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
         { redirect: "manual" },
       );
       expect(res.status).toBe(302);
@@ -377,7 +381,7 @@ describe(
           (
             await federatedSignIn(
               serverUrl(),
-              backendAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+              hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
               "555",
               [["email", "new@gmail.com"]],
             )
@@ -407,7 +411,7 @@ describe(
 
         const redirect = await federatedSignIn(
           serverUrl(),
-          backendAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+          hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
           "666",
         );
         expect(redirect.searchParams.get("error")).toBe("invalid_request");

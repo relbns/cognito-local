@@ -16,6 +16,7 @@
     "start:watch": "nodemon",
     "test": "vitest",
     "type-check": "tsc --target es2019 --esModuleInterop --resolveJsonModule --noEmit",
+    "check:vendor-terms": "node scripts/check-no-vendor-terms.mjs",
     "semantic-release": "semantic-release",
     "prepare": "husky install"
   },
