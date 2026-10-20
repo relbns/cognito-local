@@ -1,10 +1,11 @@
 services:
   cognito-local:
     build: .
+    image: ghcr.io/relbns/cognito-local:edge
     ports:
       - "9229:9229"
     volumes:
-      - ./.cognito:/app/.cognito
-    environment:
-      - HOST=0.0.0.0
-      - PORT=9229
+      - cognito-data:/app/.cognito
+
+volumes:
+  cognito-data:

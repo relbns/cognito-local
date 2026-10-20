@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+.worktrees
+.cognito
+node_modules
+lib
+docs
+integration-tests
+coverage
+*.log
