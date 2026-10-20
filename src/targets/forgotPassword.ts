@@ -5,6 +5,7 @@ import type {
 import { UnsupportedError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import { attributeValue } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -15,7 +16,7 @@ export type ForgotPasswordTarget = Target<
 
 type ForgotPasswordServices = Pick<
   Services,
-  "cognito" | "clock" | "messages" | "otp"
+  "clock" | "cognito" | "messages" | "otp" | "tokenVerifier"
 >;
 
 export const ForgotPassword =
@@ -24,9 +25,17 @@ export const ForgotPassword =
     clock,
     messages,
     otp,
+    tokenVerifier,
   }: ForgotPasswordServices): ForgotPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
+    await verifyRequestSecretHash(
+      ctx,
+      { cognito, tokenVerifier },
+      req.ClientId,
+      req.Username,
+      req.SecretHash,
+    );
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
       throw new UserNotFoundError();

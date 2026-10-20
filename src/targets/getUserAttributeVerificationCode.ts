@@ -2,13 +2,11 @@ import type {
   GetUserAttributeVerificationCodeRequest,
   GetUserAttributeVerificationCodeResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
+import { InvalidParameterError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
 import type { Present } from "../services/sdkTypes";
-import type { Token } from "../services/tokenGenerator";
 import type { User } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -50,30 +48,20 @@ export type GetUserAttributeVerificationCodeTarget = Target<
 
 type GetUserAttributeVerificationCodeServices = Pick<
   Services,
-  "cognito" | "otp" | "messages"
+  "messages" | "otp" | "tokenVerifier"
 >;
 
 export const GetUserAttributeVerificationCode =
   ({
-    cognito,
-    otp,
     messages,
+    otp,
+    tokenVerifier,
   }: GetUserAttributeVerificationCodeServices): GetUserAttributeVerificationCodeTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      ctx.logger.info("Unable to decode token");
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     const code = otp();
 

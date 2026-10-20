@@ -1,36 +1,19 @@
 import type { ForgetDeviceRequest } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import {
-  InvalidParameterError,
-  ResourceNotFoundError,
-  UserNotFoundError,
-} from "../errors";
+import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 export type ForgetDeviceTarget = Target<ForgetDeviceRequest, {}>;
 
-type ForgetDeviceServices = Pick<Services, "cognito" | "clock">;
+type ForgetDeviceServices = Pick<Services, "clock" | "tokenVerifier">;
 
 export const ForgetDevice =
-  ({ cognito, clock }: ForgetDeviceServices): ForgetDeviceTarget =>
+  ({ clock, tokenVerifier }: ForgetDeviceServices): ForgetDeviceTarget =>
   async (ctx, req) => {
-    const decodedToken = req.AccessToken
-      ? (jwt.decode(req.AccessToken) as Token | null)
-      : null;
-    if (!decodedToken) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     const devices = user.Devices ?? [];
     const index = devices.findIndex((d) => d.DeviceKey === req.DeviceKey);

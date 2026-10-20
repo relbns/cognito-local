@@ -1,22 +1,10 @@
+import type {
+  GetTokensFromRefreshTokenRequest,
+  GetTokensFromRefreshTokenResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { NotAuthorizedError } from "../errors";
-
-// New API (2024/2025) — types not yet in aws-sdk
-interface GetTokensFromRefreshTokenRequest {
-  RefreshToken: string;
-  ClientId: string;
-  ClientSecret?: string;
-}
-
-interface GetTokensFromRefreshTokenResponse {
-  AuthenticationResult?: {
-    AccessToken?: string;
-    IdToken?: string;
-    ExpiresIn?: number;
-    TokenType?: string;
-  };
-}
-
 import type { Services } from "../services";
+import { refreshTokens } from "../services/refreshTokens";
 import type { Target } from "./Target";
 
 export type GetTokensFromRefreshTokenTarget = Target<
@@ -26,40 +14,33 @@ export type GetTokensFromRefreshTokenTarget = Target<
 
 type GetTokensFromRefreshTokenServices = Pick<
   Services,
-  "cognito" | "tokenGenerator"
+  "clock" | "cognito" | "tokenGenerator" | "tokenVerifier"
 >;
 
 export const GetTokensFromRefreshToken =
-  ({
-    cognito,
-    tokenGenerator,
-  }: GetTokensFromRefreshTokenServices): GetTokensFromRefreshTokenTarget =>
+  (
+    services: GetTokensFromRefreshTokenServices,
+  ): GetTokensFromRefreshTokenTarget =>
   async (ctx, req) => {
-    const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
-    const userPoolClient = await cognito.getAppClient(ctx, req.ClientId);
-
-    const user = await userPool.getUserByRefreshToken(ctx, req.RefreshToken);
-    if (!user || !userPoolClient) {
+    const client = await services.cognito.getAppClient(ctx, req.ClientId);
+    if (!client) {
       throw new NotAuthorizedError();
     }
+    services.tokenVerifier.verifyClientSecret(client, req.ClientSecret);
 
-    const userGroups = await userPool.listUserGroupMembership(ctx, user);
-
-    const tokens = await tokenGenerator.generate(
+    const verified = await services.tokenVerifier.verifyRefreshToken(
       ctx,
-      user,
-      userGroups,
-      userPoolClient,
-      undefined,
-      "RefreshTokens",
+      req.RefreshToken,
+      req.ClientId,
     );
+    const { tokens } = await refreshTokens(ctx, services, client, verified);
 
     return {
       AuthenticationResult: {
         AccessToken: tokens.AccessToken,
         IdToken: tokens.IdToken,
-        ExpiresIn: 3600,
-        TokenType: "Bearer",
+        ExpiresIn: tokens.ExpiresIn,
+        TokenType: tokens.TokenType,
       },
     };
   };

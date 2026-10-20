@@ -1,12 +1,16 @@
 import jwt from "jsonwebtoken";
 import * as uuid from "uuid";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
+import {
+  InvalidParameterError,
+  NotAuthorizedError,
+  UserNotFoundError,
+} from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { Messages, UserPoolService } from "../services";
 import { attribute, attributeValue } from "../services/userPoolService";
@@ -47,7 +51,7 @@ describe("GetUserAttributeVerificationCode target", () => {
     });
     mockMessages = newMockMessages();
     getUserAttributeVerificationCode = GetUserAttributeVerificationCode({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
       messages: mockMessages,
       otp: () => "123456",
     });
@@ -59,7 +63,7 @@ describe("GetUserAttributeVerificationCode target", () => {
         AccessToken: "blah",
         AttributeName: "email",
       }),
-    ).rejects.toBeInstanceOf(InvalidParameterError);
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
   });
 
   it("throws if user doesn't exist", async () => {
@@ -70,7 +74,7 @@ describe("GetUserAttributeVerificationCode target", () => {
         AccessToken: validToken,
         AttributeName: "email",
       }),
-    ).rejects.toEqual(new UserNotFoundError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it("throws if the user doesn't have a valid way to contact them", async () => {

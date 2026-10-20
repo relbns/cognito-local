@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
+import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
@@ -13,6 +15,7 @@ import {
   type UserPoolService,
 } from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
+import type { TokenVerifier } from "../services/tokenVerifier";
 import {
   AdminInitiateAuth,
   type AdminInitiateAuthTarget,
@@ -23,6 +26,7 @@ describe("AdminInitiateAuth target", () => {
 
   let mockCognitoService: MockedObject<CognitoService>;
   let mockTokenGenerator: MockedObject<TokenGenerator>;
+  let mockTokenVerifier: MockedObject<TokenVerifier>;
   let mockTriggers: MockedObject<Triggers>;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let authSessions: InMemoryAuthSessions;
@@ -36,12 +40,15 @@ describe("AdminInitiateAuth target", () => {
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
     mockTriggers = newMockTriggers();
     mockTokenGenerator = newMockTokenGenerator();
+    mockTokenVerifier = newMockTokenVerifier();
     authSessions = new InMemoryAuthSessions(new DateClock());
     adminInitiateAuth = AdminInitiateAuth({
       authSessions,
       triggers: mockTriggers,
       cognito: mockCognitoService,
       tokenGenerator: mockTokenGenerator,
+      tokenVerifier: mockTokenVerifier,
+      clock: new ClockFake(new Date()),
     });
   });
 
@@ -50,6 +57,8 @@ describe("AdminInitiateAuth target", () => {
       AccessToken: "access",
       IdToken: "id",
       RefreshToken: "refresh",
+      ExpiresIn: 3600,
+      TokenType: "Bearer",
     });
 
     const existingUser = TDB.user();
@@ -185,6 +194,8 @@ describe("AdminInitiateAuth target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       const existingUser = TDB.user();
       mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
@@ -206,17 +217,17 @@ describe("AdminInitiateAuth target", () => {
   });
 
   it("supports REFRESH_TOKEN_AUTH", async () => {
-    mockTokenGenerator.generate.mockResolvedValue({
-      AccessToken: "access",
-      IdToken: "id",
-      RefreshToken: "refresh",
-    });
-
     const existingUser = TDB.user({
       RefreshTokens: ["refresh token"],
+      TokenOrigins: [
+        { Jti: "origin", ClientId: userPoolClient.ClientId, ExpiresAt: 4e9 },
+      ],
     });
-
-    mockUserPoolService.getUserByRefreshToken.mockResolvedValue(existingUser);
+    mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+      claims: { "cognito:username": existingUser.Username, jti: "origin" },
+      user: existingUser,
+      userPool: mockUserPoolService,
+    });
     mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
     const response = await adminInitiateAuth(TestContext, {
@@ -231,17 +242,19 @@ describe("AdminInitiateAuth target", () => {
       },
     });
 
-    expect(mockUserPoolService.getUserByRefreshToken).toHaveBeenCalledWith(
+    expect(mockTokenVerifier.verifyRefreshToken).toHaveBeenCalledWith(
       TestContext,
       "refresh token",
+      userPoolClient.ClientId,
     );
     expect(mockUserPoolService.storeRefreshToken).not.toHaveBeenCalled();
 
-    expect(response.AuthenticationResult?.AccessToken).toEqual("access");
-    expect(response.AuthenticationResult?.IdToken).toEqual("id");
-
-    // does not return a refresh token as part of a refresh token flow
-    expect(response.AuthenticationResult?.RefreshToken).not.toBeDefined();
+    expect(response.AuthenticationResult).toEqual({
+      AccessToken: "access",
+      IdToken: "id",
+      ExpiresIn: 3600,
+      TokenType: "Bearer",
+    });
 
     expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
       TestContext,
@@ -252,8 +265,11 @@ describe("AdminInitiateAuth target", () => {
         client: "metadata",
       },
       "RefreshTokens",
+      [],
+      { originJti: "origin" },
     );
   });
+
   it("starts a CUSTOM_AUTH session with the Create round", async () => {
     const existingUser = TDB.user();
     mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);

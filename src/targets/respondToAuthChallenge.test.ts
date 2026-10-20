@@ -11,6 +11,7 @@ import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
@@ -68,6 +69,7 @@ describe("RespondToAuthChallenge target", () => {
       messages: mockMessages,
       otp: mockOtp,
       tokenGenerator: mockTokenGenerator,
+      tokenVerifier: newMockTokenVerifier(),
       triggers: mockTriggers,
     });
   });
@@ -164,6 +166,8 @@ describe("RespondToAuthChallenge target", () => {
           AccessToken: "access",
           IdToken: "id",
           RefreshToken: "refresh",
+          ExpiresIn: 3600,
+          TokenType: "Bearer",
         });
         mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -320,6 +324,8 @@ describe("RespondToAuthChallenge target", () => {
         AccessToken: "access",
         IdToken: "id",
         RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
 
@@ -396,6 +402,8 @@ describe("RespondToAuthChallenge target", () => {
         AccessToken: "a",
         IdToken: "i",
         RefreshToken: "r",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
       });
       const result = await respondToAuthChallenge(TestContext, {
         ClientId: userPoolClient.ClientId,
@@ -508,6 +516,8 @@ describe("RespondToAuthChallenge target", () => {
       AccessToken: "access",
       IdToken: "id",
       RefreshToken: "refresh",
+      ExpiresIn: 3600,
+      TokenType: "Bearer" as const,
     };
 
     const seedSession = (

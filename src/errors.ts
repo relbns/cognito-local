@@ -120,8 +120,32 @@ export class InvalidParameterError extends CognitoError {
   }
 }
 
+export class UnsupportedOperationError extends CognitoError {
+  public constructor(message: string) {
+    super("UnsupportedOperationException", message);
+  }
+}
+
+export class UnsupportedTokenTypeError extends CognitoError {
+  public constructor(message = "Unsupported token type") {
+    super("UnsupportedTokenTypeException", message);
+  }
+}
+
 export class UnknownOperationError extends CognitoError {
   public constructor(message: string) {
     super("UnknownOperationException", message);
   }
 }
+
+export const TokenErrorMessages = {
+  invalidAccessToken: "Invalid Access Token",
+  expiredAccessToken: "Access Token has expired",
+  revokedAccessToken: "Access Token has been revoked",
+  missingScope: "Access Token does not have required scopes",
+  invalidRefreshToken: "Invalid Refresh Token",
+  expiredRefreshToken: "Refresh Token has expired",
+  revokedRefreshToken: "Refresh Token has been revoked",
+  userDisabled: "User is disabled.",
+  userDoesNotExist: "User does not exist.",
+} as const;

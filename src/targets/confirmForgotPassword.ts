@@ -5,6 +5,7 @@ import type {
 import { CodeMismatchError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -16,7 +17,7 @@ export type ConfirmForgotPasswordTarget = Target<
 
 type ConfirmForgotPasswordServices = Pick<
   Services,
-  "cognito" | "clock" | "triggers"
+  "clock" | "cognito" | "tokenVerifier" | "triggers"
 > &
   Partial<Pick<Services, "config">>;
 
@@ -26,9 +27,17 @@ export const ConfirmForgotPassword =
     clock,
     triggers,
     config,
+    tokenVerifier,
   }: ConfirmForgotPasswordServices): ConfirmForgotPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
+    await verifyRequestSecretHash(
+      ctx,
+      { cognito, tokenVerifier },
+      req.ClientId,
+      req.Username,
+      req.SecretHash,
+    );
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
       throw new UserNotFoundError();

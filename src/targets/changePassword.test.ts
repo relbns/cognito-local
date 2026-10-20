@@ -2,14 +2,14 @@ import jwt from "jsonwebtoken";
 import * as uuid from "uuid";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
-  InvalidParameterError,
   InvalidPasswordError,
   NotAuthorizedError,
+  UserNotFoundError,
 } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { UserPoolService } from "../services";
@@ -24,7 +24,7 @@ describe("ChangePassword target", () => {
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService();
     changePassword = ChangePassword({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
       clock: new ClockFake(currentDate),
     });
   });
@@ -36,7 +36,7 @@ describe("ChangePassword target", () => {
         PreviousPassword: "abc-Aa1!",
         ProposedPassword: "def-Aa1!",
       }),
-    ).rejects.toBeInstanceOf(InvalidParameterError);
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
 
     expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });
@@ -68,7 +68,7 @@ describe("ChangePassword target", () => {
         PreviousPassword: "abc-Aa1!",
         ProposedPassword: "def-Aa1!",
       }),
-    ).rejects.toEqual(new NotAuthorizedError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
 
     expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });

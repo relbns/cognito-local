@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import * as uuid from "uuid";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
@@ -42,7 +42,7 @@ describe("VerifySoftwareToken target", () => {
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService();
     verifySoftwareToken = VerifySoftwareToken({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
     });
   });
 

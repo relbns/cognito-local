@@ -26,7 +26,12 @@ export type AdminRespondToAuthChallengeTarget = Target<
 
 type AdminRespondToAuthChallengeServices = Pick<
   Services,
-  "authSessions" | "clock" | "cognito" | "triggers" | "tokenGenerator"
+  | "authSessions"
+  | "clock"
+  | "cognito"
+  | "triggers"
+  | "tokenGenerator"
+  | "tokenVerifier"
 > &
   Partial<Pick<Services, "config">>;
 
@@ -55,6 +60,13 @@ export const AdminRespondToAuthChallenge =
       ctx,
       req.ChallengeResponses.USERNAME,
     );
+    if (userPoolClient) {
+      services.tokenVerifier.verifySecretHash(
+        userPoolClient,
+        [req.ChallengeResponses.USERNAME],
+        req.ChallengeResponses.SECRET_HASH,
+      );
+    }
     if (!user || !userPoolClient) {
       throw new NotAuthorizedError();
     }
@@ -184,16 +196,22 @@ export const AdminRespondToAuthChallenge =
     }
 
     const userGroups = await userPool.listUserGroupMembership(ctx, user);
+    const tokens = await tokenGenerator.generate(
+      ctx,
+      user,
+      userGroups,
+      userPoolClient,
+      req.ClientMetadata,
+      "Authentication",
+    );
+    await userPool.storeRefreshToken(
+      ctx,
+      tokens.RefreshToken,
+      (await userPool.getUserByUsername(ctx, user.Username)) ?? user,
+    );
 
     return {
       ChallengeParameters: {},
-      AuthenticationResult: await tokenGenerator.generate(
-        ctx,
-        user,
-        userGroups,
-        userPoolClient,
-        req.ClientMetadata,
-        "Authentication",
-      ),
+      AuthenticationResult: tokens,
     };
   };

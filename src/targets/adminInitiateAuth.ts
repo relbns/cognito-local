@@ -12,7 +12,9 @@ import {
 import type { Services } from "../services";
 import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
+import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
+import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import type { Target } from "./Target";
 
 export type AdminInitiateAuthTarget = Target<
@@ -22,7 +24,12 @@ export type AdminInitiateAuthTarget = Target<
 
 type AdminInitiateAuthServices = Pick<
   Services,
-  "authSessions" | "cognito" | "triggers" | "tokenGenerator"
+  | "authSessions"
+  | "clock"
+  | "cognito"
+  | "triggers"
+  | "tokenGenerator"
+  | "tokenVerifier"
 >;
 
 const adminUserPasswordAuthFlow = async (
@@ -125,8 +132,8 @@ const adminUserPasswordAuthFlow = async (
       RefreshToken: tokens.RefreshToken,
       IdToken: tokens.IdToken,
       NewDeviceMetadata: undefined,
-      TokenType: undefined,
-      ExpiresIn: undefined,
+      TokenType: tokens.TokenType,
+      ExpiresIn: tokens.ExpiresIn,
     },
   };
 };
@@ -146,28 +153,27 @@ const refreshTokenAuthFlow = async (
     throw new InvalidParameterError("AuthParameters REFRESH_TOKEN is required");
   }
 
-  const userPool = await services.cognito.getUserPoolForClientId(
-    ctx,
-    req.ClientId,
-  );
   const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
-  const user = await userPool.getUserByRefreshToken(
-    ctx,
-    req.AuthParameters.REFRESH_TOKEN,
-  );
-  if (!user || !userPoolClient) {
+  if (!userPoolClient) {
     throw new NotAuthorizedError();
   }
-
-  const userGroups = await userPool.listUserGroupMembership(ctx, user);
-
-  const tokens = await services.tokenGenerator.generate(
+  const verified = await services.tokenVerifier.verifyRefreshToken(
     ctx,
-    user,
-    userGroups,
+    req.AuthParameters.REFRESH_TOKEN,
+    req.ClientId,
+  );
+  services.tokenVerifier.verifySecretHash(
     userPoolClient,
+    [refreshSecretHashUsername(verified.userPool, verified.user)],
+    req.AuthParameters.SECRET_HASH,
+  );
+
+  const { tokens } = await refreshTokens(
+    ctx,
+    services,
+    userPoolClient,
+    verified,
     req.ClientMetadata,
-    "RefreshTokens",
   );
 
   return {
@@ -179,8 +185,8 @@ const refreshTokenAuthFlow = async (
       RefreshToken: undefined,
       IdToken: tokens.IdToken,
       NewDeviceMetadata: undefined,
-      TokenType: undefined,
-      ExpiresIn: undefined,
+      TokenType: tokens.TokenType,
+      ExpiresIn: tokens.ExpiresIn,
     },
   };
 };
@@ -220,6 +226,19 @@ const customAuthFlow = async (
 export const AdminInitiateAuth =
   (services: AdminInitiateAuthServices): AdminInitiateAuthTarget =>
   async (ctx, req) => {
+    const isRefresh =
+      req.AuthFlow === "REFRESH_TOKEN_AUTH" || req.AuthFlow === "REFRESH_TOKEN";
+    if (!isRefresh) {
+      const client = await services.cognito.getAppClient(ctx, req.ClientId);
+      if (client) {
+        services.tokenVerifier.verifySecretHash(
+          client,
+          [req.AuthParameters?.USERNAME],
+          req.AuthParameters?.SECRET_HASH,
+        );
+      }
+    }
+
     if (
       req.AuthFlow === "ADMIN_USER_PASSWORD_AUTH" ||
       req.AuthFlow === "ADMIN_NO_SRP_AUTH"

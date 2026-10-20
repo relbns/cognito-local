@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
@@ -29,7 +29,7 @@ describe("ConfirmDevice target", () => {
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService({ Id: "test-pool" });
     confirmDevice = ConfirmDevice({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
       clock: new ClockFake(currentDate),
     });
   });

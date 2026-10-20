@@ -2,41 +2,54 @@ import type {
   RevokeTokenRequest,
   RevokeTokenResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { NotAuthorizedError } from "../errors";
+import jwt from "jsonwebtoken";
+import {
+  NotAuthorizedError,
+  UnsupportedOperationError,
+  UnsupportedTokenTypeError,
+} from "../errors";
 import type { Services } from "../services";
+import { withRefreshTokenRevoked } from "../services/tokenRevocation";
 import type { Target } from "./Target";
 
 export type RevokeTokenTarget = Target<RevokeTokenRequest, RevokeTokenResponse>;
 
-type RevokeTokenServices = Pick<Services, "cognito">;
+type RevokeTokenServices = Pick<Services, "cognito" | "tokenVerifier">;
 
 export const RevokeToken =
-  ({ cognito }: RevokeTokenServices): RevokeTokenTarget =>
+  ({ cognito, tokenVerifier }: RevokeTokenServices): RevokeTokenTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
+    const client = await cognito.getAppClient(ctx, req.ClientId);
+    if (!client) {
+      throw new NotAuthorizedError();
+    }
+    tokenVerifier.verifyClientSecret(client, req.ClientSecret);
+    if (client.EnableTokenRevocation === false) {
+      throw new UnsupportedOperationError(
+        "Token revocation is not enabled for this client.",
+      );
+    }
 
-    const users = await userPool.listUsers(ctx);
-    const user = users.find(
-      (user) =>
-        Array.isArray(user.RefreshTokens) &&
-        user.RefreshTokens.includes(req.Token),
-    );
+    const decoded = jwt.decode(req.Token);
+    if (decoded && typeof decoded === "object" && decoded.token_use) {
+      throw new UnsupportedTokenTypeError();
+    }
 
+    const user = await userPool.getUserByRefreshToken(ctx, req.Token);
     if (!user) {
       throw new NotAuthorizedError();
     }
-
-    const tokens = Array.isArray(user.RefreshTokens) ? user.RefreshTokens : [];
-    const tokenIndex = tokens.indexOf(req.Token);
-
-    if (tokenIndex !== -1) {
-      tokens.splice(tokenIndex, 1);
+    if (
+      decoded &&
+      typeof decoded === "object" &&
+      decoded.client_id !== undefined &&
+      decoded.client_id !== req.ClientId
+    ) {
+      throw new NotAuthorizedError();
     }
 
-    await userPool.saveUser(ctx, {
-      ...user,
-      RefreshTokens: [...tokens],
-    });
+    await userPool.saveUser(ctx, withRefreshTokenRevoked(user, req.Token));
 
     return {};
   };

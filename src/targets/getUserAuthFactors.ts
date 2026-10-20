@@ -1,7 +1,4 @@
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
 interface GetUserAuthFactorsRequest {
@@ -20,24 +17,15 @@ export type GetUserAuthFactorsTarget = Target<
   GetUserAuthFactorsResponse
 >;
 
-type GetUserAuthFactorsServices = Pick<Services, "cognito">;
+type GetUserAuthFactorsServices = Pick<Services, "tokenVerifier">;
 
 export const GetUserAuthFactors =
-  ({ cognito }: GetUserAuthFactorsServices): GetUserAuthFactorsTarget =>
+  ({ tokenVerifier }: GetUserAuthFactorsServices): GetUserAuthFactorsTarget =>
   async (ctx, req) => {
-    const decodedToken = jwt.decode(req.AccessToken) as Token | null;
-    if (!decodedToken) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decodedToken.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
-    if (!user) {
-      throw new UserNotFoundError();
-    }
 
     const factors: string[] = ["PASSWORD"];
     if (user.UserMFASettingList) {

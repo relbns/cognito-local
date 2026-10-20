@@ -12,6 +12,7 @@ import type { DataStore } from "./dataStore/dataStore";
 import type { DataStoreFactory } from "./dataStore/factory";
 import { FilterConfig } from "./filter";
 import type { Attribute } from "./sdkTypes";
+import { withRefreshToken } from "./tokenRevocation";
 
 export interface MFAOption {
   DeliveryMedium: "SMS";
@@ -106,6 +107,8 @@ export interface User {
   ConfirmationCode?: string;
   MFACode?: string;
   RefreshTokens: string[];
+  /** Refresh-token sessions whose access tokens are still honoured; emptied by a global sign-out. */
+  TokenOrigins?: TokenOrigin[];
   Devices?: any[];
 
   /**
@@ -127,6 +130,13 @@ export interface User {
 
   // Federated identities linked by AdminLinkProviderForUser. Internal only.
   ProviderLinks?: ProviderLink[];
+}
+
+export interface TokenOrigin {
+  Jti: string;
+  ClientId: string;
+  /** Epoch seconds. */
+  ExpiresAt: number;
 }
 
 export interface ProviderLink {
@@ -515,19 +525,14 @@ export class UserPoolServiceImpl implements UserPoolService {
     user: User,
   ): Promise<void> {
     ctx.logger.debug(
-      { refreshToken, username: user.Username },
+      { username: user.Username },
       "UserPoolServiceImpl.storeRefreshToken",
-      refreshToken,
     );
-    const refreshTokens = Array.isArray(user.RefreshTokens)
-      ? user.RefreshTokens
-      : [];
-    refreshTokens.push(refreshToken);
 
-    await this.saveUser(ctx, {
-      ...user,
-      RefreshTokens: refreshTokens,
-    });
+    await this.saveUser(
+      ctx,
+      withRefreshToken(user, refreshToken, this.clock.get()),
+    );
   }
 }
 

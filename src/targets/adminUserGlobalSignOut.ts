@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { withAllTokensRevoked } from "../services/tokenRevocation";
 import type { Target } from "./Target";
 
 export type AdminUserGlobalSignOutTarget = Target<
@@ -26,8 +27,7 @@ export const AdminUserGlobalSignOut =
     }
 
     await userPool.saveUser(ctx, {
-      ...user,
-      RefreshTokens: [],
+      ...withAllTokensRevoked(user),
       UserLastModifiedDate: clock.get(),
     });
 

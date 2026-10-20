@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { withAllTokensRevoked } from "../services/tokenRevocation";
 import type { Target } from "./Target";
 
 export type AdminDisableUserTarget = Target<
@@ -23,7 +24,7 @@ export const AdminDisableUser =
     }
 
     await userPool.saveUser(ctx, {
-      ...user,
+      ...withAllTokensRevoked(user),
       Enabled: false,
       UserLastModifiedDate: clock.get(),
     });

@@ -2,11 +2,11 @@ import jwt from "jsonwebtoken";
 import * as uuid from "uuid";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { UserPoolService } from "../services";
 import { attribute } from "../services/userPoolService";
@@ -45,7 +45,7 @@ describe("DeleteUserAttributes target", () => {
     mockUserPoolService = newMockUserPoolService();
     deleteUserAttributes = DeleteUserAttributes({
       clock,
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
     });
   });
 
@@ -57,7 +57,7 @@ describe("DeleteUserAttributes target", () => {
         AccessToken: validToken,
         UserAttributeNames: ["custom:example"],
       }),
-    ).rejects.toEqual(new NotAuthorizedError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it("throws if the token is invalid", async () => {
@@ -66,7 +66,7 @@ describe("DeleteUserAttributes target", () => {
         AccessToken: "invalid token",
         UserAttributeNames: ["custom:example"],
       }),
-    ).rejects.toEqual(new InvalidParameterError());
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
   });
 
   it("saves the updated attributes on the user", async () => {

@@ -1,7 +1,10 @@
 import type { Response } from "express";
+import jwt from "jsonwebtoken";
 import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
+import type { Token } from "../services/tokenGenerator";
+import { withTokenOrigin } from "../services/tokenRevocation";
 import type { User } from "../services/userPoolService";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { type AuthorizeFlow, includesIdToken } from "./oauthRequest";
@@ -18,7 +21,7 @@ export interface AuthorizationResponseInput {
 export async function sendAuthorizationResponse(
   ctx: Context,
   res: Response,
-  services: Pick<Services, "tokenGenerator">,
+  services: Pick<Services, "clock" | "tokenGenerator">,
   codeStore: AuthorizationCodeStore,
   {
     appClient,
@@ -42,13 +45,28 @@ export async function sendAuthorizationResponse(
       "HostedAuth",
       flow.scopes,
     );
+    const claims = jwt.decode(tokens.AccessToken) as Token | null;
+    if (claims?.origin_jti && claims.exp) {
+      await userPool.saveUser(
+        ctx,
+        withTokenOrigin(
+          user,
+          {
+            Jti: claims.origin_jti,
+            ClientId: appClient.ClientId,
+            ExpiresAt: claims.exp,
+          },
+          services.clock.get(),
+        ),
+      );
+    }
     const fragment = new URLSearchParams();
     if (includesIdToken(flow.scopes)) {
       fragment.set("id_token", tokens.IdToken);
     }
     fragment.set("access_token", tokens.AccessToken);
     fragment.set("token_type", "bearer");
-    fragment.set("expires_in", "3600");
+    fragment.set("expires_in", String(tokens.ExpiresIn));
     if (state) fragment.set("state", state);
     redirectUrl.hash = fragment.toString();
     return res.redirect(redirectUrl.toString());

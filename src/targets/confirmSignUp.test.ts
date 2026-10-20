@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
@@ -10,13 +11,16 @@ import {
   CodeMismatchError,
   NotAuthorizedError,
 } from "../errors";
-import type { Triggers, UserPoolService } from "../services";
+import type { CognitoService, Triggers, UserPoolService } from "../services";
+import type { TokenVerifier } from "../services/tokenVerifier";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import { ConfirmSignUp, type ConfirmSignUpTarget } from "./confirmSignUp";
 
 const originalDate = new Date();
 
 describe("ConfirmSignUp target", () => {
+  let mockCognito: MockedObject<CognitoService>;
+  let mockTokenVerifier: MockedObject<TokenVerifier>;
   let confirmSignUp: ConfirmSignUpTarget;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let mockTriggers: MockedObject<Triggers>;
@@ -26,12 +30,37 @@ describe("ConfirmSignUp target", () => {
     clock = new ClockFake(originalDate);
 
     mockUserPoolService = newMockUserPoolService();
+    mockCognito = newMockCognitoService(mockUserPoolService);
+    mockTokenVerifier = newMockTokenVerifier();
     mockTriggers = newMockTriggers();
     confirmSignUp = ConfirmSignUp({
-      cognito: newMockCognitoService(mockUserPoolService),
+      cognito: mockCognito,
+      tokenVerifier: mockTokenVerifier,
       clock,
       triggers: mockTriggers,
     });
+  });
+
+  it("checks SecretHash against the username", async () => {
+    const client = TDB.appClient({ ClientSecret: "secret" });
+    mockCognito.getAppClient.mockResolvedValue(client);
+    mockTokenVerifier.verifySecretHash.mockImplementation(() => {
+      throw new NotAuthorizedError("Unable to verify secret hash");
+    });
+
+    await expect(
+      confirmSignUp(TestContext, {
+        ClientId: client.ClientId,
+        Username: "u",
+        SecretHash: "bad",
+        ConfirmationCode: "123456",
+      }),
+    ).rejects.toEqual(new NotAuthorizedError("Unable to verify secret hash"));
+    expect(mockTokenVerifier.verifySecretHash).toHaveBeenCalledWith(
+      client,
+      ["u"],
+      "bad",
+    );
   });
 
   it("throws if user doesn't exist", async () => {

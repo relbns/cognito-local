@@ -5,6 +5,7 @@ import type { CodeLog } from "./codeLog";
 import type { CognitoService } from "./cognitoService";
 import type { Messages } from "./messages";
 import type { TokenGenerator } from "./tokenGenerator";
+import type { TokenVerifier } from "./tokenVerifier";
 import type { Triggers } from "./triggers";
 
 export { AuthSessions, InMemoryAuthSessions } from "./authSessions";
@@ -25,5 +26,6 @@ export interface Services {
   messages: Messages;
   otp: () => string;
   tokenGenerator: TokenGenerator;
+  tokenVerifier: TokenVerifier;
   triggers: Triggers;
 }

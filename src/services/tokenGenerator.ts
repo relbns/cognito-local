@@ -2,8 +2,8 @@ import type { TimeUnitsType } from "@aws-sdk/client-cognito-identity-provider";
 import type { StringMap } from "aws-lambda/trigger/cognito-user-pool-trigger/_common";
 import type { GroupOverrideDetails } from "aws-lambda/trigger/cognito-user-pool-trigger/pre-token-generation";
 import jwt, { type SignOptions } from "jsonwebtoken";
-import type { StringValue, UnitAnyCase } from "ms";
 import * as uuid from "uuid";
+import { InvalidParameterError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import { identitiesClaim } from "../oauth2/federation";
 import type { AppClient } from "./appClient";
@@ -19,6 +19,10 @@ import {
 
 export interface TokenConfig {
   IssuerDomain?: string;
+  /** Verify signature, expiry and revocation of tokens sent to the API; false decodes them unchecked. */
+  Verify?: boolean;
+  /** Require SECRET_HASH / ClientSecret from app clients that have a secret. */
+  CheckSecretHash?: boolean;
 }
 
 export interface Token {
@@ -31,6 +35,8 @@ export interface Token {
   scope: string;
   auth_time: Date;
   jti: string;
+  origin_jti?: string;
+  exp?: number;
 }
 
 interface TokenOverrides {
@@ -127,6 +133,14 @@ export interface Tokens {
   readonly AccessToken: string;
   readonly IdToken: string;
   readonly RefreshToken: string;
+  /** Lifetime of the access token in seconds. */
+  readonly ExpiresIn: number;
+  readonly TokenType: "Bearer";
+}
+
+export interface GenerateOptions {
+  /** Reuse the session of an existing refresh token instead of starting a new one. */
+  originJti?: string;
 }
 
 export interface TokenGenerator {
@@ -143,27 +157,76 @@ export interface TokenGenerator {
       | "NewPasswordChallenge"
       | "RefreshTokens",
     scopes?: readonly string[],
+    options?: GenerateOptions,
   ): Promise<Tokens>;
 }
 
-function assertUnitAnyCase(unit: string): asserts unit is UnitAnyCase {
-  if (!["seconds", "minutes", "hours", "days"].includes(unit)) {
+const UNIT_SECONDS: Record<TimeUnitsType, number> = {
+  seconds: 1,
+  minutes: 60,
+  hours: 60 * 60,
+  days: 24 * 60 * 60,
+};
+
+export const DEFAULT_TOKEN_VALIDITY = {
+  AccessToken: { value: 1, unit: "hours" },
+  IdToken: { value: 1, unit: "hours" },
+  RefreshToken: { value: 30, unit: "days" },
+} as const satisfies Record<
+  "AccessToken" | "IdToken" | "RefreshToken",
+  { value: number; unit: TimeUnitsType }
+>;
+
+const VALIDITY_FIELD = {
+  AccessToken: "AccessTokenValidity",
+  IdToken: "IdTokenValidity",
+  RefreshToken: "RefreshTokenValidity",
+} as const;
+
+export const tokenValiditySeconds = (
+  client: Pick<
+    AppClient,
+    | "AccessTokenValidity"
+    | "IdTokenValidity"
+    | "RefreshTokenValidity"
+    | "TokenValidityUnits"
+  >,
+  token: keyof typeof VALIDITY_FIELD,
+): number => {
+  const configured = client[VALIDITY_FIELD[token]];
+  if (configured === undefined || configured === null) {
+    const fallback = DEFAULT_TOKEN_VALIDITY[token];
+    return fallback.value * UNIT_SECONDS[fallback.unit];
+  }
+  const unit =
+    client.TokenValidityUnits?.[token] ?? DEFAULT_TOKEN_VALIDITY[token].unit;
+  const multiplier = UNIT_SECONDS[unit];
+  if (!multiplier) {
     throw new Error(`Invalid unit: ${unit}`);
   }
-}
+  return configured * multiplier;
+};
 
-const formatExpiration = (
-  duration: number | undefined,
-  unit: TimeUnitsType,
-  fallback: StringValue,
-): StringValue => {
-  if (duration === undefined) {
-    return fallback;
+const VALIDITY_LIMITS_SECONDS = {
+  AccessToken: [5 * 60, 24 * 60 * 60],
+  IdToken: [5 * 60, 24 * 60 * 60],
+  RefreshToken: [60 * 60, 3650 * 24 * 60 * 60],
+} as const;
+
+/** AWS limits: access and ID tokens 5 minutes to 1 day, refresh tokens 60 minutes to 10 years. */
+export const assertTokenValidity = (
+  client: Parameters<typeof tokenValiditySeconds>[0],
+): void => {
+  for (const token of Object.keys(
+    VALIDITY_FIELD,
+  ) as (keyof typeof VALIDITY_FIELD)[]) {
+    if (client[VALIDITY_FIELD[token]] === undefined) continue;
+    const seconds = tokenValiditySeconds(client, token);
+    const [min, max] = VALIDITY_LIMITS_SECONDS[token];
+    if (!(seconds >= min && seconds <= max)) {
+      throw new InvalidParameterError("Invalid range for token validity.");
+    }
   }
-
-  assertUnitAnyCase(unit);
-
-  return `${duration}${unit}`;
 };
 
 export class JwtTokenGenerator implements TokenGenerator {
@@ -194,8 +257,10 @@ export class JwtTokenGenerator implements TokenGenerator {
       | "NewPasswordChallenge"
       | "RefreshTokens",
     scopes?: readonly string[],
+    options: GenerateOptions = {},
   ): Promise<Tokens> {
     const eventId = uuid.v4();
+    const originJti = options.originJti ?? uuid.v4();
     const authTime = Math.floor(this.clock.get().getTime() / 1000);
     const sub = attributeValue("sub", user.Attributes);
 
@@ -205,6 +270,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       event_id: eventId,
       iat: authTime,
       jti: uuid.v4(),
+      origin_jti: originJti,
       scope: scopes?.length
         ? scopes.join(" ")
         : "aws.cognito.signin.user.admin",
@@ -222,6 +288,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       event_id: eventId,
       iat: authTime,
       jti: uuid.v4(),
+      origin_jti: originJti,
       sub,
       token_use: "id",
       ...attributesToRecord(customAttributes(user.Attributes)),
@@ -255,49 +322,45 @@ export class JwtTokenGenerator implements TokenGenerator {
 
     const issuer = `${this.tokenConfig.IssuerDomain}/${userPoolClient.UserPoolId}`;
 
+    const accessTokenSeconds = tokenValiditySeconds(
+      userPoolClient,
+      "AccessToken",
+    );
+
     return {
       AccessToken: jwt.sign(accessToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
-        expiresIn: formatExpiration(
-          userPoolClient.AccessTokenValidity,
-          userPoolClient.TokenValidityUnits?.AccessToken ?? "hours",
-          "24h",
-        ),
+        expiresIn: accessTokenSeconds,
         keyid: "CognitoLocal",
       } satisfies SignOptions),
       IdToken: jwt.sign(idToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
-        expiresIn: formatExpiration(
-          userPoolClient.IdTokenValidity,
-          userPoolClient.TokenValidityUnits?.IdToken ?? "hours",
-          "24h",
-        ),
+        expiresIn: tokenValiditySeconds(userPoolClient, "IdToken"),
         audience: userPoolClient.ClientId,
         keyid: "CognitoLocal",
       } satisfies SignOptions),
-      // this content is for debugging purposes only
-      // in reality token payload is encrypted and uses different algorithm
+      // A readable stand-in: AWS refresh tokens are encrypted. jti is the session id (origin_jti).
       RefreshToken: jwt.sign(
         {
           "cognito:username": user.Username,
+          client_id: userPoolClient.ClientId,
           email: attributeValue("email", user.Attributes),
           iat: authTime,
-          jti: uuid.v4(),
+          jti: originJti,
           ...(scopes?.length ? { scope: scopes.join(" ") } : {}),
         },
         PrivateKey.pem,
         {
           algorithm: "RS256",
           issuer,
-          expiresIn: formatExpiration(
-            userPoolClient.RefreshTokenValidity,
-            userPoolClient.TokenValidityUnits?.RefreshToken ?? "days",
-            "7d",
-          ),
+          expiresIn: tokenValiditySeconds(userPoolClient, "RefreshToken"),
+          keyid: "CognitoLocal",
         } satisfies SignOptions,
       ),
+      ExpiresIn: accessTokenSeconds,
+      TokenType: "Bearer",
     };
   }
 }

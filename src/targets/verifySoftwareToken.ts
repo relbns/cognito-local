@@ -2,14 +2,8 @@ import type {
   VerifySoftwareTokenRequest,
   VerifySoftwareTokenResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import {
-  CodeMismatchError,
-  InvalidParameterError,
-  NotAuthorizedError,
-} from "../errors";
+import { CodeMismatchError, InvalidParameterError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import { verify } from "../services/totp";
 import type { Target } from "./Target";
 
@@ -18,10 +12,10 @@ export type VerifySoftwareTokenTarget = Target<
   VerifySoftwareTokenResponse
 >;
 
-type VerifySoftwareTokenServices = Pick<Services, "cognito">;
+type VerifySoftwareTokenServices = Pick<Services, "tokenVerifier">;
 
 export const VerifySoftwareToken =
-  ({ cognito }: VerifySoftwareTokenServices): VerifySoftwareTokenTarget =>
+  ({ tokenVerifier }: VerifySoftwareTokenServices): VerifySoftwareTokenTarget =>
   async (ctx, req) => {
     if (!req.UserCode) {
       throw new InvalidParameterError("Missing required parameter UserCode");
@@ -37,19 +31,10 @@ export const VerifySoftwareToken =
       );
     }
 
-    const decoded = jwt.decode(req.AccessToken) as Token | null;
-    if (!decoded) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decoded.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decoded.sub);
-    if (!user) {
-      throw new NotAuthorizedError();
-    }
 
     const secret = user.SoftwareTokenMfaConfiguration?.Secret;
     if (!secret) {

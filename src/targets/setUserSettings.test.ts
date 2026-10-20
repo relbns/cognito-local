@@ -1,11 +1,11 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { UserPoolService } from "../services";
 import { SetUserSettings, type SetUserSettingsTarget } from "./setUserSettings";
@@ -31,7 +31,7 @@ describe("SetUserSettings target", () => {
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService();
     setUserSettings = SetUserSettings({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
       clock: new ClockFake(currentDate),
     });
   });
@@ -79,7 +79,7 @@ describe("SetUserSettings target", () => {
         AccessToken: "invalid",
         MFAOptions: [],
       }),
-    ).rejects.toBeInstanceOf(InvalidParameterError);
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
   });
 
   it("throws if user not found", async () => {
@@ -90,6 +90,6 @@ describe("SetUserSettings target", () => {
         AccessToken: validToken,
         MFAOptions: [],
       }),
-    ).rejects.toBeInstanceOf(UserNotFoundError);
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 });

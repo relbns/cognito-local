@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { UserPoolService } from "../services";
 import {
@@ -19,7 +19,7 @@ describe("GetUserAuthFactors target", () => {
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService();
     getUserAuthFactors = GetUserAuthFactors({
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
     });
   });
 
@@ -85,7 +85,7 @@ describe("GetUserAuthFactors target", () => {
   it("throws if token is invalid", async () => {
     await expect(
       getUserAuthFactors(TestContext, { AccessToken: "invalid" }),
-    ).rejects.toBeInstanceOf(InvalidParameterError);
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
   });
 
   it("throws if user not found", async () => {
@@ -104,6 +104,6 @@ describe("GetUserAuthFactors target", () => {
 
     await expect(
       getUserAuthFactors(TestContext, { AccessToken: validToken }),
-    ).rejects.toBeInstanceOf(UserNotFoundError);
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 });

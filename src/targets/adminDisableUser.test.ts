@@ -43,6 +43,8 @@ describe("AdminDisableUser target", () => {
 
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
       ...existingUser,
+      RefreshTokens: [],
+      TokenOrigins: [],
       UserLastModifiedDate: newDate,
       Enabled: false,
     });

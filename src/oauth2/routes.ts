@@ -1,9 +1,11 @@
 import type { Application, Request, Response } from "express";
-import * as jwt from "jsonwebtoken";
-import PublicKey from "../keys/cognitoLocal.public.json";
+import { CognitoError, TokenErrorMessages, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
+import { refreshTokens } from "../services/refreshTokens";
+import { withRefreshTokenRevoked } from "../services/tokenRevocation";
+import type { VerifiedAccessToken } from "../services/tokenVerifier";
 import { attributeValue } from "../services/userPoolService";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { sendAuthorizationResponse } from "./authorizationResponse";
@@ -87,11 +89,12 @@ async function listFederatedProviders(
   return identityProvidersOf(userPool.options);
 }
 
-function refreshTokenScopes(refreshToken: string): string[] {
-  const decoded = jwt.decode(refreshToken);
-  if (!decoded || typeof decoded !== "object") return [];
-  return typeof decoded.scope === "string" ? parseScopes(decoded.scope) : [];
-}
+const userInfoErrorDescription = (message: string): string =>
+  ({
+    [TokenErrorMessages.expiredAccessToken]: "Access token is expired",
+    [TokenErrorMessages.revokedAccessToken]: "Access token has been revoked",
+    [TokenErrorMessages.userDisabled]: "User is disabled",
+  })[message] ?? "Invalid access token";
 
 export function attachOAuth2Routes(
   app: Application,
@@ -332,39 +335,34 @@ export function attachOAuth2Routes(
         ...(includesIdToken(scopes) ? { id_token: tokens.IdToken } : {}),
         refresh_token: tokens.RefreshToken,
         token_type: "Bearer",
-        expires_in: 3600,
+        expires_in: tokens.ExpiresIn,
       });
     }
 
     const { refresh_token } = body;
     if (!refresh_token) return badRequest(res, "Missing refresh_token");
 
-    const userPool = await services.cognito.getUserPoolForClientId(
-      ctx,
-      client_id,
-    );
-    const user = await userPool.getUserByRefreshToken(ctx, refresh_token);
-    if (!user) {
-      return tokenError(res, "invalid_grant", "Invalid refresh token");
+    let refreshed: Awaited<ReturnType<typeof refreshTokens>>;
+    try {
+      const verified = await services.tokenVerifier.verifyRefreshToken(
+        ctx,
+        refresh_token,
+        client_id,
+      );
+      refreshed = await refreshTokens(ctx, services, appClient, verified);
+    } catch (e) {
+      if (e instanceof CognitoError) {
+        return tokenError(res, "invalid_grant", e.message);
+      }
+      throw e;
     }
-
-    const scopes = refreshTokenScopes(refresh_token);
-    const userGroups = await userPool.listUserGroupMembership(ctx, user);
-    const tokens = await services.tokenGenerator.generate(
-      ctx,
-      user,
-      userGroups,
-      appClient,
-      undefined,
-      "RefreshTokens",
-      scopes,
-    );
+    const { tokens, scopes } = refreshed;
 
     return res.status(200).json({
       access_token: tokens.AccessToken,
       ...(includesIdToken(scopes) ? { id_token: tokens.IdToken } : {}),
       token_type: "Bearer",
-      expires_in: 3600,
+      expires_in: tokens.ExpiresIn,
     });
   });
 
@@ -379,37 +377,28 @@ export function attachOAuth2Routes(
 
     const token = authHeader.slice(7);
 
-    let decoded: jwt.JwtPayload;
+    let verified: VerifiedAccessToken;
     try {
-      const verified = jwt.verify(token, PublicKey.pem, {
-        algorithms: ["RS256"],
+      verified = await services.tokenVerifier.verifyAccessToken(ctx, token, {
+        requireAdminScope: false,
       });
-      if (typeof verified !== "object" || verified === null) {
-        return res.status(401).json({ error: "invalid_token" });
+    } catch (e) {
+      if (e instanceof UserNotFoundError) {
+        return res.status(404).json({ error: "user_not_found" });
       }
-      decoded = verified as jwt.JwtPayload;
-    } catch {
-      return res.status(401).json({ error: "invalid_token" });
+      if (e instanceof CognitoError) {
+        const description = userInfoErrorDescription(e.message);
+        res.setHeader(
+          "WWW-Authenticate",
+          `Bearer error="invalid_token", error_description="${description}"`,
+        );
+        return res
+          .status(401)
+          .json({ error: "invalid_token", error_description: description });
+      }
+      throw e;
     }
-
-    // Cognito's userInfo endpoint only accepts access tokens, not ID tokens.
-    if (decoded.token_use !== "access") {
-      return res.status(401).json({ error: "invalid_token" });
-    }
-
-    const userPoolId = decoded.iss?.split("/").pop();
-    if (!userPoolId) {
-      return res.status(401).json({ error: "invalid_token" });
-    }
-
-    const userPool = await services.cognito.getUserPool(ctx, userPoolId);
-    const user = await userPool.getUserByUsername(
-      ctx,
-      decoded["username"] ?? decoded.sub ?? "",
-    );
-    if (!user) {
-      return res.status(404).json({ error: "user_not_found" });
-    }
+    const { user, claims: decoded } = verified;
 
     const claims: Record<string, string | boolean> = {
       sub: attributeValue("sub", user.Attributes) ?? user.Username,
@@ -505,7 +494,7 @@ export function attachOAuth2Routes(
     if (user) {
       await userPool.saveUser(ctx, {
         ...user,
-        RefreshTokens: (user.RefreshTokens ?? []).filter((t) => t !== token),
+        ...withRefreshTokenRevoked(user, token),
       });
     }
 

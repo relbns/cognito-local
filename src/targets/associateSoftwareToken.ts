@@ -2,10 +2,8 @@ import type {
   AssociateSoftwareTokenRequest,
   AssociateSoftwareTokenResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import jwt from "jsonwebtoken";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import { InvalidParameterError } from "../errors";
 import type { Services } from "../services";
-import type { Token } from "../services/tokenGenerator";
 import { generateSecret } from "../services/totp";
 import type { Target } from "./Target";
 
@@ -14,10 +12,12 @@ export type AssociateSoftwareTokenTarget = Target<
   AssociateSoftwareTokenResponse
 >;
 
-type AssociateSoftwareTokenServices = Pick<Services, "cognito">;
+type AssociateSoftwareTokenServices = Pick<Services, "tokenVerifier">;
 
 export const AssociateSoftwareToken =
-  ({ cognito }: AssociateSoftwareTokenServices): AssociateSoftwareTokenTarget =>
+  ({
+    tokenVerifier,
+  }: AssociateSoftwareTokenServices): AssociateSoftwareTokenTarget =>
   async (ctx, req) => {
     if (!req.AccessToken && !req.Session) {
       throw new InvalidParameterError(
@@ -31,19 +31,10 @@ export const AssociateSoftwareToken =
       );
     }
 
-    const decoded = jwt.decode(req.AccessToken) as Token | null;
-    if (!decoded) {
-      throw new InvalidParameterError();
-    }
-
-    const userPool = await cognito.getUserPoolForClientId(
+    const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
-      decoded.client_id,
+      req.AccessToken,
     );
-    const user = await userPool.getUserByUsername(ctx, decoded.sub);
-    if (!user) {
-      throw new NotAuthorizedError();
-    }
 
     const secret = generateSecret();
     await userPool.saveUser(ctx, {

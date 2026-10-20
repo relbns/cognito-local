@@ -3,10 +3,13 @@ import express from "express";
 import supertest from "supertest";
 import type { MockedObject } from "vitest";
 import { beforeEach, describe, expect, it } from "vitest";
+import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
+import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import * as TDB from "../__tests__/testDataBuilder";
+import { NotAuthorizedError } from "../errors";
 import type { CognitoService, UserPoolService } from "../services";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import { AuthorizationCodeStore } from "./authorizationCodeStore";
@@ -32,7 +35,27 @@ const buildApp = (
   });
 
   const codeStore = new AuthorizationCodeStore();
-  attachOAuth2Routes(app, { cognito, tokenGenerator } as any, codeStore);
+  const tokenVerifier = newMockTokenVerifier();
+  tokenVerifier.verifyRefreshToken.mockImplementation(
+    async (ctx, token, clientId) => {
+      const userPool = await cognito.getUserPoolForClientId(ctx, clientId);
+      const user = token
+        ? await userPool.getUserByRefreshToken(ctx, token)
+        : null;
+      if (!user) throw new NotAuthorizedError("Invalid Refresh Token");
+      return { claims: { "cognito:username": user.Username }, user, userPool };
+    },
+  );
+  attachOAuth2Routes(
+    app,
+    {
+      clock: new ClockFake(new Date()),
+      cognito,
+      tokenGenerator,
+      tokenVerifier,
+    } as any,
+    codeStore,
+  );
   return { app, codeStore };
 };
 
@@ -72,6 +95,8 @@ describe("OAuth2 routes", () => {
       AccessToken: "access-token",
       IdToken: "id-token",
       RefreshToken: "refresh-token",
+      ExpiresIn: 3600,
+      TokenType: "Bearer",
     });
   });
 
@@ -532,6 +557,8 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       AccessToken: "access-token",
       IdToken: "id-token",
       RefreshToken: "refresh-token",
+      ExpiresIn: 3600,
+      TokenType: "Bearer",
     });
   });
 

@@ -2,8 +2,8 @@ import jwt from "jsonwebtoken";
 import * as uuid from "uuid";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
+import { newDecodingTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
@@ -11,6 +11,7 @@ import {
   AliasExistsError,
   InvalidParameterError,
   NotAuthorizedError,
+  UserNotFoundError,
 } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { Messages, UserPoolService } from "../services";
@@ -56,7 +57,7 @@ describe("UpdateUserAttributes target", () => {
     mockMessages = newMockMessages();
     updateUserAttributes = UpdateUserAttributes({
       clock,
-      cognito: newMockCognitoService(mockUserPoolService),
+      tokenVerifier: newDecodingTokenVerifier(mockUserPoolService),
       messages: mockMessages,
       otp: () => "123456",
     });
@@ -71,7 +72,7 @@ describe("UpdateUserAttributes target", () => {
         },
         UserAttributes: [{ Name: "custom:example", Value: "1" }],
       }),
-    ).rejects.toBeInstanceOf(InvalidParameterError);
+    ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
   });
 
   it("throws if the user doesn't exist", async () => {
@@ -85,7 +86,7 @@ describe("UpdateUserAttributes target", () => {
         },
         UserAttributes: [{ Name: "custom:example", Value: "1" }],
       }),
-    ).rejects.toEqual(new NotAuthorizedError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it("saves the updated attributes on the user", async () => {
