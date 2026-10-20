@@ -14,11 +14,10 @@ export const DescribeRiskConfiguration =
   ({ cognito }: Pick<Services, "cognito">): DescribeRiskConfigurationTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const riskConfiguration =
-      (userPool.options as any)._riskConfiguration ?? {
-        UserPoolId: req.UserPoolId,
-        ClientId: req.ClientId,
-      };
+    const riskConfiguration = (userPool.options as any)._riskConfiguration ?? {
+      UserPoolId: req.UserPoolId,
+      ClientId: req.ClientId,
+    };
 
     return { RiskConfiguration: riskConfiguration };
   };

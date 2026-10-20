@@ -14,9 +14,7 @@ export type GetLogDeliveryConfigurationTarget = Target<
 >;
 
 export const GetLogDeliveryConfiguration =
-  ({
-    cognito,
-  }: Pick<Services, "cognito">): GetLogDeliveryConfigurationTarget =>
+  ({ cognito }: Pick<Services, "cognito">): GetLogDeliveryConfigurationTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const config = (userPool.options as any)._logDeliveryConfiguration ?? {

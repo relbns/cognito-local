@@ -9,7 +9,7 @@ interface CompleteWebAuthnRegistrationRequest {
   AccessToken: string;
   Credential?: any;
 }
-interface CompleteWebAuthnRegistrationResponse {}
+type CompleteWebAuthnRegistrationResponse = {};
 
 export type CompleteWebAuthnRegistrationTarget = Target<
   CompleteWebAuthnRegistrationRequest,
@@ -36,8 +36,7 @@ export const CompleteWebAuthnRegistration =
       throw new UserNotFoundError();
     }
 
-    const credentials =
-      ((user as any)._webauthnCredentials as any[]) ?? [];
+    const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
     credentials.push({
       CredentialId: uuid.v4(),
       FriendlyCredentialName: req.Credential?.friendlyName,

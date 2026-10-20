@@ -33,8 +33,7 @@ export const CreateUserImportJob =
       FailedUsers: 0,
     };
 
-    const jobs =
-      ((userPool.options as any)._importJobs as any[]) ?? [];
+    const jobs = ((userPool.options as any)._importJobs as any[]) ?? [];
     jobs.push(job);
 
     await userPool.updateOptions(ctx, {

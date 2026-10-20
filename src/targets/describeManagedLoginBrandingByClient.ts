@@ -18,17 +18,12 @@ export type DescribeManagedLoginBrandingByClientTarget = Target<
 export const DescribeManagedLoginBrandingByClient =
   ({
     cognito,
-  }: Pick<
-    Services,
-    "cognito"
-  >): DescribeManagedLoginBrandingByClientTarget =>
+  }: Pick<Services, "cognito">): DescribeManagedLoginBrandingByClientTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const items =
       ((userPool.options as any)._managedLoginBranding as any[]) ?? [];
-    const branding = items.find(
-      (b: any) => b.ClientId === req.ClientId,
-    );
+    const branding = items.find((b: any) => b.ClientId === req.ClientId);
     if (!branding) {
       throw new ResourceNotFoundError("Managed login branding not found");
     }

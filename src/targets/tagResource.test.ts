@@ -18,8 +18,7 @@ describe("TagResource target", () => {
 
   it("adds tags to the pool", async () => {
     await tagResource(TestContext, {
-      ResourceArn:
-        "arn:aws:cognito-idp:us-east-1:123456789:userpool/test-pool",
+      ResourceArn: "arn:aws:cognito-idp:us-east-1:123456789:userpool/test-pool",
       Tags: { env: "production", team: "backend" },
     });
 

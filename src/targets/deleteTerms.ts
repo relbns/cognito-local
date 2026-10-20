@@ -6,12 +6,9 @@ interface DeleteTermsRequest {
   UserPoolId: string;
   TermsId: string;
 }
-interface DeleteTermsResponse {}
+type DeleteTermsResponse = {};
 
-export type DeleteTermsTarget = Target<
-  DeleteTermsRequest,
-  DeleteTermsResponse
->;
+export type DeleteTermsTarget = Target<DeleteTermsRequest, DeleteTermsResponse>;
 
 export const DeleteTerms =
   ({ cognito }: Pick<Services, "cognito">): DeleteTermsTarget =>

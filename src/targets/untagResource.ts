@@ -18,8 +18,7 @@ export const UntagResource =
     const poolId = req.ResourceArn.split("/").pop() ?? req.ResourceArn;
     const userPool = await cognito.getUserPool(ctx, poolId);
 
-    const tags: Record<string, string> =
-      (userPool.options as any)._tags ?? {};
+    const tags: Record<string, string> = (userPool.options as any)._tags ?? {};
 
     if (req.TagKeys) {
       for (const key of req.TagKeys) {

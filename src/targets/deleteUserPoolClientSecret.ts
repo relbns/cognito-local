@@ -7,7 +7,7 @@ interface DeleteUserPoolClientSecretRequest {
   ClientId: string;
   SecretId?: string;
 }
-interface DeleteUserPoolClientSecretResponse {}
+type DeleteUserPoolClientSecretResponse = {};
 
 export type DeleteUserPoolClientSecretTarget = Target<
   DeleteUserPoolClientSecretRequest,
@@ -15,9 +15,7 @@ export type DeleteUserPoolClientSecretTarget = Target<
 >;
 
 export const DeleteUserPoolClientSecret =
-  ({
-    cognito,
-  }: Pick<Services, "cognito">): DeleteUserPoolClientSecretTarget =>
+  ({ cognito }: Pick<Services, "cognito">): DeleteUserPoolClientSecretTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const appClient = await cognito.getAppClient(ctx, req.ClientId);

@@ -23,8 +23,7 @@ describe("UntagResource target", () => {
 
   it("removes specified tag keys", async () => {
     await untagResource(TestContext, {
-      ResourceArn:
-        "arn:aws:cognito-idp:us-east-1:123456789:userpool/test-pool",
+      ResourceArn: "arn:aws:cognito-idp:us-east-1:123456789:userpool/test-pool",
       TagKeys: ["env", "project"],
     });
 

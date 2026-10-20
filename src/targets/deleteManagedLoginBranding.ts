@@ -6,7 +6,7 @@ interface DeleteManagedLoginBrandingRequest {
   UserPoolId: string;
   ManagedLoginBrandingId: string;
 }
-interface DeleteManagedLoginBrandingResponse {}
+type DeleteManagedLoginBrandingResponse = {};
 
 export type DeleteManagedLoginBrandingTarget = Target<
   DeleteManagedLoginBrandingRequest,
@@ -20,8 +20,7 @@ export const DeleteManagedLoginBranding =
     const items =
       ((userPool.options as any)._managedLoginBranding as any[]) ?? [];
     const idx = items.findIndex(
-      (b: any) =>
-        b.ManagedLoginBrandingId === req.ManagedLoginBrandingId,
+      (b: any) => b.ManagedLoginBrandingId === req.ManagedLoginBrandingId,
     );
     if (idx < 0) {
       throw new ResourceNotFoundError("Managed login branding not found");

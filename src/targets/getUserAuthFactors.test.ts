@@ -28,7 +28,12 @@ describe("GetUserAuthFactors target", () => {
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
 
     const validToken = jwt.sign(
-      { sub: user.Username, client_id: "test", token_use: "access", username: user.Username },
+      {
+        sub: user.Username,
+        client_id: "test",
+        token_use: "access",
+        username: user.Username,
+      },
       PrivateKey.pem,
       { algorithm: "RS256", keyid: "CognitoLocal" },
     );
@@ -50,7 +55,12 @@ describe("GetUserAuthFactors target", () => {
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
 
     const validToken = jwt.sign(
-      { sub: user.Username, client_id: "test", token_use: "access", username: user.Username },
+      {
+        sub: user.Username,
+        client_id: "test",
+        token_use: "access",
+        username: user.Username,
+      },
       PrivateKey.pem,
       { algorithm: "RS256", keyid: "CognitoLocal" },
     );
@@ -61,8 +71,15 @@ describe("GetUserAuthFactors target", () => {
 
     expect(result.Username).toBe("testuser");
     expect(result.PreferredMfaSetting).toBe("SOFTWARE_TOKEN_MFA");
-    expect(result.UserMFASettingList).toEqual(["SMS_MFA", "SOFTWARE_TOKEN_MFA"]);
-    expect(result.ConfiguredUserAuthFactors).toEqual(["PASSWORD", "SMS", "TOTP"]);
+    expect(result.UserMFASettingList).toEqual([
+      "SMS_MFA",
+      "SOFTWARE_TOKEN_MFA",
+    ]);
+    expect(result.ConfiguredUserAuthFactors).toEqual([
+      "PASSWORD",
+      "SMS",
+      "TOTP",
+    ]);
   });
 
   it("throws if token is invalid", async () => {
@@ -75,7 +92,12 @@ describe("GetUserAuthFactors target", () => {
     mockUserPoolService.getUserByUsername.mockResolvedValue(null);
 
     const validToken = jwt.sign(
-      { sub: "unknown", client_id: "test", token_use: "access", username: "unknown" },
+      {
+        sub: "unknown",
+        client_id: "test",
+        token_use: "access",
+        username: "unknown",
+      },
       PrivateKey.pem,
       { algorithm: "RS256", keyid: "CognitoLocal" },
     );

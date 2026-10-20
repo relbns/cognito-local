@@ -8,10 +8,7 @@ import * as TDB from "../__tests__/testDataBuilder";
 import { InvalidParameterError, UserNotFoundError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import type { UserPoolService } from "../services";
-import {
-  SetUserSettings,
-  type SetUserSettingsTarget,
-} from "./setUserSettings";
+import { SetUserSettings, type SetUserSettingsTarget } from "./setUserSettings";
 
 const currentDate = new Date();
 
@@ -21,7 +18,12 @@ describe("SetUserSettings target", () => {
 
   const user = TDB.user({ Username: "testuser" });
   const validToken = jwt.sign(
-    { sub: user.Username, client_id: "test", token_use: "access", username: user.Username },
+    {
+      sub: user.Username,
+      client_id: "test",
+      token_use: "access",
+      username: user.Username,
+    },
     PrivateKey.pem,
     { algorithm: "RS256", keyid: "CognitoLocal" },
   );

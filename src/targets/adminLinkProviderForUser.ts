@@ -4,7 +4,7 @@ import type {
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
-import { attributesAppend, attribute } from "../services/userPoolService";
+import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
 
 export type AdminLinkProviderForUserTarget = Target<
@@ -34,15 +34,18 @@ export const AdminLinkProviderForUser =
 
     const updatedAttributes = attributesAppend(
       user.Attributes,
-      attribute(`identities`, JSON.stringify([
-        {
-          providerName,
-          providerType: providerName,
-          userId: providerValue,
-          primary: false,
-          dateCreated: clock.get().getTime(),
-        },
-      ])),
+      attribute(
+        `identities`,
+        JSON.stringify([
+          {
+            providerName,
+            providerType: providerName,
+            userId: providerValue,
+            primary: false,
+            dateCreated: clock.get().getTime(),
+          },
+        ]),
+      ),
     );
 
     await userPool.saveUser(ctx, {

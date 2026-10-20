@@ -15,8 +15,7 @@ export const ListUserImportJobs =
   ({ cognito }: Pick<Services, "cognito">): ListUserImportJobsTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const jobs =
-      ((userPool.options as any)._importJobs as any[]) ?? [];
+    const jobs = ((userPool.options as any)._importJobs as any[]) ?? [];
 
     const { items, nextToken } = paginate(
       jobs,

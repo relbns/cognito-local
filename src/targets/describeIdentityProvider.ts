@@ -19,12 +19,9 @@ export const DescribeIdentityProvider =
   }: DescribeIdentityProviderServices): DescribeIdentityProviderTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const providers: any[] =
-      (userPool.options as any)._identityProviders ?? [];
+    const providers: any[] = (userPool.options as any)._identityProviders ?? [];
 
-    const provider = providers.find(
-      (p) => p.ProviderName === req.ProviderName,
-    );
+    const provider = providers.find((p) => p.ProviderName === req.ProviderName);
     if (!provider) {
       throw new ResourceNotFoundError("Identity provider not found.");
     }

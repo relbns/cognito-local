@@ -15,8 +15,7 @@ export const DescribeUserImportJob =
   ({ cognito }: Pick<Services, "cognito">): DescribeUserImportJobTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const jobs =
-      ((userPool.options as any)._importJobs as any[]) ?? [];
+    const jobs = ((userPool.options as any)._importJobs as any[]) ?? [];
     const job = jobs.find((j: any) => j.JobId === req.JobId);
     if (!job) {
       throw new ResourceNotFoundError("User import job not found");

@@ -12,7 +12,7 @@ interface DeleteWebAuthnCredentialRequest {
   AccessToken: string;
   CredentialId: string;
 }
-interface DeleteWebAuthnCredentialResponse {}
+type DeleteWebAuthnCredentialResponse = {};
 
 export type DeleteWebAuthnCredentialTarget = Target<
   DeleteWebAuthnCredentialRequest,
@@ -39,8 +39,7 @@ export const DeleteWebAuthnCredential =
       throw new UserNotFoundError();
     }
 
-    const credentials =
-      ((user as any)._webauthnCredentials as any[]) ?? [];
+    const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
     const idx = credentials.findIndex(
       (c: any) => c.CredentialId === req.CredentialId,
     );

@@ -45,8 +45,6 @@ describe("DescribeResourceServer target", () => {
         UserPoolId: "test-pool",
         Identifier: "https://unknown.example.com",
       }),
-    ).rejects.toEqual(
-      new ResourceNotFoundError("Resource server not found."),
-    );
+    ).rejects.toEqual(new ResourceNotFoundError("Resource server not found."));
   });
 });

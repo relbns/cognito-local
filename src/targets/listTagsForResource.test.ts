@@ -25,8 +25,7 @@ describe("ListTagsForResource target", () => {
 
   it("returns stored tags", async () => {
     const result = await listTagsForResource(TestContext, {
-      ResourceArn:
-        "arn:aws:cognito-idp:us-east-1:123456789:userpool/test-pool",
+      ResourceArn: "arn:aws:cognito-idp:us-east-1:123456789:userpool/test-pool",
     });
 
     expect(result.Tags).toEqual({

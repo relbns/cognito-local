@@ -17,8 +17,7 @@ export const ListResourceServers =
   ({ cognito }: ListResourceServersServices): ListResourceServersTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const servers: any[] =
-      (userPool.options as any)._resourceServers ?? [];
+    const servers: any[] = (userPool.options as any)._resourceServers ?? [];
 
     const { items, nextToken } = paginate(
       servers,

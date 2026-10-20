@@ -24,8 +24,7 @@ export const DescribeManagedLoginBranding =
     const items =
       ((userPool.options as any)._managedLoginBranding as any[]) ?? [];
     const branding = items.find(
-      (b: any) =>
-        b.ManagedLoginBrandingId === req.ManagedLoginBrandingId,
+      (b: any) => b.ManagedLoginBrandingId === req.ManagedLoginBrandingId,
     );
     if (!branding) {
       throw new ResourceNotFoundError("Managed login branding not found");

@@ -37,8 +37,7 @@ export const ListWebAuthnCredentials =
       throw new UserNotFoundError();
     }
 
-    const credentials =
-      ((user as any)._webauthnCredentials as any[]) ?? [];
+    const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
 
     const { items, nextToken } = paginate(
       credentials,

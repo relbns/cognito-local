@@ -14,13 +14,10 @@ export type DescribeResourceServerTarget = Target<
 type DescribeResourceServerServices = Pick<Services, "cognito">;
 
 export const DescribeResourceServer =
-  ({
-    cognito,
-  }: DescribeResourceServerServices): DescribeResourceServerTarget =>
+  ({ cognito }: DescribeResourceServerServices): DescribeResourceServerTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const servers: any[] =
-      (userPool.options as any)._resourceServers ?? [];
+    const servers: any[] = (userPool.options as any)._resourceServers ?? [];
 
     const server = servers.find((s) => s.Identifier === req.Identifier);
     if (!server) {

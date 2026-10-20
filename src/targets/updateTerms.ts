@@ -11,10 +11,7 @@ interface UpdateTermsResponse {
   Terms?: any;
 }
 
-export type UpdateTermsTarget = Target<
-  UpdateTermsRequest,
-  UpdateTermsResponse
->;
+export type UpdateTermsTarget = Target<UpdateTermsRequest, UpdateTermsResponse>;
 
 export const UpdateTerms =
   ({

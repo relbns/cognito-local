@@ -14,8 +14,7 @@ export const DeleteResourceServer =
   ({ cognito }: DeleteResourceServerServices): DeleteResourceServerTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const servers: any[] =
-      (userPool.options as any)._resourceServers ?? [];
+    const servers: any[] = (userPool.options as any)._resourceServers ?? [];
 
     const index = servers.findIndex((s) => s.Identifier === req.Identifier);
     if (index === -1) {

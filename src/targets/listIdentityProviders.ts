@@ -14,13 +14,10 @@ export type ListIdentityProvidersTarget = Target<
 type ListIdentityProvidersServices = Pick<Services, "cognito">;
 
 export const ListIdentityProviders =
-  ({
-    cognito,
-  }: ListIdentityProvidersServices): ListIdentityProvidersTarget =>
+  ({ cognito }: ListIdentityProvidersServices): ListIdentityProvidersTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const providers: any[] =
-      (userPool.options as any)._identityProviders ?? [];
+    const providers: any[] = (userPool.options as any)._identityProviders ?? [];
 
     const { items, nextToken } = paginate(
       providers,

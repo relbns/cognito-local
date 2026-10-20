@@ -31,12 +31,19 @@ describe("GlobalSignOut target", () => {
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
 
     const validToken = jwt.sign(
-      { sub: user.Username, client_id: "test", token_use: "access", username: user.Username },
+      {
+        sub: user.Username,
+        client_id: "test",
+        token_use: "access",
+        username: user.Username,
+      },
       PrivateKey.pem,
       { algorithm: "RS256", keyid: "CognitoLocal" },
     );
 
-    const result = await globalSignOut(TestContext, { AccessToken: validToken });
+    const result = await globalSignOut(TestContext, {
+      AccessToken: validToken,
+    });
 
     expect(result).toEqual({});
     expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
@@ -58,7 +65,12 @@ describe("GlobalSignOut target", () => {
     mockUserPoolService.getUserByUsername.mockResolvedValue(null);
 
     const validToken = jwt.sign(
-      { sub: "unknown-user", client_id: "test", token_use: "access", username: "unknown-user" },
+      {
+        sub: "unknown-user",
+        client_id: "test",
+        token_use: "access",
+        username: "unknown-user",
+      },
       PrivateKey.pem,
       { algorithm: "RS256", keyid: "CognitoLocal" },
     );
