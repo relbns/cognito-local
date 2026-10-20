@@ -72,10 +72,8 @@ The untested SDKs use the same protocol and are expected to work. Report what br
   arrays were merged index by index. A request's array now replaces the default.
 - API responses carry `x-amzn-RequestId`, so `$metadata.requestId` (JavaScript v3) and
   `ResponseMetadata.RequestId` (boto3) are set.
-- With `HOST=0.0.0.0` the token issuer became `http://0.0.0.0:9229`. A wildcard host was mapped to
-  `http://localhost:<port>`, but the CLI recomputes the issuer from the raw host, so `--host 0.0.0.0`
-  and the Docker image issue `http://0.0.0.0:<port>` again. Set `TokenConfig.IssuerDomain` until
-  this is fixed.
+- With `HOST=0.0.0.0` (or `--host 0.0.0.0`, as in the Docker image) the token issuer became
+  `http://0.0.0.0:9229`. A wildcard host now maps to `http://localhost:<port>`.
 - Access tokens are verified (signature, issuer, expiry, user, revocation) and a token that does not
   decode returns `NotAuthorizedException` ("Invalid Access Token"). `GlobalSignOut` revokes access
   tokens, refresh tokens expire, `ExpiresIn` follows the client's token validity, and `SECRET_HASH`

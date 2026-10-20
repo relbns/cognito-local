@@ -49,8 +49,8 @@ upstream's `cognito-local`. It is not published to npm.
 A flag wins over the environment, the environment over the built-in default. Values in
 `<data>/config.json` (`ServerConfig.port`, `ServerConfig.hostname`, `AdminUIConfig.Enabled`) win
 over the environment but not over a flag. The token issuer (`TokenConfig.IssuerDomain`) follows the
-final host and port unless `config.json` sets it; with `--host 0.0.0.0` it is currently
-`http://0.0.0.0:<port>`, so set `IssuerDomain` when binding a wildcard host.
+final host and port unless `config.json` sets it; a wildcard host (`0.0.0.0`, `::`) becomes
+`localhost` in the issuer.
 
 ## Data directory
 

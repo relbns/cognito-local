@@ -75,9 +75,8 @@ docker run --rm -p 127.0.0.1:9229:9229 \
 - It listens on `0.0.0.0:9229` inside the container as the unprivileged `node` user, keeps data and
   `config.json` in the `/app/.cognito` volume, and has a health check on `/health`.
 - `-p 127.0.0.1:9229:9229` keeps the port, and the unauthenticated admin UI, off your network.
-- Set `TokenConfig.IssuerDomain` to the URL your clients use (see [Docker Compose](#docker-compose)).
-  Without it the image currently writes `http://0.0.0.0:9229` into the `iss` claim, which token
-  verifiers reject.
+- Tokens are issued for `http://localhost:9229`. When clients reach the emulator under another name,
+  set `TokenConfig.IssuerDomain` to that URL (see [Docker Compose](#docker-compose)).
 - To apply a seed to a running container, run `cognito-local seed seed.json --url http://localhost:9229`
   on the host, or `curl -X POST -H 'Content-Type: application/json' --data-binary @seed.json http://localhost:9229/_admin/api/seed`.
 
@@ -327,7 +326,7 @@ kill "$(jq -r .pid .cognito-ci/server.json)"
   `CODE=123456` to make every confirmation, forgot-password and MFA code fixed.
 - With Docker: `docker run -d --name cognito -p 9229:9229 ghcr.io/relbns/cognito-local:edge`, then
   `until curl -sf http://localhost:9229/health; do sleep 1; done`, then seed through `--url` or the
-  admin API. Mount a `config.json` with `IssuerDomain` if the tests check `iss`.
+  admin API. Mount a `config.json` with `IssuerDomain` if the tests reach it under another name than `localhost`.
 - `status`, `seed`, `export` and `reset` print JSON with `--json`, and the exit codes are fixed:
   0 ok, 1 error, 2 usage error or confirmation needed, 3 not running. See [docs/cli.md](docs/cli.md).
 
@@ -432,7 +431,7 @@ One difference goes the other way: pools default to email as the username
 | `cognito-local is already serving .cognito at ...; stop it first.` | A server already runs on this data directory. Stop it, or use another `--data`. |
 | `curl http://127.0.0.1:9229` is refused while `localhost` works | The default host `localhost` can bind IPv6 `::1` only. Use `localhost` in URLs, or start with `--host 127.0.0.1`. |
 | A container cannot reach an emulator running on the host | It listens on `localhost` only. Start it with `--host 0.0.0.0` and set `TokenConfig.IssuerDomain`, or run the Docker image on the same network. |
-| Token verification fails with an issuer or JWKS mismatch | `iss` is `TokenConfig.IssuerDomain` + `/<poolId>`, by default the emulator's own host and port. When clients reach it under another name (a Compose service name, a mapped port, `0.0.0.0`), set `IssuerDomain` to that URL and fetch the JWKS from `<IssuerDomain>/<poolId>/.well-known/jwks.json`. |
+| Token verification fails with an issuer or JWKS mismatch | `iss` is `TokenConfig.IssuerDomain` + `/<poolId>`, by default the emulator's own host and port. When clients reach it under another name (a Compose service name, a mapped port), set `IssuerDomain` to that URL and fetch the JWKS from `<IssuerDomain>/<poolId>/.well-known/jwks.json`. |
 | boto3: `NoRegionError: You must specify a region` | boto3 ignores `AWS_REGION`. Set `AWS_DEFAULT_REGION` or pass `region_name`. |
 | AWS SDK v2: `LambdaConfig` value rejected as too short | SDK v2 checks a 20-character minimum on `LambdaConfig` values. Use an absolute path: `file:/abs/path/triggers/define.js`. |
 | `NodeVersionSupportWarning: ... will require node >=22` | Printed by the AWS SDK on Node 20. Harmless; Node 22 removes it. Node below 20 is not supported. |

@@ -117,6 +117,19 @@ describe("loadConfig", () => {
     expect(config.TokenConfig.IssuerDomain).toBe("http://127.0.0.1:9330");
   });
 
+  it.each(["0.0.0.0", "::"])(
+    "maps a wildcard --host %s to localhost in the issuer",
+    async (host) => {
+      const config = await loadConfig(TestContext, newMockDataStoreFactory(), {
+        port: 9330,
+        hostname: host,
+      });
+
+      expect(config.ServerConfig.hostname).toBe(host);
+      expect(config.TokenConfig.IssuerDomain).toBe("http://localhost:9330");
+    },
+  );
+
   it("keeps an issuer set in the config file", async () => {
     const ds = newMockDataStore();
     ds.getRoot.mockResolvedValue({

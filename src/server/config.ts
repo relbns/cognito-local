@@ -57,9 +57,8 @@ export interface Config {
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
 const hostname = process.env.HOST ?? "localhost";
-const issuerHost = ["0.0.0.0", "::", "[::]"].includes(hostname)
-  ? "localhost"
-  : hostname;
+const issuerHostFor = (host: string | undefined): string | undefined =>
+  ["0.0.0.0", "::", "[::]"].includes(host ?? "") ? "localhost" : host;
 const adminUIEnabled = !["0", "false", "off"].includes(
   (process.env.COGNITO_LOCAL_ADMIN_UI ?? "").toLowerCase(),
 );
@@ -77,7 +76,7 @@ export const DefaultConfig: Config = {
     UsernameAttributes: ["email"],
   },
   TokenConfig: {
-    IssuerDomain: `http://${issuerHost}:${port}`,
+    IssuerDomain: `http://${issuerHostFor(hostname)}:${port}`,
     Verify: true,
     CheckSecretHash: true,
   },
@@ -140,7 +139,7 @@ export const loadConfig = async (
   }
   if (!config?.TokenConfig?.IssuerDomain) {
     const proto = merged.ServerConfig.https ? "https" : "http";
-    merged.TokenConfig.IssuerDomain = `${proto}://${merged.ServerConfig.hostname}:${merged.ServerConfig.port}`;
+    merged.TokenConfig.IssuerDomain = `${proto}://${issuerHostFor(merged.ServerConfig.hostname)}:${merged.ServerConfig.port}`;
   }
 
   return merged;
