@@ -1,9 +1,9 @@
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import * as uuid from "uuid";
 import { NotAuthorizedError, ResourceNotFoundError } from "../../errors";
 import type { Clock } from "../clock";
 import type { CognitoService } from "../cognitoService";
 import type { Lambda, UserMigrationTriggerResponse } from "../lambda";
+import type { Attribute } from "../sdkTypes";
 import {
   attributesFromRecord,
   attributesToRecord,
@@ -17,7 +17,7 @@ export type UserMigrationTrigger = Trigger<
     clientId: string;
     username: string;
     password: string;
-    userAttributes: AttributeListType;
+    userAttributes: Attribute[];
 
     /**
      * One or more key-value pairs that you can provide as custom input to the Lambda function that you specify for the

@@ -1,8 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type {
-  SchemaAttributesListType,
-  SchemaAttributeType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { SchemaAttributeType } from "@aws-sdk/client-cognito-identity-provider";
 import type { CognitoService } from "../services";
 import type { Clock } from "../services/clock";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
@@ -62,6 +59,7 @@ const CLIENT_FIELDS = [
   "AnalyticsConfiguration",
   "PreventUserExistenceErrors",
   "EnableTokenRevocation",
+  "AuthSessionValidity",
 ] as const;
 
 const defined = <T extends object>(value: T): T =>
@@ -70,7 +68,7 @@ const defined = <T extends object>(value: T): T =>
   ) as T;
 
 const exportSchema = (
-  attributes: SchemaAttributesListType | undefined,
+  attributes: SchemaAttributeType[] | undefined,
 ): SchemaAttributeType[] => {
   const defaults = USER_POOL_AWS_DEFAULTS.SchemaAttributes ?? [];
   const out: SchemaAttributeType[] = [];

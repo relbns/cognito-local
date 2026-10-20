@@ -1,7 +1,7 @@
 import type {
   AdminRespondToAuthChallengeRequest,
   AdminRespondToAuthChallengeResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { v4 } from "uuid";
 import {
   CodeMismatchError,

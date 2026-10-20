@@ -1,6 +1,6 @@
 import type { CreateAuthChallengeTriggerEvent } from "aws-lambda";
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import type { Lambda } from "../lambda";
+import type { Attribute } from "../sdkTypes";
 import { attributesToRecord } from "../userPoolService";
 import type { Trigger } from "./trigger";
 
@@ -10,7 +10,7 @@ export type CreateAuthChallengeTriggerResponse =
 export type CreateAuthChallengeTrigger = Trigger<
   {
     clientId: string;
-    userAttributes: AttributeListType;
+    userAttributes: Attribute[];
     username: string;
     userPoolId: string;
     challengeName: string;

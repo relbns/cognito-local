@@ -1,7 +1,8 @@
 import type {
   AddCustomAttributesRequest,
   AddCustomAttributesResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+  SchemaAttributeType,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError } from "../errors";
 import type { Services } from "../services";
 import type { Target } from "./Target";
@@ -28,25 +29,29 @@ export const AddCustomAttributes =
       ...userPool.options,
       SchemaAttributes: [
         ...(userPool.options.SchemaAttributes ?? []),
-        ...req.CustomAttributes.map(({ Name, ...attr }) => {
-          const name = `custom:${Name ?? "null"}`;
+        ...req.CustomAttributes.map(
+          ({ Name, ...attr }): SchemaAttributeType => {
+            const name = `custom:${Name ?? "null"}`;
 
-          if (userPool.options.SchemaAttributes?.find((x) => x.Name === name)) {
-            throw new InvalidParameterError(
-              `${name}: Existing attribute already has name ${name}.`,
-            );
-          }
+            if (
+              userPool.options.SchemaAttributes?.find((x) => x.Name === name)
+            ) {
+              throw new InvalidParameterError(
+                `${name}: Existing attribute already has name ${name}.`,
+              );
+            }
 
-          return {
-            AttributeDataType: "String",
-            DeveloperOnlyAttribute: false,
-            Mutable: true,
-            Required: false,
-            StringAttributeConstraints: {},
-            Name: name,
-            ...attr,
-          };
-        }),
+            return {
+              AttributeDataType: "String",
+              DeveloperOnlyAttribute: false,
+              Mutable: true,
+              Required: false,
+              StringAttributeConstraints: {},
+              Name: name,
+              ...attr,
+            };
+          },
+        ),
       ],
       LastModifiedDate: clock.get(),
     });

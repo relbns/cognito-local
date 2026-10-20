@@ -1,7 +1,7 @@
 import type {
   SetUserMFAPreferenceRequest,
   SetUserMFAPreferenceResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import jwt from "jsonwebtoken";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Services } from "../services";

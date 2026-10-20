@@ -1,7 +1,7 @@
 import type {
   AdminUpdateUserAttributesRequest,
   AdminUpdateUserAttributesResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
 import {
@@ -11,6 +11,7 @@ import {
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import type { Present } from "../services/sdkTypes";
 import {
   attributesAppend,
   defaultVerifiedAttributesIfModified,
@@ -25,7 +26,7 @@ const sendAttributeVerificationCode = async (
   userPool: UserPoolService,
   user: User,
   messages: Messages,
-  req: AdminUpdateUserAttributesRequest,
+  req: Present<AdminUpdateUserAttributesRequest>,
   code: string,
 ) => {
   const deliveryDetails = selectAppropriateDeliveryMethod(

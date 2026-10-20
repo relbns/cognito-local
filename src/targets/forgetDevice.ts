@@ -1,4 +1,4 @@
-import type { ForgetDeviceRequest } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { ForgetDeviceRequest } from "@aws-sdk/client-cognito-identity-provider";
 import jwt from "jsonwebtoken";
 import {
   InvalidParameterError,

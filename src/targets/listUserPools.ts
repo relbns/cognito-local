@@ -1,7 +1,7 @@
 import type {
   ListUserPoolsRequest,
   ListUserPoolsResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
 import { paginate } from "../services/pagination";
 import { userPoolToResponseObject } from "./responses";

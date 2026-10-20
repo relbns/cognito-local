@@ -1,9 +1,5 @@
 import * as crypto from "node:crypto";
-import type {
-  AuthParametersType,
-  ChallengeResponsesType,
-  InitiateAuthResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { InitiateAuthResponse } from "@aws-sdk/client-cognito-identity-provider";
 import {
   InvalidParameterError,
   InvalidPasswordError,
@@ -102,14 +98,17 @@ const runCustomAuthRound = async (
   const newSession = (
     pendingChallenge: Parameters<AuthSessions["create"]>[0]["pendingChallenge"],
   ) =>
-    services.authSessions.create({
-      userPoolId: round.userPool.options.Id,
-      clientId: round.client.ClientId,
-      username: round.user.Username,
-      clientMetadata: round.clientMetadata,
-      history: round.history,
-      pendingChallenge,
-    });
+    services.authSessions.create(
+      {
+        userPoolId: round.userPool.options.Id,
+        clientId: round.client.ClientId,
+        username: round.user.Username,
+        clientMetadata: round.clientMetadata,
+        history: round.history,
+        pendingChallenge,
+      },
+      round.client.AuthSessionValidity,
+    );
 
   if (challengeName === "PASSWORD_VERIFIER") {
     return {
@@ -165,7 +164,7 @@ export const startCustomAuth = async (
     userPool: UserPoolService;
     user: User;
     client: AppClient;
-    authParameters?: AuthParametersType;
+    authParameters?: Record<string, string>;
     clientMetadata?: Record<string, string>;
   },
 ): Promise<CustomAuthResponse> => {
@@ -208,7 +207,7 @@ export const respondToCustomAuthChallenge = async (
     client: AppClient;
     sessionId: string;
     challengeName: string;
-    challengeResponses: ChallengeResponsesType;
+    challengeResponses: Record<string, string>;
     clientMetadata?: Record<string, string>;
   },
 ): Promise<CustomAuthResponse> => {

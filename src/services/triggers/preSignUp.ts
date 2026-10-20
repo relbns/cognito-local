@@ -1,5 +1,5 @@
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import type { Lambda, PreSignUpTriggerResponse } from "../lambda";
+import type { Attribute } from "../sdkTypes";
 import { attributesToRecord } from "../userPoolService";
 import type { Trigger } from "./trigger";
 
@@ -10,7 +10,7 @@ export type PreSignUpTrigger = Trigger<
       | "PreSignUp_AdminCreateUser"
       | "PreSignUp_ExternalProvider"
       | "PreSignUp_SignUp";
-    userAttributes: AttributeListType;
+    userAttributes: Attribute[];
     username: string;
     userPoolId: string;
 

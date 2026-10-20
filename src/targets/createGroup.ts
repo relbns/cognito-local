@@ -1,7 +1,7 @@
 import type {
   CreateGroupRequest,
   CreateGroupResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { GroupExistsError } from "../errors";
 import type { Services } from "../services";
 import type { Group } from "../services/userPoolService";

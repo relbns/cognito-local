@@ -5,7 +5,7 @@ A local Amazon Cognito User Pool emulator. This fork of [jagregory/cognito-local
 ## What this fork adds
 
 - **PR #468 integrated.** [jagregory/cognito-local#468](https://github.com/jagregory/cognito-local/pull/468) by [vipinkashyap](https://github.com/vipinkashyap) (full User Pool API coverage, OAuth2/OIDC endpoints, MFA, WebAuthn and more) merged on top of upstream 5.3.0, with Biome fixes.
-- **Stateful CUSTOM_AUTH.** `InitiateAuth` / `RespondToAuthChallenge` keep a real challenge session: the Define, Create and Verify triggers run as in Cognito, Define gets the session history, Verify gets the private challenge parameters, a wrong answer returns a new `Session`, and the session expires (`AuthSessionConfig.AuthSessionValidity`, 3 minutes by default).
+- **Stateful CUSTOM_AUTH.** `InitiateAuth` / `RespondToAuthChallenge` keep a real challenge session: the Define, Create and Verify triggers run as in Cognito, Define gets the session history, Verify gets the private challenge parameters, a wrong answer returns a new `Session`, and the session expires after the app client's `AuthSessionValidity` (3-15 minutes), else `AuthSessionConfig.AuthSessionValidity` (3 minutes by default).
 - **Cognito-compatible `/oauth2/authorize` and `/oauth2/token`.** `response_type` `code` or `token` in any case, optional PKCE, scopes checked against the client's `AllowedOAuthScopes` and returned in the `scope` claim, client secret by HTTP Basic or in the body (`invalid_client` otherwise), `identity_provider=COGNITO` shows the built-in login.
 - **Admin UI at `/_admin`.** User pools, app clients, users (create, confirm, set password, enable or disable, groups), a codes viewer with every sign-up, forgot-password, MFA and CUSTOM_AUTH code (including the OTP your `CreateAuthChallenge` trigger generated), a JSON feed of the same codes for test scripts, and a JWT decoder that verifies a token against the pool.
 
@@ -90,11 +90,12 @@ npx github:relbns/cognito-local status --json
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `AuthSessionConfig.AuthSessionValidity` | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid |
+| `AuthSessionConfig.AuthSessionValidity` | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid when the app client sets no `AuthSessionValidity` |
 | `AdminUIConfig.Enabled` | `true` | Serve the admin UI at `/_admin` and record codes |
 | `AdminUIConfig.CodeLogSize` | `100` | How many recent codes the admin UI keeps |
 | `COGNITO_LOCAL_ADMIN_UI` (env) | on | `false`, `0` or `off` disables the admin UI |
 | `PasswordPolicyConfig.Enforce` | `true` | Enforce each pool's `PasswordPolicy` (AWS default when unset); `false` restores the old lenient behaviour |
+| `LambdaClient`, `KMSConfig` client options | -- | AWS SDK v3 client options (`region`, `endpoint`, `credentials`, `maxAttempts`, ...). v2 names (`maxRetries`, `sslEnabled`, `httpOptions`, top-level keys) are translated with a startup warning, others are ignored with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md) |
 
 ## Not supported yet
 
@@ -297,14 +298,14 @@ mkdir -p .cognito && echo '{}' > .cognito/config.json
 | `ServerConfig.cert` | string | -- | Path to TLS cert |
 | `ServerConfig.key` | string | -- | Path to TLS key |
 | `TokenConfig.IssuerDomain` | string | `http://localhost:9229` | JWT issuer domain |
-| `AuthSessionConfig.AuthSessionValidity` | number | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid (kept in memory, lost on restart) |
+| `AuthSessionConfig.AuthSessionValidity` | number | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid when the app client sets no `AuthSessionValidity` (kept in memory, lost on restart) |
 | `AdminUIConfig.Enabled` | boolean | `true` | Serve the [admin UI](#admin-ui) at `/_admin` (no authentication, local development only) |
 | `AdminUIConfig.CodeLogSize` | number | `100` | How many recent codes the admin UI keeps in memory |
-| `LambdaClient.endpoint` | string | -- | Local Lambda endpoint (e.g. serverless-offline) |
+| `LambdaClient.endpoint` | string | -- | Local Lambda endpoint (e.g. serverless-offline); the section takes AWS SDK v3 client options, see [docs/aws-client-config.md](docs/aws-client-config.md) |
 | `LambdaClient.region` | string | `local` | Lambda region |
 | `TriggerFunctions` | object | `{}` | Trigger-to-function mapping |
 | `UserPoolDefaults.UsernameAttributes` | string[] | `["email"]` | Default username attributes |
-| `KMSConfig.endpoint` | string | -- | Local KMS endpoint |
+| `KMSConfig.endpoint` | string | -- | Local KMS endpoint (AWS SDK v3 client options, like `LambdaClient`) |
 
 ### Lambda Triggers
 

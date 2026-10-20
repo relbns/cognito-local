@@ -32,7 +32,7 @@ export interface ActiveAuthSession {
 }
 
 export interface AuthSessions {
-  create(session: AuthSession): string;
+  create(session: AuthSession, validityMinutes?: number): string;
   list(): ActiveAuthSession[];
   peek(sessionId: string): AuthSession | undefined;
   take(sessionId: string): AuthSession;
@@ -51,12 +51,13 @@ export class InMemoryAuthSessions implements AuthSessions {
     private readonly validityMinutes = DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,
   ) {}
 
-  public create(session: AuthSession): string {
+  public create(session: AuthSession, validityMinutes?: number): string {
     this.evictExpired();
     const id = v4();
+    const minutes = validityMinutes ?? this.validityMinutes;
     this.sessions.set(id, {
       session,
-      expiresAt: this.clock.get().getTime() + this.validityMinutes * 60_000,
+      expiresAt: this.clock.get().getTime() + minutes * 60_000,
     });
     return id;
   }

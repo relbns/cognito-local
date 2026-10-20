@@ -1,7 +1,7 @@
 import type {
   ConfirmSignUpRequest,
   ConfirmSignUpResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import {
   CodeMismatchError,
   ExpiredCodeError,
@@ -10,6 +10,7 @@ import {
 import type { Services } from "../services";
 import { enforceAliasUniqueness } from "../services/aliases";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -45,7 +46,7 @@ export const ConfirmSignUp =
       user,
     )?.AttributeName;
 
-    const updatedUser = {
+    const updatedUser: User = {
       ...user,
       Attributes: verifiedByCode
         ? attributesAppend(

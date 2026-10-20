@@ -1,11 +1,12 @@
 import type {
   AnalyticsConfigurationType,
-  ExplicitAuthFlowsListType,
-  OAuthFlowsType,
+  ExplicitAuthFlowsType,
+  OAuthFlowType,
   PreventUserExistenceErrorTypes,
   TokenValidityUnitsType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import shortUUID from "short-uuid";
+import { InvalidParameterError } from "../errors";
 
 export interface AppClient {
   UserPoolId: string;
@@ -51,7 +52,7 @@ export interface AppClient {
   /**
    * The authentication flows that are supported by the user pool clients. Flow names without the ALLOW_ prefix are deprecated in favor of new names with the ALLOW_ prefix. Note that values with ALLOW_ prefix cannot be used along with values without ALLOW_ prefix. Valid values include:    ALLOW_ADMIN_USER_PASSWORD_AUTH: Enable admin based user password authentication flow ADMIN_USER_PASSWORD_AUTH. This setting replaces the ADMIN_NO_SRP_AUTH setting. With this authentication flow, Cognito receives the password in the request instead of using the SRP (Secure Remote Password protocol) protocol to verify passwords.    ALLOW_CUSTOM_AUTH: Enable Lambda trigger based authentication.    ALLOW_USER_PASSWORD_AUTH: Enable user password-based authentication. In this flow, Cognito receives the password in the request instead of using the SRP protocol to verify passwords.    ALLOW_USER_SRP_AUTH: Enable SRP based authentication.    ALLOW_REFRESH_TOKEN_AUTH: Enable authflow to refresh tokens.
    */
-  ExplicitAuthFlows?: ExplicitAuthFlowsListType;
+  ExplicitAuthFlows?: ExplicitAuthFlowsType[];
   /**
    * A list of provider names for the identity providers that are supported on this client.
    */
@@ -71,7 +72,7 @@ export interface AppClient {
   /**
    * The allowed OAuth flows. Set to code to initiate a code grant flow, which provides an authorization code as the response. This code can be exchanged for access tokens with the token endpoint. Set to implicit to specify that the client should get the access token (and, optionally, ID token, based on scopes) directly. Set to client_credentials to specify that the client should get the access token (and, optionally, ID token, based on scopes) from the token endpoint using a combination of client and client_secret.
    */
-  AllowedOAuthFlows?: OAuthFlowsType;
+  AllowedOAuthFlows?: OAuthFlowType[];
   /**
    * The allowed OAuth scopes. Possible values provided by OAuth are: phone, email, openid, and profile. Possible values provided by Amazon Web Services are: aws.cognito.signin.user.admin. Custom scopes created in Resource Servers are also supported.
    */
@@ -92,7 +93,29 @@ export interface AppClient {
    * Indicates whether token revocation is enabled for the user pool client. When you create a new user pool client, token revocation is enabled by default. For more information about revoking tokens, see RevokeToken.
    */
   EnableTokenRevocation?: boolean;
+  /** Minutes (3-15) an auth flow session stays valid; AuthSessionConfig.AuthSessionValidity when unset. */
+  AuthSessionValidity?: number;
 }
+
+export const AUTH_SESSION_VALIDITY_MIN = 3;
+export const AUTH_SESSION_VALIDITY_MAX = 15;
+
+export const assertAuthSessionValidity = (value: number | undefined): void => {
+  if (value === undefined) return;
+  const constraint =
+    value < AUTH_SESSION_VALIDITY_MIN
+      ? `greater than or equal to ${AUTH_SESSION_VALIDITY_MIN}`
+      : value > AUTH_SESSION_VALIDITY_MAX
+        ? `less than or equal to ${AUTH_SESSION_VALIDITY_MAX}`
+        : !Number.isInteger(value)
+          ? "an integer value"
+          : undefined;
+  if (constraint) {
+    throw new InvalidParameterError(
+      `1 validation error detected: Value '${value}' at 'authSessionValidity' failed to satisfy constraint: Member must have value ${constraint}`,
+    );
+  }
+};
 
 const generator = shortUUID("0123456789abcdefghijklmnopqrstuvwxyz");
 

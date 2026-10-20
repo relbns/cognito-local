@@ -3,6 +3,7 @@ import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
+import { InvalidParameterError } from "../errors";
 import type { UserPoolService } from "../services";
 import {
   CreateUserPoolClient,
@@ -59,5 +60,37 @@ describe("CreateUserPoolClient target", () => {
         },
       },
     });
+  });
+
+  it("stores and returns AuthSessionValidity", async () => {
+    const result = await createUserPoolClient(TestContext, {
+      ClientName: "clientName",
+      UserPoolId: "userPoolId",
+      AuthSessionValidity: 10,
+    });
+
+    expect(mockUserPoolService.saveAppClient).toHaveBeenCalledWith(
+      TestContext,
+      expect.objectContaining({ AuthSessionValidity: 10 }),
+    );
+    expect(result.UserPoolClient?.AuthSessionValidity).toEqual(10);
+  });
+
+  it.each([
+    [2, "greater than or equal to 3"],
+    [16, "less than or equal to 15"],
+  ])("rejects AuthSessionValidity %d", async (value, constraint) => {
+    await expect(
+      createUserPoolClient(TestContext, {
+        ClientName: "clientName",
+        UserPoolId: "userPoolId",
+        AuthSessionValidity: value,
+      }),
+    ).rejects.toEqual(
+      new InvalidParameterError(
+        `1 validation error detected: Value '${value}' at 'authSessionValidity' failed to satisfy constraint: Member must have value ${constraint}`,
+      ),
+    );
+    expect(mockUserPoolService.saveAppClient).not.toHaveBeenCalled();
   });
 });

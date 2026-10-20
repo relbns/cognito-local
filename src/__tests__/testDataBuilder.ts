@@ -12,6 +12,7 @@ export const appClient = (partial?: Partial<AppClient>): AppClient => ({
   AllowedOAuthFlowsUserPoolClient: partial?.AllowedOAuthFlowsUserPoolClient,
   AllowedOAuthScopes: partial?.AllowedOAuthScopes,
   AnalyticsConfiguration: partial?.AnalyticsConfiguration,
+  AuthSessionValidity: partial?.AuthSessionValidity,
   CallbackURLs: partial?.CallbackURLs,
   ClientId: partial?.ClientId ?? id("AppClient"),
   ClientName: partial?.ClientName ?? id("ClientName"),

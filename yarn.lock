@@ -2,150 +2,222 @@
 # yarn lockfile v1
 
 
-"@aws-crypto/cache-material@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/cache-material/-/cache-material-3.1.0.tgz#8369ed971feeaa710ee03cd5ccae11623e86b51a"
-  integrity sha512-fC59BV0YoxSSzI8bIAWLjaKrP52iOqey0NSvsZ5/kV/UwJp8VtDfD7UC5UneORQh1luRw8ZnC0kx0wHbqG/+iw==
+"@aws-crypto/branch-keystore-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/branch-keystore-node/-/branch-keystore-node-5.0.2.tgz#0d483ce7d780afd28d4a534a77e4a670e63456b4"
+  integrity sha512-Bpfa2DUHbcjj4XrZkgxldCUCeK+lZyQ/oSi3bapFJq4vHA+yA55ax2LbMZg2IP7ht6uH4kRG+iqWo5HPT5d+AQ==
   dependencies:
-    "@aws-crypto/material-management" "^3.1.0"
-    "@aws-crypto/serialize" "^3.1.0"
+    "@aws-crypto/kms-keyring" "^5.0.2"
+    "@aws-sdk/client-dynamodb" "^3.616.0"
+    "@aws-sdk/client-kms" "^3.616.0"
+    "@aws-sdk/util-dynamodb" "^3.616.0"
+    tslib "^2.2.0"
+    uuid "^11.1.1"
+
+"@aws-crypto/cache-material@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/cache-material/-/cache-material-5.0.2.tgz#5c4c4c390f20281e34891d4edcc3dd458c2ac919"
+  integrity sha512-IYddhLIE6QownHsr3g8sjAmQxt7t5R2tIeHRu3OBynswqqSEM1i3dIjnbZADYvKIv7mb9ye7hHZw6NbqS02ucw==
+  dependencies:
+    "@aws-crypto/material-management" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
     "@types/lru-cache" "^5.1.0"
     lru-cache "^6.0.0"
     tslib "^2.2.0"
 
-"@aws-crypto/caching-materials-manager-node@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/caching-materials-manager-node/-/caching-materials-manager-node-3.1.0.tgz#6e41af1ee63dfea4417c51928fc2ea58bfd010ca"
-  integrity sha512-1cb/XVb43RRq1PYdzBPyycfH+1ASZ6DfQ2GbSLFrMgPLvhnxoyyv+Bd5QlvViIREn3xIXa1gupeGJz6BaayFXQ==
+"@aws-crypto/caching-materials-manager-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/caching-materials-manager-node/-/caching-materials-manager-node-5.0.2.tgz#b55582b61d11c9347472d1a2bb67ea73878833ae"
+  integrity sha512-FuCaTjuTUu/g0o0AAn8nIniB1HknLSg1Gt/28nCmTJKzTRBkoktt5Y4fSOQjN/2uGJH10QqGyT5E46P2ja17sA==
   dependencies:
-    "@aws-crypto/cache-material" "^3.1.0"
-    "@aws-crypto/material-management-node" "^3.1.0"
+    "@aws-crypto/cache-material" "^5.0.2"
+    "@aws-crypto/material-management-node" "^5.0.2"
     tslib "^2.2.0"
 
-"@aws-crypto/client-node@^3.1.1":
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/client-node/-/client-node-3.1.1.tgz#97062007ec0a86e01713ba772a40af49e0322735"
-  integrity sha512-WdbYBxbB5onE4LVab5q7fByNiAAmL4Y+pGCaDOl6RLLH17xHBfyQHHeG+5+Xloygh/aWR42So8LhLPhGmral3g==
+"@aws-crypto/client-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/client-node/-/client-node-5.0.2.tgz#472acf1650caa474501ab66598c0d4af5a924233"
+  integrity sha512-MH4IAmIIJ/BMnSBCAPO6APRdapy7gEShRRLrvFV/a3VA7e92pjgej6UG8GDEWHgEpvGng2Jg67ysThlkyFcATw==
   dependencies:
-    "@aws-crypto/caching-materials-manager-node" "^3.1.0"
-    "@aws-crypto/decrypt-node" "^3.1.0"
-    "@aws-crypto/encrypt-node" "^3.1.1"
-    "@aws-crypto/kms-keyring-node" "^3.1.0"
-    "@aws-crypto/material-management-node" "^3.1.0"
-    "@aws-crypto/raw-aes-keyring-node" "^3.1.0"
-    "@aws-crypto/raw-rsa-keyring-node" "^3.1.0"
+    "@aws-crypto/branch-keystore-node" "^5.0.2"
+    "@aws-crypto/caching-materials-manager-node" "^5.0.2"
+    "@aws-crypto/decrypt-node" "^5.0.2"
+    "@aws-crypto/encrypt-node" "^5.0.2"
+    "@aws-crypto/kms-keyring" "^5.0.2"
+    "@aws-crypto/kms-keyring-node" "^5.0.2"
+    "@aws-crypto/material-management-node" "^5.0.2"
+    "@aws-crypto/raw-aes-keyring-node" "^5.0.2"
+    "@aws-crypto/raw-rsa-keyring-node" "^5.0.2"
     tslib "^2.2.0"
 
-"@aws-crypto/decrypt-node@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/decrypt-node/-/decrypt-node-3.1.0.tgz#f5d8298a50a2f73f4635770a8ed688df618595cd"
-  integrity sha512-F0TlNkdy11m1BCfhPQAXvdKHg82tAeOIc+tYXCL6ND/I3zh0F8oqVdr5oIuv4B6aIOgSSnAym0ctbAs8jw3pBA==
+"@aws-crypto/decrypt-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/decrypt-node/-/decrypt-node-5.0.2.tgz#73904ba0e50d1f91dfd7c1748ff5200bbf7e75cd"
+  integrity sha512-CCXjVeXIsMynlXxyNRmjYelazWYrtxSNVQuZuSyFxqIWIbbmSoY5ecmF3e6s7Qq2gUeiJsKexwb0y+0WvmZ4Qw==
   dependencies:
-    "@aws-crypto/material-management-node" "^3.1.0"
-    "@aws-crypto/serialize" "^3.1.0"
+    "@aws-crypto/material-management-node" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
     "@types/duplexify" "^3.6.0"
     duplexify "^4.1.1"
     readable-stream "^3.6.0"
     tslib "^2.2.0"
 
-"@aws-crypto/encrypt-node@^3.1.1":
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/encrypt-node/-/encrypt-node-3.1.1.tgz#7dcd533a008a0201d24bae6b0304a0cb87a2b7c8"
-  integrity sha512-LfB6LC1DhpsMCN2M24SgtR9m8CC2lTyO5w5mBWCsk+8h4BvhQXcgfruvHabGfDn4L+2Lr97nT9/THstNCuVVyg==
+"@aws-crypto/encrypt-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/encrypt-node/-/encrypt-node-5.0.2.tgz#4da7014adcccf76d7385b15df4a7afdbbf73b459"
+  integrity sha512-PQq1rJ2spoQSd1xX/r/1yEfycjp05JSewytyEizKyaxhOT6zaG01h9kBWJhf68CKPUw68uMBKoWrB4fDw+oq3Q==
   dependencies:
-    "@aws-crypto/material-management-node" "^3.1.0"
-    "@aws-crypto/serialize" "^3.1.0"
+    "@aws-crypto/material-management-node" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
     "@types/duplexify" "^3.6.0"
-    duplexify "^4.1.1"
+    duplexify "^4.1.3"
     readable-stream "^3.6.0"
     tslib "^2.2.0"
 
-"@aws-crypto/hkdf-node@^3.0.0":
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/hkdf-node/-/hkdf-node-3.0.0.tgz#9cf3a177ad1c1f98e245af6a19289bf98833f3b8"
-  integrity sha512-boeNV9G3Jk6W5Q9Zcj8yGqIOoQ2PwB+yvA/xFUazlu6qTtGRTviqkVx0Bf6r68KrkvmIY/9STN0mlF9q3jzPcQ==
+"@aws-crypto/hkdf-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/hkdf-node/-/hkdf-node-5.0.2.tgz#2caa7910e45fe7b714f2c0670d1c27476b60ea5a"
+  integrity sha512-VJC1zsQ9e/u/ru0Gtk0MTXmokzWzNgc0d9txqwLK/ZQT0LzHDDsrdvNqLmXnu9u+Wx3/E+hB17ZDnmaTpsklYQ==
   dependencies:
     tslib "^2.2.0"
 
-"@aws-crypto/kms-keyring-node@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/kms-keyring-node/-/kms-keyring-node-3.1.0.tgz#64686da89192392d89036bbb03c64b99326ea77d"
-  integrity sha512-8SVn+Vz0HU3FXfHc6jdm4yvrAVssN7t5F9s3zzvKdb8w8u7vLpzZiLEw5TonmZD4KwBqG4YbciTX8wtXx3PUIw==
+"@aws-crypto/kdf-ctr-mode-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/kdf-ctr-mode-node/-/kdf-ctr-mode-node-5.0.2.tgz#3f2b1b1336cebdd25c9885cb6a46d1947a089a1b"
+  integrity sha512-b2gxEa4zF+kvVyS35TdvxYBfwKaTE18wfZFNvBqYzNymAS3PtYMEah50DxGhvb35U/3j5pXBugTb6cfZ1qHwpQ==
   dependencies:
-    "@aws-crypto/kms-keyring" "^3.1.0"
-    "@aws-crypto/material-management-node" "^3.1.0"
-    aws-sdk "^2.650.0"
     tslib "^2.2.0"
 
-"@aws-crypto/kms-keyring@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/kms-keyring/-/kms-keyring-3.1.0.tgz#406399557a0d61f2ab79abe65f3c01f5160733fb"
-  integrity sha512-Z7hlnLs+8tz4XeRY6ZLccJ0TC7E1YJHLj5RuirZf/80tVmk9yJuicquLzev/5n2f0a01t7U4oyO2n8ahN81Isw==
+"@aws-crypto/kms-keyring-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/kms-keyring-node/-/kms-keyring-node-5.0.2.tgz#5a49334db3aa2ea30ed4575427e6ae89e52b0f84"
+  integrity sha512-AL1Gtz69EILFlwNSEStRr87MwalkLnV3znRDVeCFNV0A5SwRT3FVPj6m1r8+/ExGsVbp+IFG/oemlITmScBmtQ==
   dependencies:
-    "@aws-crypto/material-management" "^3.1.0"
+    "@aws-crypto/branch-keystore-node" "^5.0.2"
+    "@aws-crypto/cache-material" "^5.0.2"
+    "@aws-crypto/kdf-ctr-mode-node" "^5.0.2"
+    "@aws-crypto/kms-keyring" "^5.0.2"
+    "@aws-crypto/material-management-node" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
+    "@aws-sdk/client-dynamodb" "^3.621.0"
+    "@aws-sdk/client-kms" "^3.362.0"
     tslib "^2.2.0"
 
-"@aws-crypto/material-management-node@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/material-management-node/-/material-management-node-3.1.0.tgz#85dc37837a7170b3d7989fbb1ecc4583b57e598a"
-  integrity sha512-QX4JUqVydtskQbsKgd9JgTjzmrgYVaTOeguoV2KGz9TfqT//GDFUAL9jI6x20FdPH0A5D6BfgAAXzcUqjSWN5g==
+"@aws-crypto/kms-keyring@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/kms-keyring/-/kms-keyring-5.0.2.tgz#b1a91962349c9d6538701f03232648abe6b94956"
+  integrity sha512-05iY+lmtkDUNP+2awmTdaSRU6MkmqurqurArHhrMG27bN6VNf+PtspAUlN1K+LPhhhY6TQY/zNLxGpIzLFdcMw==
   dependencies:
-    "@aws-crypto/hkdf-node" "^3.0.0"
-    "@aws-crypto/material-management" "^3.1.0"
-    "@aws-crypto/serialize" "^3.1.0"
+    "@aws-crypto/material-management" "^5.0.2"
     tslib "^2.2.0"
 
-"@aws-crypto/material-management@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/material-management/-/material-management-3.1.0.tgz#888d08c4c707f7d443afb8a9cacd5b730958a6f1"
-  integrity sha512-bkxu2wr+Wk2KXpN/mDaGFbx2j5UoqqACAEecWzTpP8XafW9z8rzdVqtDp/3hUeytXrS0w+UwFtZQw1A946C5Ow==
+"@aws-crypto/material-management-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/material-management-node/-/material-management-node-5.0.2.tgz#4a973790dc195f5f6bfc403a917d45dfc126c333"
+  integrity sha512-36DOENaITlydQ6xduVGpX3G9U67n/tpLUT9QGDH75kAhhK7s1RJcBrLJ4Bhz3piRL4D5FkY18h4AXfqQlw3BoA==
+  dependencies:
+    "@aws-crypto/hkdf-node" "^5.0.2"
+    "@aws-crypto/material-management" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
+    tslib "^2.2.0"
+
+"@aws-crypto/material-management@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/material-management/-/material-management-5.0.2.tgz#f932bdcf4a72f90be3be917556a5791218f7e3f3"
+  integrity sha512-LyrgDGPfd4w/ZRgsqGYAH+i0hbYNllk8VWd5ZkRd/ofFmlmm5UfTiirxOzVYTN8QmRhgwWvVhtCkN9Ipyn4hPw==
   dependencies:
     asn1.js "^5.3.0"
-    bn.js "^5.1.1"
+    bn.js "^5.2.3"
+    tslib "^2.2.0"
+    uuid "^11.1.1"
+
+"@aws-crypto/raw-aes-keyring-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/raw-aes-keyring-node/-/raw-aes-keyring-node-5.0.2.tgz#c9954781e93d00f7cf7b4e1cca5ce15c059106ff"
+  integrity sha512-BuYJQq1Q1RJAkaxXj/VAT2nQCC1t4v3tChE44jHNm0S2afID/A2ChvMtJb/bvWNMgvoIB+sViV5ieG6Rk/RqJQ==
+  dependencies:
+    "@aws-crypto/material-management-node" "^5.0.2"
+    "@aws-crypto/raw-keyring" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
     tslib "^2.2.0"
 
-"@aws-crypto/raw-aes-keyring-node@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/raw-aes-keyring-node/-/raw-aes-keyring-node-3.1.0.tgz#54f8d92cc896709742bdc46f7af2f9bd8ac93b92"
-  integrity sha512-td1BH2OJks1PMkuHrMcwPJwVmyzsCrj1H9vqNnuw26dz9ZIdW8+e8DTv68WWUoCv43Qc6osmnGsTy7JjvGPzMQ==
+"@aws-crypto/raw-keyring@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/raw-keyring/-/raw-keyring-5.0.2.tgz#04425b62851a3c800bb50498fcfdecfa549083e6"
+  integrity sha512-ITtsg+HmvVe1wISGtVElKMCtvnR+lNYT+2bkuxKLvRmo4mBXqc76A5fl+XcJK4hp5ZYqJp9aQeolVGja587e6A==
   dependencies:
-    "@aws-crypto/material-management-node" "^3.1.0"
-    "@aws-crypto/raw-keyring" "^3.1.0"
-    "@aws-crypto/serialize" "^3.1.0"
+    "@aws-crypto/material-management" "^5.0.2"
+    "@aws-crypto/serialize" "^5.0.2"
     tslib "^2.2.0"
 
-"@aws-crypto/raw-keyring@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/raw-keyring/-/raw-keyring-3.1.0.tgz#6adef656f2fca85a42b97887804518d5098dc078"
-  integrity sha512-GIZvpQ7eEXeV0FOZ5Tvwzz5t4dMmigjs739Dypt6q5Er02zQUB2OVmteLJH6p33j11zLaD1AGW6Yq22gy2+NDQ==
+"@aws-crypto/raw-rsa-keyring-node@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/raw-rsa-keyring-node/-/raw-rsa-keyring-node-5.0.2.tgz#ca894cba8df4a19489c01d150f0aa37fd86a3a61"
+  integrity sha512-wM8HB9lkUb5o3c299hL51x55j8yVMvZRZaj0YLTwg4qVl+4pYCjY/rbo9iRDQA1VDm/Une9By77c2FcoQjWEug==
   dependencies:
-    "@aws-crypto/material-management" "^3.1.0"
-    "@aws-crypto/serialize" "^3.1.0"
+    "@aws-crypto/material-management-node" "^5.0.2"
+    "@aws-crypto/raw-keyring" "^5.0.2"
     tslib "^2.2.0"
 
-"@aws-crypto/raw-rsa-keyring-node@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/raw-rsa-keyring-node/-/raw-rsa-keyring-node-3.1.0.tgz#3a9f6d695d3b46bf819226a92bcb18fd77d2b71f"
-  integrity sha512-3EPnGm0l8Ui29p+jYctKaJAHv381MHvnjcPGw2ZGaVL+HAve+5WSL9JjwK8gOXoRot7ntt1KC1nBBmI+cj/G0g==
+"@aws-crypto/serialize@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@aws-crypto/serialize/-/serialize-5.0.2.tgz#bb4c6ff3b5445567a115cb39194dcffa63075ae0"
+  integrity sha512-TKFABiTVow9VYk0m1nUKQYzj/DYG6x7HquBuva+VByFO5rJDxdsPrHNehTXgcQop3Huz5juP/vwrJK4F9/vMpg==
   dependencies:
-    "@aws-crypto/material-management-node" "^3.1.0"
-    "@aws-crypto/raw-keyring" "^3.1.0"
-    tslib "^2.2.0"
-
-"@aws-crypto/serialize@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@aws-crypto/serialize/-/serialize-3.1.0.tgz#3c76095e344c9064f797daed7eb099aa5611629d"
-  integrity sha512-Dn1cZLudJrRAmwA95iVNo5ocKCX2sFvJe+cGVWPuj54qyF2gLfKQGWq20DWsu5Y7sSemp9NYbWsHD4/sesKnfw==
-  dependencies:
-    "@aws-crypto/material-management" "^3.1.0"
+    "@aws-crypto/material-management" "^5.0.2"
     asn1.js "^5.3.0"
-    bn.js "^5.1.1"
+    bn.js "^5.2.3"
     tslib "^2.2.0"
+    uuid "^11.1.1"
 
 "@aws-sdk/client-cognito-identity-provider@^3.1153.0":
   version "3.1153.0"
   resolved "https://registry.yarnpkg.com/@aws-sdk/client-cognito-identity-provider/-/client-cognito-identity-provider-3.1153.0.tgz#626f0bb2764bc1b9a2f22ba921fda7120d20e7b0"
   integrity sha512-rwZKMTxLoBh3gcxwQPUuXQnMwzERm9qhpMx7oKe+NKMHW/RmqYEs5k/n8MCfocqp7uCFILIq2KlK3jQ0usmm5A==
+  dependencies:
+    "@aws-sdk/core" "^3.978.4"
+    "@aws-sdk/credential-provider-node" "^3.972.87"
+    "@aws-sdk/types" "^3.974.6"
+    "@smithy/core" "^3.36.0"
+    "@smithy/fetch-http-handler" "^5.8.0"
+    "@smithy/node-http-handler" "^4.12.1"
+    "@smithy/types" "^4.19.0"
+    tslib "^2.6.2"
+
+"@aws-sdk/client-dynamodb@^3.616.0", "@aws-sdk/client-dynamodb@^3.621.0":
+  version "3.1153.0"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/client-dynamodb/-/client-dynamodb-3.1153.0.tgz#40b710c02690b5a54c58589c1fc700954be45e9b"
+  integrity sha512-VLltvPCGtzBIskdvOY6MDkCM5igTCAY4KUpFTFh/ak1DuvrJ8R9H0hiSfPBj8meqyJkc+dzc2oACVnwT9JMjvg==
+  dependencies:
+    "@aws-sdk/core" "^3.978.4"
+    "@aws-sdk/credential-provider-node" "^3.972.87"
+    "@aws-sdk/dynamodb-codec" "^3.973.49"
+    "@aws-sdk/middleware-endpoint-discovery" "^3.972.33"
+    "@aws-sdk/types" "^3.974.6"
+    "@smithy/core" "^3.36.0"
+    "@smithy/fetch-http-handler" "^5.8.0"
+    "@smithy/node-http-handler" "^4.12.1"
+    "@smithy/types" "^4.19.0"
+    tslib "^2.6.2"
+
+"@aws-sdk/client-kms@^3.362.0", "@aws-sdk/client-kms@^3.616.0":
+  version "3.1153.0"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/client-kms/-/client-kms-3.1153.0.tgz#e61ca2160d77d5b143cfb711b4d7094d845003e7"
+  integrity sha512-oNeTQ6vQ128656/5kh4n+VHre7FJebjPD9g74ZYxqBbyrrJiO3fLfjd5/WSAS6t1/fXv4HnIH6HV3zuO/lvZtA==
+  dependencies:
+    "@aws-sdk/core" "^3.978.4"
+    "@aws-sdk/credential-provider-node" "^3.972.87"
+    "@aws-sdk/types" "^3.974.6"
+    "@smithy/core" "^3.36.0"
+    "@smithy/fetch-http-handler" "^5.8.0"
+    "@smithy/node-http-handler" "^4.12.1"
+    "@smithy/types" "^4.19.0"
+    tslib "^2.6.2"
+
+"@aws-sdk/client-lambda@^3.1153.0":
+  version "3.1153.0"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/client-lambda/-/client-lambda-3.1153.0.tgz#bd207c0a97e93b3b23cb3c67a16392a6ae9c1c93"
+  integrity sha512-5CRIdVXNr6Dy7Xkb56fR0fLzIZkMiX760YwoLmJTom74O7M0Dw00DzEwFnAmivoQkiac7X+F7RBX7h0Z2f5xKQ==
   dependencies:
     "@aws-sdk/core" "^3.978.4"
     "@aws-sdk/credential-provider-node" "^3.972.87"
@@ -278,6 +350,35 @@
     "@smithy/types" "^4.19.0"
     tslib "^2.6.2"
 
+"@aws-sdk/dynamodb-codec@^3.973.49":
+  version "3.973.49"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/dynamodb-codec/-/dynamodb-codec-3.973.49.tgz#5d26fba454423cb65f9dbf2e5c303a432940e8f2"
+  integrity sha512-COdyvnU3RLx1MxBCjdUmWIm9+3gvgfOP4vjBL2HZts0ntnwoiKEzsIIs8YR2tRX1xba9N0u+7RpJzJsqUP0Q4A==
+  dependencies:
+    "@aws-sdk/core" "^3.978.4"
+    "@smithy/core" "^3.36.0"
+    "@smithy/types" "^4.19.0"
+    tslib "^2.6.2"
+
+"@aws-sdk/endpoint-cache@^3.972.11":
+  version "3.972.11"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/endpoint-cache/-/endpoint-cache-3.972.11.tgz#0d4a52d6307e240d0f404c649f9a58b773511d03"
+  integrity sha512-8q1ICxcDjHId3bBryuu/j+1L9y5/3uQnwzLDt5j2ElcjZSoWmFtymdJy7OjLrluSMe0Z4mq5bcH4fxBXvlEHfw==
+  dependencies:
+    mnemonist "0.38.3"
+    tslib "^2.6.2"
+
+"@aws-sdk/middleware-endpoint-discovery@^3.972.33":
+  version "3.972.33"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/middleware-endpoint-discovery/-/middleware-endpoint-discovery-3.972.33.tgz#3d0b43f8dfd8cbfacf226c115bb57d3223c166ad"
+  integrity sha512-0ed2hDcj2bAQviyydVAWtu63Bl2R0fsvQgw3SK+X9ei7EpFegUdhpdRW/N7cJZIl4YPJXhMnmaq32wDcvUtacA==
+  dependencies:
+    "@aws-sdk/endpoint-cache" "^3.972.11"
+    "@aws-sdk/types" "^3.974.6"
+    "@smithy/core" "^3.36.0"
+    "@smithy/types" "^4.19.0"
+    tslib "^2.6.2"
+
 "@aws-sdk/nested-clients@^3.997.49":
   version "3.997.49"
   resolved "https://registry.yarnpkg.com/@aws-sdk/nested-clients/-/nested-clients-3.997.49.tgz#535ef82c3a9e4c6f42fa55364648c1e49bb34493"
@@ -320,6 +421,13 @@
   integrity sha512-v/clNZzZnDxGyvpHMOGpJKVXFAExJzUNAAjaWGdcx8QAcXLGwTaOkw33p5SHAi0YAioK32xB3hWwOekRVfmfKg==
   dependencies:
     "@smithy/types" "^4.19.0"
+    tslib "^2.6.2"
+
+"@aws-sdk/util-dynamodb@^3.616.0":
+  version "3.996.9"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/util-dynamodb/-/util-dynamodb-3.996.9.tgz#493c00ffec4280450492966867197bbd26d50b83"
+  integrity sha512-16x2tRvl7OYpZ0W/DdFJieFriD13+RvuRBDbe5sj/tCEfK86HSGd7I2s5j0ivz8p6KWGkS+5wKRO9OliJkjUOQ==
+  dependencies:
     tslib "^2.6.2"
 
 "@aws-sdk/xml-builder@^3.972.41":
@@ -1935,21 +2043,6 @@ aws-sdk@^2.1145.0:
     uuid "3.3.2"
     xml2js "0.4.19"
 
-aws-sdk@^2.650.0:
-  version "2.1136.0"
-  resolved "https://registry.yarnpkg.com/aws-sdk/-/aws-sdk-2.1136.0.tgz#d103aed0313af2c254a2dbd54823af8057c7a0b9"
-  integrity sha512-cuXPB1lNoiK/oNTAN+Bud2Pp8/PvY7erL2DYPVN2zsk2nh9e8VG3yldf6KcEO6mm4q/FgZc4X6Zq+fOyuBY/wA==
-  dependencies:
-    buffer "4.9.2"
-    events "1.1.1"
-    ieee754 "1.1.13"
-    jmespath "0.16.0"
-    querystring "0.2.0"
-    sax "1.2.1"
-    url "0.10.3"
-    uuid "3.3.2"
-    xml2js "0.4.19"
-
 balanced-match@^1.0.0:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/balanced-match/-/balanced-match-1.0.2.tgz#e83e3a7e3f300b34cb9d87f615fa0cbf357690ee"
@@ -1992,10 +2085,10 @@ bn.js@^4.0.0:
   resolved "https://registry.yarnpkg.com/bn.js/-/bn.js-4.12.0.tgz#775b3f278efbb9718eec7361f483fb36fbbfea88"
   integrity sha512-c98Bf3tPniI+scsdk237ku1Dc3ujXQTSgyiPUDEOe7tRkhrqridvh8klBv0HCEso1OLOYcHuCv/cS6DNxKH+ZA==
 
-bn.js@^5.1.1:
-  version "5.2.0"
-  resolved "https://registry.yarnpkg.com/bn.js/-/bn.js-5.2.0.tgz#358860674396c6997771a9d051fcc1b57d4ae002"
-  integrity sha512-D7iWRBvnZE8ecXiLj/9wbxH7Tk79fAh8IHaTNq1RWRixsS02W+5qS+iE9yq6RYl0asXx5tw0bLhmT5pIfbSquw==
+bn.js@^5.2.3:
+  version "5.2.5"
+  resolved "https://registry.yarnpkg.com/bn.js/-/bn.js-5.2.5.tgz#e81ce41cf25e6f0cd1e05f20a9db8c18405e375f"
+  integrity sha512-Vq886eXykuP5E6HcKSSStP3bJgrE6In5WKxVUvJ8XGpWWYs2xZHWqUwzCtGgEtBcxyd57KBFDPFoUfNzdaHCNg==
 
 body-parser@^2.2.0:
   version "2.2.0"
@@ -2932,6 +3025,16 @@ duplexify@^4.1.1, duplexify@^4.1.2:
     inherits "^2.0.3"
     readable-stream "^3.1.1"
     stream-shift "^1.0.0"
+
+duplexify@^4.1.3:
+  version "4.1.3"
+  resolved "https://registry.yarnpkg.com/duplexify/-/duplexify-4.1.3.tgz#a07e1c0d0a2c001158563d32592ba58bddb0236f"
+  integrity sha512-M3BmBhwJRZsSx38lZyhE53Csddgzl5R7xGJNk7CVddZD6CcmwMCH8J+7AprIrQKH7TonKxaCjcv27Qmf+sQ+oA==
+  dependencies:
+    end-of-stream "^1.4.1"
+    inherits "^2.0.3"
+    readable-stream "^3.1.1"
+    stream-shift "^1.0.2"
 
 ecdsa-sig-formatter@1.0.11:
   version "1.0.11"
@@ -5145,6 +5248,13 @@ mkdirp@^1.0.3, mkdirp@^1.0.4:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
+mnemonist@0.38.3:
+  version "0.38.3"
+  resolved "https://registry.yarnpkg.com/mnemonist/-/mnemonist-0.38.3.tgz#35ec79c1c1f4357cfda2fe264659c2775ccd7d9d"
+  integrity sha512-2K9QYubXx/NAjv4VLq1d1Ly8pWNC5L3BrixtdkyTegXWJIqY+zLNDhhX/A+ZwWt70tB1S8H4BE8FLYEFyNoOBw==
+  dependencies:
+    obliterator "^1.6.1"
+
 modify-values@^1.0.0:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/modify-values/-/modify-values-1.0.1.tgz#b3939fa605546474e3e3e3c63d64bd43b4ee6022"
@@ -5537,6 +5647,11 @@ object.pick@^1.2.0:
   integrity sha1-h6EKxMFpS9Lhy/U1kaZhQftd10c=
   dependencies:
     isobject "^3.0.1"
+
+obliterator@^1.6.1:
+  version "1.6.1"
+  resolved "https://registry.yarnpkg.com/obliterator/-/obliterator-1.6.1.tgz#dea03e8ab821f6c4d96a299e17aef6a3af994ef3"
+  integrity sha512-9WXswnqINnnhOG/5SLimUlzuU1hFJUc8zkwyD59Sd+dPOMf05PmnYG/d6Q7HZ+KmgkZJa1PxRso6QdM3sTNHig==
 
 on-exit-leak-free@^0.2.0:
   version "0.2.0"
@@ -6833,6 +6948,11 @@ stream-shift@^1.0.0:
   resolved "https://registry.yarnpkg.com/stream-shift/-/stream-shift-1.0.1.tgz#d7088281559ab2778424279b0877da3c392d5a3d"
   integrity sha512-AiisoFqQ0vbGcZgQPY1cdP2I76glaVA/RauYR4G4thNFgkTqr90yXTo4LYX60Jl+sIlPNHHdGSwo01AvbKUSVQ==
 
+stream-shift@^1.0.2:
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/stream-shift/-/stream-shift-1.0.3.tgz#85b8fab4d71010fc3ba8772e8046cc49b8a3864b"
+  integrity sha512-76ORR0DO1o1hlKwTbi/DM3EXWGf3ZJYO8cXX5RJwnul2DEg2oyoZyjLNoQM8WsvZiFKCRfC1O0J7iCvie3RZmQ==
+
 string-argv@0.3.1:
   version "0.3.1"
   resolved "https://registry.yarnpkg.com/string-argv/-/string-argv-0.3.1.tgz#95e2fbec0427ae19184935f816d74aaa4c5c19da"
@@ -7422,6 +7542,11 @@ uuid@3.3.2:
   version "3.3.2"
   resolved "https://registry.yarnpkg.com/uuid/-/uuid-3.3.2.tgz#1b4af4955eb3077c501c23872fc6513811587131"
   integrity sha512-yXJmeNaw3DnnKAOKJE51sL/ZaYfWJRl1pK9dr19YFCu0ObS231AB1/LbqTKRAQ5kw8A90rA6fr4riOUpTZvQZA==
+
+uuid@^11.1.1:
+  version "11.1.1"
+  resolved "https://registry.yarnpkg.com/uuid/-/uuid-11.1.1.tgz#f6d81d2e1c65d00762e5e29b16c5d2d995e208ad"
+  integrity sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==
 
 uuid@^8.3.2:
   version "8.3.2"

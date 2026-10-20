@@ -771,6 +771,36 @@ describe("InitiateAuth target", () => {
       });
     });
 
+    it("keeps the session for the client's AuthSessionValidity", async () => {
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "CUSTOM_CHALLENGE",
+        issueTokens: false,
+        failAuthentication: false,
+      });
+      const longSessionClient = { ...userPoolClient, AuthSessionValidity: 10 };
+      const cognito = newMockCognitoService(mockUserPoolService);
+      cognito.getAppClient.mockResolvedValue(longSessionClient);
+      const target = InitiateAuth({
+        authSessions,
+        cognito,
+        messages: mockMessages,
+        otp: mockOtp,
+        triggers: mockTriggers,
+        tokenGenerator: mockTokenGenerator,
+      });
+
+      const output = await target(TestContext, {
+        ClientId: longSessionClient.ClientId,
+        AuthFlow: "CUSTOM_AUTH",
+        AuthParameters: { USERNAME: user.Username },
+      });
+
+      clock.advanceBy(10 * 60_000 - 1);
+      expect(authSessions.peek(output.Session as string)).toBeDefined();
+      clock.advanceBy(1);
+      expect(authSessions.peek(output.Session as string)).toBeUndefined();
+    });
+
     it("issues tokens when Define says so without a challenge", async () => {
       mockTriggers.defineAuthChallenge.mockResolvedValue({
         challengeName: "",

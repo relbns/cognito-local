@@ -143,8 +143,8 @@ export class RecordingAuthSessions implements AuthSessions {
     private readonly codeLog: CodeLog,
   ) {}
 
-  public create(session: AuthSession): string {
-    const id = this.inner.create(session);
+  public create(session: AuthSession, validityMinutes?: number): string {
+    const id = this.inner.create(session, validityMinutes);
     const { pendingChallenge } = session;
     if (pendingChallenge.challengeName === "CUSTOM_CHALLENGE") {
       this.codeLog.record({

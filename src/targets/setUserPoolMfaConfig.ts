@@ -1,7 +1,7 @@
 import type {
   SetUserPoolMfaConfigRequest,
   SetUserPoolMfaConfigResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
 import type { Target } from "./Target";
 

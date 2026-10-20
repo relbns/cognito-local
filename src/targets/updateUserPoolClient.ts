@@ -1,10 +1,13 @@
 import type {
   UpdateUserPoolClientRequest,
   UpdateUserPoolClientResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { AppClient } from "../services/appClient";
+import {
+  type AppClient,
+  assertAuthSessionValidity,
+} from "../services/appClient";
 import { appClientToResponseObject } from "./responses";
 import type { Target } from "./Target";
 
@@ -21,6 +24,7 @@ export const UpdateUserPoolClient =
     cognito,
   }: UpdateUserPoolClientServices): UpdateUserPoolClientTarget =>
   async (ctx, req) => {
+    assertAuthSessionValidity(req.AuthSessionValidity);
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const appClient = await cognito.getAppClient(ctx, req.ClientId);
     if (!appClient || appClient.UserPoolId !== req.UserPoolId) {
@@ -39,6 +43,8 @@ export const UpdateUserPoolClient =
         req.AllowedOAuthScopes ?? appClient.AllowedOAuthScopes,
       AnalyticsConfiguration:
         req.AnalyticsConfiguration ?? appClient.AnalyticsConfiguration,
+      AuthSessionValidity:
+        req.AuthSessionValidity ?? appClient.AuthSessionValidity,
       CallbackURLs: req.CallbackURLs ?? appClient.CallbackURLs,
       ClientName: req.ClientName ?? appClient.ClientName,
       DefaultRedirectURI:

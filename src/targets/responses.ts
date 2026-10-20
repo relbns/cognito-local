@@ -3,7 +3,7 @@ import type {
   UserPoolClientType,
   UserPoolType,
   UserType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { AppClient } from "../services/appClient";
 import type { Group, User, UserPool } from "../services/userPoolService";
 
@@ -15,6 +15,7 @@ export const appClientToResponseObject = (
   AllowedOAuthFlowsUserPoolClient: appClient.AllowedOAuthFlowsUserPoolClient,
   AllowedOAuthScopes: appClient.AllowedOAuthScopes,
   AnalyticsConfiguration: appClient.AnalyticsConfiguration,
+  AuthSessionValidity: appClient.AuthSessionValidity,
   CallbackURLs: appClient.CallbackURLs,
   ClientId: appClient.ClientId,
   ClientName: appClient.ClientName,

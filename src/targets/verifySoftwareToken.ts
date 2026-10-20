@@ -1,7 +1,7 @@
 import type {
   VerifySoftwareTokenRequest,
   VerifySoftwareTokenResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import jwt from "jsonwebtoken";
 import {
   CodeMismatchError,

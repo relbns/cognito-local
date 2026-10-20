@@ -1,7 +1,7 @@
 import type {
   StartUserImportJobRequest,
   StartUserImportJobResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { Target } from "./Target";

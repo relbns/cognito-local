@@ -1,4 +1,4 @@
-import type { DeleteUserRequest } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { DeleteUserRequest } from "@aws-sdk/client-cognito-identity-provider";
 import jwt from "jsonwebtoken";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Services } from "../services";

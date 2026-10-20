@@ -1,5 +1,6 @@
 import type { CognitoIdentityServiceProvider } from "aws-sdk";
 import { describe, expect, it } from "vitest";
+import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
 import { LambdaService } from "../../src/services";
 import { withCognitoSdk } from "./setup";
 
@@ -310,19 +311,17 @@ describe(
 );
 
 const autoConfirmLambda = () =>
-  new LambdaService({ PreSignUp: "PreSignUp" }, {
-    invoke: (params: { FunctionName: string; Payload: string }) => ({
-      promise: async () => {
-        const event = JSON.parse(params.Payload);
-        event.response = {
-          autoConfirmUser: true,
-          autoVerifyPhone: "phone_number" in event.request.userAttributes,
-          autoVerifyEmail: "email" in event.request.userAttributes,
-        };
-        return { StatusCode: 200, Payload: JSON.stringify(event) };
-      },
+  new LambdaService(
+    { PreSignUp: "PreSignUp" },
+    fakeLambdaClient((_, event) => {
+      event.response = {
+        autoConfirmUser: true,
+        autoVerifyPhone: "phone_number" in event.request.userAttributes,
+        autoVerifyEmail: "email" in event.request.userAttributes,
+      };
+      return event;
     }),
-  } as any);
+  );
 
 describe(
   "CognitoIdentityServiceProvider aliases with a PreSignUp trigger",

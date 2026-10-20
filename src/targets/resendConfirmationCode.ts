@@ -1,7 +1,7 @@
 import type {
   ResendConfirmationCodeRequest,
   ResendConfirmationCodeResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";

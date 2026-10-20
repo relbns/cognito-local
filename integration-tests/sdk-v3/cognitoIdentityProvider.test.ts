@@ -17,11 +17,13 @@ import {
   CreateGroupCommand,
   CreateUserPoolClientCommand,
   CreateUserPoolCommand,
+  DescribeUserPoolClientCommand,
   DescribeUserPoolCommand,
   ForgotPasswordCommand,
   GetUserCommand,
   GlobalSignOutCommand,
   InitiateAuthCommand,
+  InvalidParameterException,
   InvalidPasswordException,
   ListUserPoolsCommand,
   ListUsersCommand,
@@ -29,10 +31,12 @@ import {
   RespondToAuthChallengeCommand,
   SignUpCommand,
   UpdateUserAttributesCommand,
+  UpdateUserPoolClientCommand,
   UserNotFoundException,
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { afterEach, describe, expect, it } from "vitest";
+import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
 import { LambdaService } from "../../src/services";
 import { withCognitoSdk } from "../aws-sdk/setup";
 
@@ -73,15 +77,10 @@ const customAuthLambda = () =>
       CreateAuthChallenge: "CreateAuthChallenge",
       VerifyAuthChallengeResponse: "VerifyAuthChallengeResponse",
     },
-    {
-      invoke: (params: { FunctionName: string; Payload: string }) => ({
-        promise: async () => {
-          const event = JSON.parse(params.Payload);
-          customAuthHandlers[params.FunctionName](event);
-          return { StatusCode: 200, Payload: JSON.stringify(event) };
-        },
-      }),
-    } as any,
+    fakeLambdaClient((functionName, event) => {
+      customAuthHandlers[functionName](event);
+      return event;
+    }),
   );
 
 describe(
@@ -176,6 +175,31 @@ describe(
         expect(pool.$metadata.requestId).toMatch(/^[0-9a-f-]{36}$/);
         expect(pool.UserPool?.CreationDate).toBeInstanceOf(Date);
         expect(pool.UserPool?.Name).toBe("v3");
+      });
+
+      it("keeps a client's AuthSessionValidity", async () => {
+        const { cognito, UserPoolId, ClientId } = await setup();
+        await cognito.send(
+          new UpdateUserPoolClientCommand({
+            UserPoolId,
+            ClientId,
+            AuthSessionValidity: 10,
+          }),
+        );
+        const described = await cognito.send(
+          new DescribeUserPoolClientCommand({ UserPoolId, ClientId }),
+        );
+        expect(described.UserPoolClient?.AuthSessionValidity).toBe(10);
+
+        await expect(
+          cognito.send(
+            new UpdateUserPoolClientCommand({
+              UserPoolId,
+              ClientId,
+              AuthSessionValidity: 20,
+            }),
+          ),
+        ).rejects.toBeInstanceOf(InvalidParameterException);
       });
 
       it("signs up, confirms and signs in with USER_PASSWORD_AUTH", async () => {

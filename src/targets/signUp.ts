@@ -2,7 +2,7 @@ import type {
   SignUpRequest,
   SignUpResponse,
   UserStatusType,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import * as uuid from "uuid";
 import { InvalidParameterError, UsernameExistsError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
@@ -91,7 +91,7 @@ export const SignUp =
     assertPasswordConformsToPolicy(
       config,
       userPool.options,
-      req.Password,
+      req.Password as string,
       "signUp",
     );
 
@@ -222,7 +222,7 @@ export const SignUp =
     const updatedUser: User = {
       Attributes: attributes,
       Enabled: true,
-      Password: req.Password,
+      Password: req.Password as string,
       RefreshTokens: [],
       UserCreateDate: now,
       UserLastModifiedDate: now,

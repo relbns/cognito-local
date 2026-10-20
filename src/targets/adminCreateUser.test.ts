@@ -378,7 +378,7 @@ describe("AdminCreateUser target", () => {
       ],
     });
     const request = {
-      MessageAction: "SUPPRESS",
+      MessageAction: "SUPPRESS" as const,
       UserAttributes: [
         attribute("phone_number", phone),
         attribute("phone_number_verified", "true"),

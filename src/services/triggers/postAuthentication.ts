@@ -1,5 +1,5 @@
-import type { AttributeListType } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import type { Lambda } from "../lambda";
+import type { Attribute } from "../sdkTypes";
 import { attributesToRecord } from "../userPoolService";
 import type { Trigger } from "./trigger";
 
@@ -15,7 +15,7 @@ export type PostAuthenticationTrigger = Trigger<
      */
     clientMetadata: Record<string, string> | undefined;
     source: "PostAuthentication_Authentication";
-    userAttributes: AttributeListType;
+    userAttributes: Attribute[];
     username: string;
     userPoolId: string;
   },

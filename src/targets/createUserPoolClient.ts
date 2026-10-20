@@ -1,9 +1,13 @@
 import type {
   CreateUserPoolClientRequest,
   CreateUserPoolClientResponse,
-} from "aws-sdk/clients/cognitoidentityserviceprovider";
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
-import { type AppClient, newId } from "../services/appClient";
+import {
+  type AppClient,
+  assertAuthSessionValidity,
+  newId,
+} from "../services/appClient";
 import { appClientToResponseObject } from "./responses";
 import type { Target } from "./Target";
 
@@ -20,6 +24,7 @@ export const CreateUserPoolClient =
     cognito,
   }: CreateUserPoolClientServices): CreateUserPoolClientTarget =>
   async (ctx, req) => {
+    assertAuthSessionValidity(req.AuthSessionValidity);
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
 
     const appClient: AppClient = {
@@ -28,6 +33,7 @@ export const CreateUserPoolClient =
       AllowedOAuthFlowsUserPoolClient: req.AllowedOAuthFlowsUserPoolClient,
       AllowedOAuthScopes: req.AllowedOAuthScopes,
       AnalyticsConfiguration: req.AnalyticsConfiguration,
+      AuthSessionValidity: req.AuthSessionValidity,
       CallbackURLs: req.CallbackURLs,
       ClientId: newId(),
       ClientName: req.ClientName,

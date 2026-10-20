@@ -1,4 +1,4 @@
-import type { AdminForgetDeviceRequest } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import type { AdminForgetDeviceRequest } from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { Target } from "./Target";
