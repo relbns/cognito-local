@@ -26,6 +26,14 @@ export interface FederatedSignInResult {
   outcome: "created" | "existing" | "linked";
 }
 
+// Triggers can change the user through the admin API, so callers get the stored record.
+const reload = async (
+  ctx: Context,
+  userPool: UserPoolService,
+  user: User,
+): Promise<User> =>
+  (await userPool.getUserByUsername(ctx, user.Username)) ?? user;
+
 async function signInExisting(
   ctx: Context,
   { clock, triggers }: FederatedSignInServices,
@@ -51,6 +59,7 @@ async function signInExisting(
       username: updated.Username,
       userPoolId: userPool.options.Id,
     });
+    return reload(ctx, userPool, updated);
   }
   return updated;
 }
@@ -174,6 +183,7 @@ export async function federatedSignIn(
       username: user.Username,
       userPoolId: userPool.options.Id,
     });
+    return { user: await reload(ctx, userPool, user), outcome: "created" };
   }
   return { user, outcome: "created" };
 }

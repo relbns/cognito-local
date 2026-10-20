@@ -26,10 +26,10 @@ export const AdminUserGlobalSignOut =
       throw new UserNotFoundError();
     }
 
-    await userPool.saveUser(ctx, {
-      ...withAllTokensRevoked(user),
+    await userPool.updateUser(ctx, user, (latest) => ({
+      ...withAllTokensRevoked(latest),
       UserLastModifiedDate: clock.get(),
-    });
+    }));
 
     return {};
   };

@@ -66,11 +66,11 @@ export const ForgotPassword =
       deliveryDetails,
     );
 
-    await userPool.saveUser(ctx, {
-      ...user,
+    await userPool.updateUser(ctx, user, (latest) => ({
+      ...latest,
       UserLastModifiedDate: clock.get(),
       ConfirmationCode: code,
-    });
+    }));
 
     return {
       CodeDeliveryDetails: deliveryDetails,

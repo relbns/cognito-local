@@ -50,7 +50,7 @@ const sendSmsMfaChallenge = async (
   user: User,
   userPoolId: string,
   services: RespondToAuthChallengeService,
-  saveUser: (u: User) => Promise<void>,
+  saveMfaCode: (code: string) => Promise<unknown>,
 ): Promise<RespondToAuthChallengeResponse> => {
   const smsMfaOption = user.MFAOptions?.find(
     (x): x is MFAOption & { DeliveryMedium: DeliveryMediumType } =>
@@ -83,7 +83,7 @@ const sendSmsMfaChallenge = async (
     },
   );
 
-  await saveUser({ ...user, MFACode: code });
+  await saveMfaCode(code);
 
   return {
     ChallengeName: "SMS_MFA",
@@ -156,7 +156,11 @@ export const RespondToAuthChallenge =
           user,
           userPool.options.Id,
           services,
-          (u) => userPool.saveUser(ctx, u),
+          (code) =>
+            userPool.updateUser(ctx, user, (latest) => ({
+              ...latest,
+              MFACode: code,
+            })),
         );
       }
       if (answer === "SOFTWARE_TOKEN_MFA") {
@@ -309,11 +313,7 @@ export const RespondToAuthChallenge =
       req.ClientMetadata,
       "Authentication",
     );
-    await userPool.storeRefreshToken(
-      ctx,
-      tokens.RefreshToken,
-      (await userPool.getUserByUsername(ctx, user.Username)) ?? user,
-    );
+    await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
 
     return {
       ChallengeParameters: {},

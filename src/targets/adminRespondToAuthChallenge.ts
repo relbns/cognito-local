@@ -204,11 +204,7 @@ export const AdminRespondToAuthChallenge =
       req.ClientMetadata,
       "Authentication",
     );
-    await userPool.storeRefreshToken(
-      ctx,
-      tokens.RefreshToken,
-      (await userPool.getUserByUsername(ctx, user.Username)) ?? user,
-    );
+    await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
 
     return {
       ChallengeParameters: {},
