@@ -60,6 +60,20 @@ const client = new CognitoIdentityProviderClient({ region: "us-east-1" });
 
 The OAuth2 endpoints are under `http://localhost:9229/oauth2` (`/authorize`, `/token`, `/userInfo`, `/revoke`) and the JWKS under `http://localhost:9229/<poolId>/.well-known/jwks.json`. To keep usernames free-form (no email or phone as username), set `"UserPoolDefaults": { "UsernameAttributes": [] }` in `.cognito/config.json`.
 
+## CLI, seed files and local triggers
+
+`cognito-local` is one command with `start`, `seed`, `export`, `reset` and `status`, flags for everything and `--json` output, so scripts and agents can drive it:
+
+```bash
+npx github:relbns/cognito-local start --port 9229 --data .cognito --seed examples/seed.custom-auth-otp.json
+npx github:relbns/cognito-local status --json
+```
+
+- **Seed files** declare user pools, app clients (with pinned ids and secrets), identity providers, resource servers, groups and users with AWS API field names. They are applied at startup (`--seed`, `COGNITO_LOCAL_SEED`) or with `cognito-local seed`, idempotently, and validated with the file and field path of every problem. **Export as seed** in the admin UI, `GET /_admin/api/export` and `cognito-local export` write the current state back as a seed (passwords excluded). See [docs/seed-files.md](docs/seed-files.md).
+- **Local triggers**: `"LambdaConfig": { "DefineAuthChallenge": "file:./triggers/define.js#handler" }` runs a CommonJS or ES module handler in-process with the AWS event shape, async or callback style, with a timeout, Cognito-style errors and hot reload. See [docs/local-triggers.md](docs/local-triggers.md).
+- **OAuth callback page** at `/_admin/callback` (a dev tool, not a Cognito feature): builds an authorize URL for a client and identity provider, receives the code, exchanges it at `/oauth2/token` and decodes the tokens. See [docs/oauth-callback.md](docs/oauth-callback.md).
+- Examples: [examples/seed.basic.json](examples/seed.basic.json), [examples/seed.custom-auth-otp.json](examples/seed.custom-auth-otp.json) with [examples/triggers](examples/triggers), [examples/seed.federation.json](examples/seed.federation.json). Commands, flags, environment variables and exit codes: [docs/cli.md](docs/cli.md).
+
 ## Configuration added by this fork
 
 | Key | Default | Meaning |
