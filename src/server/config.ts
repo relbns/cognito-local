@@ -1,5 +1,6 @@
 import mergeWith from "lodash.mergewith";
 import { DEFAULT_AUTH_SESSION_VALIDITY_MINUTES } from "../services/authSessions";
+import { DEFAULT_CODE_LOG_SIZE } from "../services/codeLog";
 import type { Context } from "../services/context";
 import type { KMSConfig } from "../services/crypto";
 import type { DataStoreFactory } from "../services/dataStore/factory";
@@ -17,6 +18,11 @@ export interface AuthSessionConfig {
   AuthSessionValidity: number;
 }
 
+export interface AdminUIConfig {
+  Enabled: boolean;
+  CodeLogSize: number;
+}
+
 export interface Config {
   LambdaClient: AWS.Lambda.ClientConfiguration;
   TriggerFunctions: FunctionConfig;
@@ -25,10 +31,14 @@ export interface Config {
   ServerConfig: ServerOptions;
   TokenConfig: TokenConfig;
   AuthSessionConfig: AuthSessionConfig;
+  AdminUIConfig: AdminUIConfig;
 }
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
 const hostname = process.env.HOST ?? "localhost";
+const adminUIEnabled = !["0", "false", "off"].includes(
+  (process.env.COGNITO_LOCAL_ADMIN_UI ?? "").toLowerCase(),
+);
 
 export const DefaultConfig: Config = {
   LambdaClient: {
@@ -47,6 +57,10 @@ export const DefaultConfig: Config = {
   },
   AuthSessionConfig: {
     AuthSessionValidity: DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,
+  },
+  AdminUIConfig: {
+    Enabled: adminUIEnabled,
+    CodeLogSize: DEFAULT_CODE_LOG_SIZE,
   },
   KMSConfig: {
     credentials: {

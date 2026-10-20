@@ -139,6 +139,31 @@ All `List*` APIs support pagination via `NextToken` / `MaxResults`.
 
 ---
 
+## Admin UI
+
+A web UI served by the emulator itself at **`http://localhost:9229/_admin`**, in the spirit of `dynamodb-admin`.
+
+> **Warning:** the admin UI has **no authentication**. Anyone who can reach the port can read every user, code and client secret, and change users. It is for local development only. Turn it off (see below) whenever the emulator is reachable from a shared network.
+
+- **User pools**: every pool with its settings summary, and its app clients with their auth flows and OAuth settings (flows, scopes, callback and logout URLs).
+- **Users**: search by username, email, phone or `sub`, filter by status; view attributes, status, groups and the codes pending on the user. Create a user (optionally with a permanent password and verified email/phone), delete, confirm (`AdminConfirmSignUp`), set a password, enable/disable, add to or remove from a group. Every action runs through the same target the API uses (`AdminCreateUser`, `AdminSetUserPassword`, ...), so triggers and validation behave as they do for an SDK call.
+- **Groups**: each pool's groups with their members; create a group.
+- **Codes**: the codes the emulator produced since it started, newest first: sign-up confirmation, forgot-password, SMS MFA, temporary passwords, attribute verification, and every `CUSTOM_AUTH` round with the `privateChallengeParameters` your `CreateAuthChallenge` trigger returned (an OTP in `secretLoginCode` is shown as the code). Active `CUSTOM_AUTH` sessions are listed with a live expiry countdown. Kept in memory only (last `AdminUIConfig.CodeLogSize`), lost on restart.
+- **Tokens**: paste a JWT to decode its header and claims and verify it against the pool's JWKS (key id, signature, issuer, expiry, client/audience).
+
+For test scripts, the codes feed is also available as JSON:
+
+```bash
+curl -s 'http://localhost:9229/_admin/api/codes?q=jane@example.com&type=CUSTOM_AUTH&limit=1'
+# { "codes": [{ "type": "CUSTOM_AUTH", "code": "123456", "username": "...", ... }], "sessions": [...] }
+```
+
+Filters: `pool` (user pool id), `type` (`SIGN_UP`, `FORGOT_PASSWORD`, `MFA`, `TEMPORARY_PASSWORD`, `ATTRIBUTE_VERIFICATION`, `CUSTOM_AUTH`), `q` (substring of username, email, phone or code) and `limit`.
+
+**Enable / disable**: on by default. Disable with `"AdminUIConfig": { "Enabled": false }` in `.cognito/config.json` or the environment variable `COGNITO_LOCAL_ADMIN_UI=false`; when disabled, `/_admin` is not mounted and no codes are recorded.
+
+---
+
 ## Configuration
 
 Configuration lives in `.cognito/config.json`. Create it only if you need to customize behavior:
@@ -156,6 +181,8 @@ mkdir -p .cognito && echo '{}' > .cognito/config.json
 | `ServerConfig.key` | string | -- | Path to TLS key |
 | `TokenConfig.IssuerDomain` | string | `http://localhost:9229` | JWT issuer domain |
 | `AuthSessionConfig.AuthSessionValidity` | number | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid (kept in memory, lost on restart) |
+| `AdminUIConfig.Enabled` | boolean | `true` | Serve the [admin UI](#admin-ui) at `/_admin` (no authentication, local development only) |
+| `AdminUIConfig.CodeLogSize` | number | `100` | How many recent codes the admin UI keeps in memory |
 | `LambdaClient.endpoint` | string | -- | Local Lambda endpoint (e.g. serverless-offline) |
 | `LambdaClient.region` | string | `local` | Lambda region |
 | `TriggerFunctions` | object | `{}` | Trigger-to-function mapping |
@@ -192,6 +219,7 @@ Supported triggers: PreSignUp, PostConfirmation, PostAuthentication, PreAuthenti
 | `HOST` | Override listen hostname |
 | `DEBUG` | Enable verbose logging |
 | `CODE` | Fixed confirmation code (instead of random) |
+| `COGNITO_LOCAL_ADMIN_UI` | `false`, `0` or `off` disables the admin UI |
 | `NODE_TLS_REJECT_UNAUTHORIZED=0` | Accept self-signed certs for Lambda endpoints |
 
 ### Data Storage

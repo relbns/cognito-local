@@ -18,8 +18,13 @@ const logger = Pino(
   }),
 );
 
+let adminUiPath: string | undefined;
+
 createDefaultServer(logger)
-  .then((server) => server.start())
+  .then((server) => {
+    adminUiPath = server.adminUiPath;
+    return server.start();
+  })
   .then((server) => {
     const address = server.address();
     if (!address) {
@@ -33,6 +38,11 @@ createDefaultServer(logger)
     const proto = server instanceof https.Server ? "https" : "http";
 
     logger.info(`Cognito Local running on ${proto}://${url}`);
+    if (adminUiPath) {
+      logger.info(
+        `Admin UI on ${proto}://${url}${adminUiPath} (no authentication, local development only)`,
+      );
+    }
   })
   .catch((err) => {
     logger.error(err);

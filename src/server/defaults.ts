@@ -3,10 +3,12 @@ import type pino from "pino";
 import {
   DateClock,
   InMemoryAuthSessions,
+  InMemoryCodeLog,
   LambdaService,
   MessagesService,
   TriggersService,
 } from "../services";
+import { RecordingAuthSessions, RecordingMessages } from "../services/codeLog";
 import { CognitoServiceFactoryImpl } from "../services/cognitoService";
 import { CryptoService } from "../services/crypto";
 import { StormDBDataStoreFactory } from "../services/dataStore/stormDb";
@@ -72,18 +74,27 @@ export const createDefaultServer = async (
     logger.info(`Email delivery via SMTP: ${smtpHost}:${smtpPort}`);
   }
 
-  const services = {
-    authSessions: new InMemoryAuthSessions(
-      clock,
-      config.AuthSessionConfig.AuthSessionValidity,
-    ),
+  const authSessions = new InMemoryAuthSessions(
     clock,
+    config.AuthSessionConfig.AuthSessionValidity,
+  );
+  const messages = new MessagesService(
+    triggers,
+    new MessageDeliveryService(messageSender),
+  );
+  const codeLog = config.AdminUIConfig.Enabled
+    ? new InMemoryCodeLog(clock, config.AdminUIConfig.CodeLogSize)
+    : undefined;
+
+  const services = {
+    authSessions: codeLog
+      ? new RecordingAuthSessions(authSessions, codeLog)
+      : authSessions,
+    clock,
+    codeLog,
     cognito: cognitoClient,
     config,
-    messages: new MessagesService(
-      triggers,
-      new MessageDeliveryService(messageSender),
-    ),
+    messages: codeLog ? new RecordingMessages(messages, codeLog) : messages,
     otp,
     tokenGenerator: new JwtTokenGenerator(clock, triggers, config.TokenConfig),
     triggers,

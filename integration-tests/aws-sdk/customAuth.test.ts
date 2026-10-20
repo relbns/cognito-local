@@ -99,7 +99,7 @@ const lastCode = () =>
 describe(
   "CUSTOM_AUTH challenge sessions",
   withCognitoSdk(
-    (Cognito) => {
+    (Cognito, { serverUrl }) => {
       const start = (clientId: string) =>
         Cognito()
           .initiateAuth({
@@ -227,6 +227,34 @@ describe(
           code: "NotAuthorizedException",
           message: "Invalid session for the user, session is expired.",
         });
+      });
+
+      it("shows the active session's OTP in the admin codes feed", async () => {
+        const clientId = await setup(Cognito());
+        await start(clientId);
+        const code = lastCode();
+
+        const feed = await fetch(`${serverUrl()}/_admin/api/codes`).then((r) =>
+          r.json(),
+        );
+        expect(feed.codes[0]).toMatchObject({
+          type: "CUSTOM_AUTH",
+          username: "otp-user",
+          email: "otp@example.com",
+          code,
+          round: 1,
+          privateChallengeParameters: { secretLoginCode: code },
+        });
+        expect(feed.sessions[0]).toMatchObject({
+          username: "otp-user",
+          challengeName: "CUSTOM_CHALLENGE",
+          privateChallengeParameters: { secretLoginCode: code },
+        });
+
+        const page = await fetch(`${serverUrl()}/_admin/codes`).then((r) =>
+          r.text(),
+        );
+        expect(page).toContain(code);
       });
     },
     { clock, lambda: fakeLambda },
