@@ -1,4 +1,8 @@
 import type {
+  InvokeCommandOutput,
+  Lambda as LambdaSdkClient,
+} from "@aws-sdk/client-lambda";
+import type {
   CreateAuthChallengeTriggerEvent,
   CustomEmailSenderTriggerEvent,
   CustomMessageTriggerEvent,
@@ -11,9 +15,6 @@ import type {
   UserMigrationTriggerEvent,
   VerifyAuthChallengeResponseTriggerEvent,
 } from "aws-lambda";
-import type { Lambda as LambdaClient } from "aws-sdk";
-import type { InvocationResponse } from "aws-sdk/clients/lambda";
-import { version as awsSdkVersion } from "aws-sdk/package.json";
 import {
   InvalidLambdaResponseError,
   UnexpectedLambdaExceptionError,
@@ -205,6 +206,14 @@ interface VerifyAuthChallengeResponseEvent extends EventCommonParameters {
   privateChallengeParameters?: Record<string, string>;
 }
 
+export type LambdaClient = Pick<LambdaSdkClient, "invoke">;
+
+// The value Cognito itself sends in callerContext.
+export const COGNITO_AWS_SDK_VERSION = "aws-sdk-unknown-unknown";
+
+const decodePayload = (payload: Uint8Array | undefined): string =>
+  payload ? new TextDecoder().decode(payload) : "";
+
 export type PoolLambdaConfigLookup = (
   userPoolId: string,
 ) => Record<string, unknown> | undefined;
@@ -352,15 +361,13 @@ export class LambdaService implements Lambda {
       },
       `Invoking "${functionName}" with event`,
     );
-    let result: InvocationResponse;
+    let result: InvokeCommandOutput;
     try {
-      result = await this.lambdaClient
-        .invoke({
-          FunctionName: functionName,
-          InvocationType: "RequestResponse",
-          Payload: JSON.stringify(lambdaEvent),
-        })
-        .promise();
+      result = await this.lambdaClient.invoke({
+        FunctionName: functionName,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(JSON.stringify(lambdaEvent)),
+      });
     } catch (ex) {
       ctx.logger.error(ex);
       throw new UnexpectedLambdaExceptionError();
@@ -369,9 +376,10 @@ export class LambdaService implements Lambda {
     ctx.logger.debug(
       `Lambda completed with StatusCode=${result.StatusCode} and FunctionError=${result.FunctionError}`,
     );
+    const payload = decodePayload(result.Payload);
     if (!result.FunctionError) {
       try {
-        const parsedPayload = JSON.parse(result.Payload as string);
+        const parsedPayload = JSON.parse(payload);
 
         return parsedPayload.response;
       } catch (err) {
@@ -381,8 +389,8 @@ export class LambdaService implements Lambda {
     } else {
       ctx.logger.error({ result }, result.FunctionError);
 
-      if (result.FunctionError === "Unhandled" && result.Payload) {
-        const parsedPayload = JSON.parse(result.Payload as string);
+      if (result.FunctionError === "Unhandled" && payload) {
+        const parsedPayload = JSON.parse(payload);
 
         if (parsedPayload.errorMessage) {
           throw new UserLambdaValidationError(
@@ -461,7 +469,7 @@ export class LambdaService implements Lambda {
   ): CognitoUserPoolEvent {
     const version = "0"; // TODO: how do we know what this is?
     const callerContext = {
-      awsSdkVersion,
+      awsSdkVersion: COGNITO_AWS_SDK_VERSION,
 
       // client id can be null, even though the types don't allow it
       clientId: event.clientId as string,

@@ -1,5 +1,5 @@
 import path from "node:path";
-import * as AWS from "aws-sdk";
+import { Lambda } from "@aws-sdk/client-lambda";
 import type pino from "pino";
 import { applySeed, formatSeedResult, loadSeedFile } from "../seed";
 import type { SeedResult } from "../seed/types";
@@ -12,6 +12,7 @@ import {
   type Services,
   TriggersService,
 } from "../services";
+import { toSdkV3ClientConfig } from "../services/awsClientConfig";
 import { RecordingAuthSessions, RecordingMessages } from "../services/codeLog";
 import { CognitoServiceFactoryImpl } from "../services/cognitoService";
 import { CryptoService } from "../services/crypto";
@@ -78,12 +79,19 @@ export const createDefaultServices = async (
     ctx,
     config.UserPoolDefaults,
   );
+  const lambdaClient = toSdkV3ClientConfig("LambdaClient", config.LambdaClient);
+  const { KMSKeyId, KMSKeyAlias, ...kmsOptions } = config.KMSConfig ?? {};
+  const kmsClient = toSdkV3ClientConfig("KMSConfig", kmsOptions);
+  for (const warning of [...lambdaClient.warnings, ...kmsClient.warnings]) {
+    logger.warn(warning);
+  }
+
   const triggers = new TriggersService(
     clock,
     cognitoClient,
     new LambdaService(
       config.TriggerFunctions,
-      new AWS.Lambda(config.LambdaClient),
+      new Lambda(lambdaClient.config),
       {
         baseDir: path.resolve(configDirectory),
         poolLambdaConfig: (userPoolId) =>
@@ -96,7 +104,7 @@ export const createDefaultServices = async (
         }),
       },
     ),
-    new CryptoService(config.KMSConfig),
+    new CryptoService({ KMSKeyId, KMSKeyAlias }, kmsClient.config),
   );
 
   // Use SMTP sender (e.g. MailHog) when SMTP_HOST is set, otherwise log to console

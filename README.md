@@ -95,6 +95,7 @@ npx github:relbns/cognito-local status --json
 | `AdminUIConfig.CodeLogSize` | `100` | How many recent codes the admin UI keeps |
 | `COGNITO_LOCAL_ADMIN_UI` (env) | on | `false`, `0` or `off` disables the admin UI |
 | `PasswordPolicyConfig.Enforce` | `true` | Enforce each pool's `PasswordPolicy` (AWS default when unset); `false` restores the old lenient behaviour |
+| `LambdaClient`, `KMSConfig` client options | -- | AWS SDK v3 client options (`region`, `endpoint`, `credentials`, `maxAttempts`, ...). v2 names (`maxRetries`, `sslEnabled`, `httpOptions`, top-level keys) are translated with a startup warning, others are ignored with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md) |
 
 ## Not supported yet
 
@@ -300,11 +301,11 @@ mkdir -p .cognito && echo '{}' > .cognito/config.json
 | `AuthSessionConfig.AuthSessionValidity` | number | `3` | Minutes a CUSTOM_AUTH challenge `Session` stays valid when the app client sets no `AuthSessionValidity` (kept in memory, lost on restart) |
 | `AdminUIConfig.Enabled` | boolean | `true` | Serve the [admin UI](#admin-ui) at `/_admin` (no authentication, local development only) |
 | `AdminUIConfig.CodeLogSize` | number | `100` | How many recent codes the admin UI keeps in memory |
-| `LambdaClient.endpoint` | string | -- | Local Lambda endpoint (e.g. serverless-offline) |
+| `LambdaClient.endpoint` | string | -- | Local Lambda endpoint (e.g. serverless-offline); the section takes AWS SDK v3 client options, see [docs/aws-client-config.md](docs/aws-client-config.md) |
 | `LambdaClient.region` | string | `local` | Lambda region |
 | `TriggerFunctions` | object | `{}` | Trigger-to-function mapping |
 | `UserPoolDefaults.UsernameAttributes` | string[] | `["email"]` | Default username attributes |
-| `KMSConfig.endpoint` | string | -- | Local KMS endpoint |
+| `KMSConfig.endpoint` | string | -- | Local KMS endpoint (AWS SDK v3 client options, like `LambdaClient`) |
 
 ### Lambda Triggers
 

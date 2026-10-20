@@ -56,7 +56,8 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@aws-crypto/client-node": "^3.1.1",
+    "@aws-crypto/client-node": "^5.0.2",
+    "@aws-sdk/client-lambda": "^3.1153.0",
     "aws-sdk": "^2.1145.0",
     "body-parser": "^2.2.0",
     "boxen": "^5.1.2",

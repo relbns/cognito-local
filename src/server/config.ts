@@ -1,5 +1,6 @@
 import mergeWith from "lodash.mergewith";
 import { DEFAULT_AUTH_SESSION_VALIDITY_MINUTES } from "../services/authSessions";
+import type { AwsClientOptions } from "../services/awsClientConfig";
 import { DEFAULT_CODE_LOG_SIZE } from "../services/codeLog";
 import type { Context } from "../services/context";
 import type { KMSConfig } from "../services/crypto";
@@ -42,10 +43,10 @@ export interface ConfigOverrides {
 }
 
 export interface Config {
-  LambdaClient: AWS.Lambda.ClientConfiguration;
+  LambdaClient: AwsClientOptions;
   TriggerFunctions: FunctionConfig;
   UserPoolDefaults: UserPoolDefaults;
-  KMSConfig?: AWS.KMS.ClientConfiguration & KMSConfig;
+  KMSConfig?: AwsClientOptions & KMSConfig;
   ServerConfig: ServerOptions;
   TokenConfig: TokenConfig;
   AuthSessionConfig: AuthSessionConfig;

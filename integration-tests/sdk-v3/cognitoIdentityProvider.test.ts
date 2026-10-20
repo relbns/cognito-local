@@ -36,6 +36,7 @@ import {
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { afterEach, describe, expect, it } from "vitest";
+import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
 import { LambdaService } from "../../src/services";
 import { withCognitoSdk } from "../aws-sdk/setup";
 
@@ -76,15 +77,10 @@ const customAuthLambda = () =>
       CreateAuthChallenge: "CreateAuthChallenge",
       VerifyAuthChallengeResponse: "VerifyAuthChallengeResponse",
     },
-    {
-      invoke: (params: { FunctionName: string; Payload: string }) => ({
-        promise: async () => {
-          const event = JSON.parse(params.Payload);
-          customAuthHandlers[params.FunctionName](event);
-          return { StatusCode: 200, Payload: JSON.stringify(event) };
-        },
-      }),
-    } as any,
+    fakeLambdaClient((functionName, event) => {
+      customAuthHandlers[functionName](event);
+      return event;
+    }),
   );
 
 describe(

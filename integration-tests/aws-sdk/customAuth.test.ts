@@ -1,6 +1,7 @@
 import type { CognitoIdentityServiceProvider } from "aws-sdk";
 import { describe, expect, it } from "vitest";
 import { ClockFake } from "../../src/__tests__/clockFake";
+import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
 import { LambdaService } from "../../src/services";
 import { withCognitoSdk } from "./setup";
 
@@ -58,17 +59,11 @@ const fakeLambda = () =>
       CreateAuthChallenge: "CreateAuthChallenge",
       VerifyAuthChallengeResponse: "VerifyAuthChallengeResponse",
     },
-    {
-      invoke: (params: { FunctionName: string; Payload: string }) => ({
-        promise: async () => {
-          const result = handlers[params.FunctionName](
-            JSON.parse(params.Payload),
-          );
-          invocations.push(structuredClone(result));
-          return { StatusCode: 200, Payload: JSON.stringify(result) };
-        },
-      }),
-    } as any,
+    fakeLambdaClient((functionName, event) => {
+      const result = handlers[functionName](event);
+      invocations.push(structuredClone(result));
+      return result;
+    }),
   );
 
 const clock = new ClockFake(new Date());

@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type * as AWS from "aws-sdk";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TestContext } from "../__tests__/testContext";
 import {
@@ -10,11 +9,11 @@ import {
   UserLambdaValidationError,
 } from "../errors";
 import { FileTriggerInvoker } from "./fileTrigger";
-import { LambdaService } from "./lambda";
+import { type LambdaClient, LambdaService } from "./lambda";
 
 describe("LambdaService with file: targets", () => {
   let dir: string;
-  const lambdaClient = { invoke: vi.fn() } as unknown as AWS.Lambda;
+  const lambdaClient = { invoke: vi.fn() } as unknown as LambdaClient;
 
   const write = (name: string, body: string) => {
     const file = path.join(dir, name);

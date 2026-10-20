@@ -1,9 +1,10 @@
 import {
   buildClient,
   CommitmentPolicy,
+  KMS,
   KmsKeyringNode,
 } from "@aws-crypto/client-node";
-import { KMS } from "aws-sdk";
+import type { SdkV3ClientConfig } from "./awsClientConfig";
 import type { Context } from "./context";
 
 export interface KMSConfig {
@@ -15,10 +16,12 @@ const { encrypt } = buildClient(CommitmentPolicy.REQUIRE_ENCRYPT_ALLOW_DECRYPT);
 
 export class CryptoService {
   _keyringNode?: KmsKeyringNode;
-  config?: KMSConfig & AWS.KMS.ClientConfiguration;
+  config?: KMSConfig;
+  clientConfig: SdkV3ClientConfig;
 
-  constructor(config?: KMSConfig) {
+  constructor(config?: KMSConfig, clientConfig: SdkV3ClientConfig = {}) {
     this.config = config;
+    this.clientConfig = clientConfig;
   }
 
   get keyringNode(): KmsKeyringNode {
@@ -32,15 +35,13 @@ export class CryptoService {
       );
     }
 
-    const { KMSKeyId, KMSKeyAlias, ...clientConfig } = this.config;
-
-    const generatorKeyId = KMSKeyAlias;
-    const keyIds = [KMSKeyId];
+    const generatorKeyId = this.config.KMSKeyAlias;
+    const keyIds = [this.config.KMSKeyId];
 
     this._keyringNode = new KmsKeyringNode({
       generatorKeyId,
       keyIds,
-      clientProvider: () => new KMS(clientConfig),
+      clientProvider: () => new KMS(this.clientConfig),
     });
 
     return this._keyringNode;
