@@ -71,22 +71,19 @@ The untested SDKs use the same protocol and are expected to work. Report what br
   `ResponseMetadata.RequestId` (boto3) are set.
 - With `HOST=0.0.0.0` the token issuer became `http://0.0.0.0:9229`. A wildcard host now yields
   `http://localhost:<port>`.
+- Access tokens are verified (signature, issuer, expiry, user, revocation) and a token that does not
+  decode returns `NotAuthorizedException` ("Invalid Access Token"). `GlobalSignOut` revokes access
+  tokens, refresh tokens expire, `ExpiresIn` follows the client's token validity, and `SECRET_HASH`
+  is checked. See [tokens.md](tokens.md).
+- An unknown operation returns HTTP 400 `UnknownOperationException`, and an unsupported flow HTTP
+  400 `CognitoLocal#Unsupported`, so SDKs no longer retry them as a 5xx.
 
 ## Known gaps
 
 These apply to every SDK, since they are server behaviour:
 
-- **`SECRET_HASH` is not verified.** For an app client with a secret, Cognito rejects a missing or
-  wrong `SECRET_HASH` with `NotAuthorizedException`. The emulator accepts both.
 - **`USER_AUTH` (choice-based sign-in) is not supported.** `InitiateAuth` with `AuthFlow: USER_AUTH`
   returns `Unsupported`, and `AllowedFirstAuthFactors` on an app client is not stored.
-- **Unsupported operations answer HTTP 500** with `__type: "CognitoLocal#Unsupported"`. SDKs treat
-  5xx as retryable, so the call is retried (JavaScript v3 standard mode: 3 attempts) before the
-  `Unsupported` error surfaces.
-- **Access tokens are decoded, not verified.** Signature, expiry and revocation are not checked, so
-  an access token still works after `GlobalSignOut` (its refresh tokens are revoked). A token that
-  does not decode returns `InvalidParameterException`, where Cognito returns
-  `NotAuthorizedException` ("Invalid Access Token").
 - **Request parameters are not validated against the API model.** A missing required parameter
   yields whatever the handler does next (for example `UserNotFoundException` for `AdminGetUser`
   without `Username`) instead of `InvalidParameterException`.
