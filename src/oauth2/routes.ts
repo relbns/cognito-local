@@ -2,9 +2,21 @@ import type { Application, Request, Response } from "express";
 import * as jwt from "jsonwebtoken";
 import PublicKey from "../keys/cognitoLocal.public.json";
 import type { Services } from "../services";
+import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
 import { attributeValue } from "../services/userPoolService";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
+import {
+  type AuthorizeParams,
+  buildErrorRedirect,
+  COGNITO_PROVIDER,
+  decideAuthorize,
+  type FederatedProvider,
+  includesIdToken,
+  isClientAuthenticated,
+  parseClientCredentials,
+  parseScopes,
+} from "./oauthRequest";
 import { verifyS256 } from "./pkce";
 
 // Escape untrusted values before interpolating them into HTML attribute
@@ -20,23 +32,17 @@ function escapeHtml(value: string | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-// Extracts the presented client secret from either HTTP Basic auth or the
-// request body (client_secret parameter), per RFC 6749 §2.3.1.
-function extractClientSecret(req: Request): string | undefined {
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Basic ")) {
-    const decoded = Buffer.from(authHeader.slice(6), "base64").toString();
-    const idx = decoded.indexOf(":");
-    return idx === -1 ? undefined : decoded.slice(idx + 1);
-  }
-  return (req.body as Record<string, string>)?.client_secret;
-}
+const hiddenInput = (name: string, value: string | undefined) =>
+  value === undefined
+    ? ""
+    : `  <input type="hidden" name="${name}" value="${escapeHtml(value)}" />\n`;
 
 const LOGIN_FORM = (params: {
   clientId: string;
   redirectUri: string;
-  codeChallenge: string;
-  codeChallengeMethod: string;
+  responseType: string;
+  codeChallenge: string | undefined;
+  codeChallengeMethod: string | undefined;
   scope: string;
   state: string;
   error?: string;
@@ -46,17 +52,19 @@ const LOGIN_FORM = (params: {
 <body>
 ${params.error ? `<p style="color:red">${escapeHtml(params.error)}</p>` : ""}
 <form method="POST" action="/oauth2/authorize">
-  <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}" />
-  <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}" />
-  <input type="hidden" name="response_type" value="code" />
-  <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}" />
-  <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
-  <input type="hidden" name="scope" value="${escapeHtml(params.scope)}" />
-  <input type="hidden" name="state" value="${escapeHtml(params.state)}" />
-  <label>Username: <input type="text" name="username" /></label><br />
+${hiddenInput("client_id", params.clientId)}${hiddenInput("redirect_uri", params.redirectUri)}${hiddenInput("response_type", params.responseType)}${hiddenInput("code_challenge", params.codeChallenge)}${hiddenInput("code_challenge_method", params.codeChallengeMethod)}${hiddenInput("scope", params.scope)}${hiddenInput("state", params.state)}  <label>Username: <input type="text" name="username" /></label><br />
   <label>Password: <input type="password" name="password" /></label><br />
   <button type="submit">Sign in</button>
 </form>
+</body>
+</html>`;
+
+const FEDERATION_NOT_IMPLEMENTED = (providerName: string) => `<!DOCTYPE html>
+<html>
+<head><title>Federation not implemented</title></head>
+<body>
+<h1>Federated sign-in is not implemented</h1>
+<p>The identity provider <strong>${escapeHtml(providerName)}</strong> is configured for this app client, but cognito-local cannot redirect to third-party identity providers yet.</p>
 </body>
 </html>`;
 
@@ -66,96 +74,135 @@ function badRequest(res: Response, message: string) {
     .json({ error: "invalid_request", error_description: message });
 }
 
+function tokenError(res: Response, error: string, description?: string) {
+  return res
+    .status(400)
+    .json(description ? { error, error_description: description } : { error });
+}
+
+async function findAppClient(
+  services: Services,
+  ctx: Context,
+  clientId: string | undefined,
+): Promise<AppClient | null> {
+  if (!clientId) return null;
+  try {
+    return await services.cognito.getAppClient(ctx, clientId);
+  } catch {
+    return null;
+  }
+}
+
+async function listFederatedProviders(
+  services: Services,
+  ctx: Context,
+  params: AuthorizeParams,
+): Promise<FederatedProvider[]> {
+  const wantsFederation =
+    (params.identity_provider &&
+      params.identity_provider !== COGNITO_PROVIDER) ||
+    (!params.identity_provider && params.idp_identifier);
+  if (!wantsFederation || !params.client_id) return [];
+  const userPool = await services.cognito.getUserPoolForClientId(
+    ctx,
+    params.client_id,
+  );
+  const options = userPool.options as { _identityProviders?: unknown };
+  return Array.isArray(options._identityProviders)
+    ? (options._identityProviders as FederatedProvider[])
+    : [];
+}
+
+function refreshTokenScopes(refreshToken: string): string[] {
+  const decoded = jwt.decode(refreshToken);
+  if (!decoded || typeof decoded !== "object") return [];
+  return typeof decoded.scope === "string" ? parseScopes(decoded.scope) : [];
+}
+
 export function attachOAuth2Routes(
   app: Application,
   services: Services,
   codeStore: AuthorizationCodeStore,
 ): void {
   app.get("/oauth2/authorize", async (req: Request, res: Response) => {
-    const {
-      client_id,
-      redirect_uri,
-      response_type,
-      code_challenge,
-      code_challenge_method,
-      scope,
-      state,
-    } = req.query as Record<string, string>;
-
-    if (!client_id) return badRequest(res, "Missing client_id");
-    if (!redirect_uri) return badRequest(res, "Missing redirect_uri");
-    if (response_type !== "code")
-      return badRequest(res, "response_type must be code");
-    if (!code_challenge) return badRequest(res, "Missing code_challenge");
-    if (code_challenge_method !== "S256")
-      return badRequest(res, "code_challenge_method must be S256");
-
+    const params = req.query as AuthorizeParams;
     const ctx: Context = { logger: req.log };
 
-    let appClient: Awaited<ReturnType<typeof services.cognito.getAppClient>>;
+    const appClient = await findAppClient(services, ctx, params.client_id);
+    let providers: FederatedProvider[] = [];
     try {
-      appClient = await services.cognito.getAppClient(ctx, client_id);
+      providers = await listFederatedProviders(services, ctx, params);
     } catch {
-      return badRequest(res, "Invalid client_id");
+      providers = [];
     }
+    const decision = decideAuthorize(params, appClient, providers);
 
-    if (!appClient) return badRequest(res, "Invalid client_id");
-
-    const allowedUrls = appClient.CallbackURLs ?? [];
-    if (!allowedUrls.includes(redirect_uri)) {
-      return badRequest(res, "redirect_uri not registered for this client");
+    switch (decision.kind) {
+      case "reject":
+        return badRequest(res, decision.description);
+      case "redirectError":
+        return res.redirect(
+          buildErrorRedirect(
+            params.redirect_uri ?? "",
+            decision.error,
+            decision.description,
+            params.state,
+          ),
+        );
+      case "federated":
+        return res
+          .status(501)
+          .type("text/html")
+          .send(FEDERATION_NOT_IMPLEMENTED(decision.providerName));
+      case "login":
+        return res
+          .status(200)
+          .type("text/html")
+          .send(
+            LOGIN_FORM({
+              clientId: params.client_id ?? "",
+              redirectUri: params.redirect_uri ?? "",
+              responseType: decision.responseType,
+              codeChallenge: decision.codeChallenge,
+              codeChallengeMethod: decision.codeChallengeMethod,
+              scope: params.scope ?? "",
+              state: params.state ?? "",
+            }),
+          );
     }
-
-    res
-      .status(200)
-      .type("text/html")
-      .send(
-        LOGIN_FORM({
-          clientId: client_id,
-          redirectUri: redirect_uri,
-          codeChallenge: code_challenge,
-          codeChallengeMethod: code_challenge_method ?? "S256",
-          scope: scope ?? "",
-          state: state ?? "",
-        }),
-      );
   });
 
   app.post("/oauth2/authorize", async (req: Request, res: Response) => {
-    const {
-      client_id,
-      redirect_uri,
-      response_type,
-      code_challenge,
-      code_challenge_method,
-      scope,
-      state,
-      username,
-      password,
-    } = req.body as Record<string, string>;
-
-    if (
-      !client_id ||
-      !redirect_uri ||
-      !code_challenge ||
-      !username ||
-      !password
-    ) {
-      return badRequest(res, "Missing required fields");
-    }
-    if (response_type !== "code")
-      return badRequest(res, "response_type must be code");
-    if (code_challenge_method !== "S256")
-      return badRequest(res, "code_challenge_method must be S256");
-
+    const body = req.body as AuthorizeParams & {
+      username?: string;
+      password?: string;
+    };
+    const { client_id, redirect_uri, scope, state, username, password } = body;
     const ctx: Context = { logger: req.log };
 
-    const appClient = await services.cognito.getAppClient(ctx, client_id);
-    if (!appClient) return badRequest(res, "Invalid client_id");
-
-    const allowedUrls = appClient.CallbackURLs ?? [];
-    if (!allowedUrls.includes(redirect_uri)) {
-      return badRequest(res, "redirect_uri not registered for this client");
+    const appClient = await findAppClient(services, ctx, client_id);
+    const decision = decideAuthorize(
+      { ...body, identity_provider: undefined, idp_identifier: undefined },
+      appClient,
+    );
+    if (decision.kind === "reject") {
+      return badRequest(res, decision.description);
+    }
+    if (decision.kind === "redirectError") {
+      return res.redirect(
+        buildErrorRedirect(
+          redirect_uri ?? "",
+          decision.error,
+          decision.description,
+          state,
+        ),
+      );
+    }
+    if (decision.kind !== "login" || !appClient || !client_id) {
+      return badRequest(res, "Invalid request");
+    }
+    if (!username || !password) {
+      return badRequest(res, "Missing required fields");
     }
 
     let userPool: Awaited<
@@ -180,9 +227,10 @@ export function attachOAuth2Routes(
         .send(
           LOGIN_FORM({
             clientId: client_id,
-            redirectUri: redirect_uri,
-            codeChallenge: code_challenge,
-            codeChallengeMethod: code_challenge_method ?? "S256",
+            redirectUri: redirect_uri ?? "",
+            responseType: decision.responseType,
+            codeChallenge: decision.codeChallenge,
+            codeChallengeMethod: decision.codeChallengeMethod,
             scope: scope ?? "",
             state: state ?? "",
             error: "Incorrect username or password.",
@@ -191,17 +239,41 @@ export function attachOAuth2Routes(
       return;
     }
 
+    const redirectUrl = new URL(redirect_uri ?? "");
+
+    if (decision.responseType === "token") {
+      const userGroups = await userPool.listUserGroupMembership(ctx, user);
+      const tokens = await services.tokenGenerator.generate(
+        ctx,
+        user,
+        userGroups,
+        appClient,
+        undefined,
+        "HostedAuth",
+        decision.scopes,
+      );
+      const fragment = new URLSearchParams();
+      if (includesIdToken(decision.scopes)) {
+        fragment.set("id_token", tokens.IdToken);
+      }
+      fragment.set("access_token", tokens.AccessToken);
+      fragment.set("token_type", "bearer");
+      fragment.set("expires_in", "3600");
+      if (state) fragment.set("state", state);
+      redirectUrl.hash = fragment.toString();
+      return res.redirect(redirectUrl.toString());
+    }
+
     const code = codeStore.create({
       clientId: client_id,
       userPoolId: userPool.options.Id,
       username: user.Username,
-      redirectUri: redirect_uri,
-      codeChallenge: code_challenge,
-      scope: scope ?? "",
+      redirectUri: redirect_uri ?? "",
+      codeChallenge: decision.codeChallenge,
+      scope: decision.scopes.join(" "),
       state: state ?? undefined,
     });
 
-    const redirectUrl = new URL(redirect_uri);
     redirectUrl.searchParams.set("code", code);
     if (state) redirectUrl.searchParams.set("state", state);
 
@@ -214,47 +286,65 @@ export function attachOAuth2Routes(
 
     const ctx: Context = { logger: req.log };
 
+    if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
+      return tokenError(
+        res,
+        "unsupported_grant_type",
+        `Unsupported grant_type: ${grant_type}`,
+      );
+    }
+
+    const credentials = parseClientCredentials(req.headers.authorization, body);
+    if (credentials.conflict) {
+      return tokenError(
+        res,
+        "invalid_client",
+        "client_id in the body does not match the Authorization header",
+      );
+    }
+    const client_id = credentials.clientId;
+    if (!client_id) return badRequest(res, "Missing client_id");
+
+    const appClient = await findAppClient(services, ctx, client_id);
+    if (!appClient) {
+      return tokenError(res, "invalid_client", "Unknown client");
+    }
+    if (!isClientAuthenticated(appClient, credentials.clientSecret)) {
+      return tokenError(res, "invalid_client", "Client authentication failed");
+    }
+
     if (grant_type === "authorization_code") {
-      const { code, redirect_uri, client_id, code_verifier } = body;
+      const { code, redirect_uri, code_verifier } = body;
 
       if (!code) return badRequest(res, "Missing code");
       if (!redirect_uri) return badRequest(res, "Missing redirect_uri");
-      if (!client_id) return badRequest(res, "Missing client_id");
-      if (!code_verifier) return badRequest(res, "Missing code_verifier");
 
       const stored = codeStore.consume(code);
       if (!stored) {
-        return res.status(400).json({
-          error: "invalid_grant",
-          error_description: "Authorization code expired or invalid",
-        });
+        return tokenError(
+          res,
+          "invalid_grant",
+          "Authorization code expired or invalid",
+        );
       }
 
       if (stored.clientId !== client_id) {
-        return res.status(400).json({
-          error: "invalid_grant",
-          error_description: "client_id mismatch",
-        });
+        return tokenError(res, "invalid_grant", "client_id mismatch");
       }
       if (stored.redirectUri !== redirect_uri) {
-        return res.status(400).json({
-          error: "invalid_grant",
-          error_description: "redirect_uri mismatch",
-        });
+        return tokenError(res, "unauthorized_client", "invalid_redirect");
       }
-      if (!verifyS256(code_verifier, stored.codeChallenge)) {
-        return res.status(400).json({
-          error: "invalid_grant",
-          error_description: "code_verifier does not match code_challenge",
-        });
-      }
-
-      const appClient = await services.cognito.getAppClient(ctx, client_id);
-      if (!appClient) {
-        return res.status(400).json({
-          error: "invalid_client",
-          error_description: "Unknown client",
-        });
+      if (stored.codeChallenge) {
+        if (!code_verifier) {
+          return tokenError(res, "invalid_grant", "Missing code_verifier");
+        }
+        if (!verifyS256(code_verifier, stored.codeChallenge)) {
+          return tokenError(
+            res,
+            "invalid_grant",
+            "code_verifier does not match code_challenge",
+          );
+        }
       }
 
       const userPool = await services.cognito.getUserPool(
@@ -263,12 +353,10 @@ export function attachOAuth2Routes(
       );
       const user = await userPool.getUserByUsername(ctx, stored.username);
       if (!user) {
-        return res.status(400).json({
-          error: "invalid_grant",
-          error_description: "User not found",
-        });
+        return tokenError(res, "invalid_grant", "User not found");
       }
 
+      const scopes = parseScopes(stored.scope);
       const userGroups = await userPool.listUserGroupMembership(ctx, user);
       const tokens = await services.tokenGenerator.generate(
         ctx,
@@ -277,66 +365,49 @@ export function attachOAuth2Routes(
         appClient,
         undefined,
         "HostedAuth",
+        scopes,
       );
 
       await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
 
       return res.status(200).json({
         access_token: tokens.AccessToken,
-        id_token: tokens.IdToken,
+        ...(includesIdToken(scopes) ? { id_token: tokens.IdToken } : {}),
         refresh_token: tokens.RefreshToken,
         token_type: "Bearer",
         expires_in: 3600,
       });
     }
 
-    if (grant_type === "refresh_token") {
-      const { refresh_token, client_id } = body;
+    const { refresh_token } = body;
+    if (!refresh_token) return badRequest(res, "Missing refresh_token");
 
-      if (!refresh_token) return badRequest(res, "Missing refresh_token");
-      if (!client_id) return badRequest(res, "Missing client_id");
-
-      const appClient = await services.cognito.getAppClient(ctx, client_id);
-      if (!appClient) {
-        return res.status(400).json({
-          error: "invalid_client",
-          error_description: "Unknown client",
-        });
-      }
-
-      const userPool = await services.cognito.getUserPoolForClientId(
-        ctx,
-        client_id,
-      );
-      const user = await userPool.getUserByRefreshToken(ctx, refresh_token);
-      if (!user) {
-        return res.status(400).json({
-          error: "invalid_grant",
-          error_description: "Invalid refresh token",
-        });
-      }
-
-      const userGroups = await userPool.listUserGroupMembership(ctx, user);
-      const tokens = await services.tokenGenerator.generate(
-        ctx,
-        user,
-        userGroups,
-        appClient,
-        undefined,
-        "RefreshTokens",
-      );
-
-      return res.status(200).json({
-        access_token: tokens.AccessToken,
-        id_token: tokens.IdToken,
-        token_type: "Bearer",
-        expires_in: 3600,
-      });
+    const userPool = await services.cognito.getUserPoolForClientId(
+      ctx,
+      client_id,
+    );
+    const user = await userPool.getUserByRefreshToken(ctx, refresh_token);
+    if (!user) {
+      return tokenError(res, "invalid_grant", "Invalid refresh token");
     }
 
-    return res.status(400).json({
-      error: "unsupported_grant_type",
-      error_description: `Unsupported grant_type: ${grant_type}`,
+    const scopes = refreshTokenScopes(refresh_token);
+    const userGroups = await userPool.listUserGroupMembership(ctx, user);
+    const tokens = await services.tokenGenerator.generate(
+      ctx,
+      user,
+      userGroups,
+      appClient,
+      undefined,
+      "RefreshTokens",
+      scopes,
+    );
+
+    return res.status(200).json({
+      access_token: tokens.AccessToken,
+      ...(includesIdToken(scopes) ? { id_token: tokens.IdToken } : {}),
+      token_type: "Bearer",
+      expires_in: 3600,
     });
   });
 
@@ -445,7 +516,10 @@ export function attachOAuth2Routes(
   // POST /oauth2/revoke — revoke a refresh token
   app.post("/oauth2/revoke", async (req: Request, res: Response) => {
     const ctx: Context = { logger: req.log };
-    const { token, client_id } = req.body as Record<string, string>;
+    const body = req.body as Record<string, string>;
+    const { token } = body;
+    const credentials = parseClientCredentials(req.headers.authorization, body);
+    const client_id = credentials.clientId;
 
     if (!token || !client_id) {
       return badRequest(res, "Missing token or client_id");
@@ -459,11 +533,11 @@ export function attachOAuth2Routes(
     }
 
     // Confidential clients must authenticate before revoking tokens.
-    if (appClient.ClientSecret) {
-      const presented = extractClientSecret(req);
-      if (presented !== appClient.ClientSecret) {
-        return res.status(401).json({ error: "invalid_client" });
-      }
+    if (
+      credentials.conflict ||
+      !isClientAuthenticated(appClient, credentials.clientSecret)
+    ) {
+      return res.status(401).json({ error: "invalid_client" });
     }
 
     const userPool = await services.cognito.getUserPoolForClientId(

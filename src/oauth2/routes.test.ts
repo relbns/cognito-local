@@ -88,7 +88,7 @@ describe("OAuth2 routes", () => {
       expect(res.body.error).toBe("invalid_request");
     });
 
-    it("returns 400 if response_type is not code", async () => {
+    it("redirects unauthorized_client when the client does not allow the implicit flow", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app).get("/oauth2/authorize").query({
         client_id: "test-client-id",
@@ -97,10 +97,13 @@ describe("OAuth2 routes", () => {
         code_challenge: "abc",
         code_challenge_method: "S256",
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(302);
+      const location = new URL(res.header.location);
+      expect(location.origin).toBe("http://localhost:9876");
+      expect(location.searchParams.get("error")).toBe("unauthorized_client");
     });
 
-    it("returns 400 if code_challenge_method is not S256", async () => {
+    it("redirects invalid_request if code_challenge_method is not S256", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
       const res = await supertest(app).get("/oauth2/authorize").query({
         client_id: "test-client-id",
@@ -108,8 +111,12 @@ describe("OAuth2 routes", () => {
         response_type: "code",
         code_challenge: "abc",
         code_challenge_method: "plain",
+        state: "s1",
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(302);
+      const location = new URL(res.header.location);
+      expect(location.searchParams.get("error")).toBe("invalid_request");
+      expect(location.searchParams.get("state")).toBe("s1");
     });
 
     it("returns 400 if redirect_uri is not registered", async () => {
@@ -313,7 +320,7 @@ describe("OAuth2 routes", () => {
         expect(res.body.error).toBe("invalid_grant");
       });
 
-      it("returns 400 when redirect_uri does not match stored value", async () => {
+      it("returns unauthorized_client when redirect_uri does not match stored value", async () => {
         const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
         const code = codeStore.create({
           clientId: "test-client-id",
@@ -336,7 +343,10 @@ describe("OAuth2 routes", () => {
             code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
           });
         expect(res.status).toBe(400);
-        expect(res.body.error).toBe("invalid_grant");
+        expect(res.body).toEqual({
+          error: "unauthorized_client",
+          error_description: "invalid_redirect",
+        });
       });
 
       it("invalidates the code after first use", async () => {
@@ -477,5 +487,337 @@ describe("AuthorizationCodeStore", () => {
     });
     store.consume(code);
     expect(store.consume(code)).toBeNull();
+  });
+});
+
+describe("OAuth2 routes: Cognito request compatibility", () => {
+  const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+  const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+  const basic = (id: string, secret: string) =>
+    `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
+
+  let mockUserPoolService: MockedObject<UserPoolService>;
+  let mockCognito: MockedObject<CognitoService>;
+  let mockTokenGenerator: MockedObject<TokenGenerator>;
+  let appClient: ReturnType<typeof TDB.appClient>;
+
+  beforeEach(() => {
+    appClient = TDB.appClient({
+      ClientId: "conf-client",
+      ClientSecret: "s3cret",
+      UserPoolId: "us-east-1_test",
+      CallbackURLs: ["http://localhost:9999/cb"],
+      AllowedOAuthFlows: ["code", "implicit"],
+      AllowedOAuthScopes: ["email", "openid", "phone", "profile"],
+      SupportedIdentityProviders: ["COGNITO", "Google"],
+    });
+    mockUserPoolService = newMockUserPoolService({
+      Id: "us-east-1_test",
+      _identityProviders: [
+        { ProviderName: "Google", ProviderType: "Google" },
+        { ProviderName: "examplesaml", ProviderType: "OIDC" },
+      ],
+    } as any);
+    mockUserPoolService.getUserByUsername.mockResolvedValue(
+      TDB.user({ Username: "u1", Password: "Pw1!", UserStatus: "CONFIRMED" }),
+    );
+    mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+    mockUserPoolService.storeRefreshToken.mockResolvedValue(undefined);
+    mockCognito = newMockCognitoService(mockUserPoolService);
+    mockCognito.getAppClient.mockResolvedValue(appClient);
+    mockCognito.getUserPoolForClientId.mockResolvedValue(mockUserPoolService);
+    mockCognito.getUserPool.mockResolvedValue(mockUserPoolService);
+    mockTokenGenerator = newMockTokenGenerator();
+    mockTokenGenerator.generate.mockResolvedValue({
+      AccessToken: "access-token",
+      IdToken: "id-token",
+      RefreshToken: "refresh-token",
+    });
+  });
+
+  const backendAuthorizeQuery = {
+    redirect_uri: "http://localhost:9999/cb",
+    response_type: "CODE",
+    client_id: "conf-client",
+    scope: "openid email profile phone",
+    state: "s1",
+  };
+
+  describe("GET /oauth2/authorize", () => {
+    it("accepts upper-case response_type=CODE without PKCE", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query(backendAuthorizeQuery);
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('name="response_type" value="code"');
+      expect(res.text).not.toContain('name="code_challenge"');
+    });
+
+    it("shows the built-in login for identity_provider=COGNITO", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query({ ...backendAuthorizeQuery, identity_provider: "COGNITO" });
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('name="password"');
+    });
+
+    it("returns 501 for a configured federated identity provider", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query({ ...backendAuthorizeQuery, identity_provider: "Google" });
+      expect(res.status).toBe(501);
+      expect(res.text).toContain("Google");
+      expect(res.text).not.toContain('name="password"');
+    });
+
+    it("redirects invalid_request for an identity provider not enabled for the client", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query({ ...backendAuthorizeQuery, identity_provider: "examplesaml" });
+      expect(res.status).toBe(302);
+      const location = new URL(res.header.location);
+      expect(location.searchParams.get("error")).toBe("invalid_request");
+      expect(location.searchParams.get("error_description")).toContain(
+        "not enabled",
+      );
+      expect(location.searchParams.get("state")).toBe("s1");
+    });
+
+    it("redirects invalid_request for an unknown identity provider", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query({ ...backendAuthorizeQuery, identity_provider: "Nope" });
+      expect(res.status).toBe(302);
+      expect(
+        new URL(res.header.location).searchParams.get("error_description"),
+      ).toContain("not configured");
+    });
+
+    it("redirects invalid_scope for a scope the client does not allow", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query({ ...backendAuthorizeQuery, scope: "openid admin:all" });
+      expect(res.status).toBe(302);
+      expect(new URL(res.header.location).searchParams.get("error")).toBe(
+        "invalid_scope",
+      );
+    });
+
+    it("redirects unsupported_response_type for an unknown response_type", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .get("/oauth2/authorize")
+        .query({ ...backendAuthorizeQuery, response_type: "id_token" });
+      expect(res.status).toBe(302);
+      expect(new URL(res.header.location).searchParams.get("error")).toBe(
+        "unsupported_response_type",
+      );
+    });
+  });
+
+  describe("POST /oauth2/authorize", () => {
+    it("issues a code without PKCE and keeps the granted scopes", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/authorize")
+        .type("form")
+        .send({
+          ...backendAuthorizeQuery,
+          response_type: "code",
+          username: "u1",
+          password: "Pw1!",
+        });
+      expect(res.status).toBe(302);
+      const code = new URL(res.header.location).searchParams.get("code")!;
+      expect(codeStore.consume(code)).toMatchObject({
+        codeChallenge: undefined,
+        scope: "openid email profile phone",
+      });
+    });
+
+    it("returns tokens in the fragment for response_type=token", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/authorize")
+        .type("form")
+        .send({
+          ...backendAuthorizeQuery,
+          response_type: "token",
+          scope: "openid email",
+          username: "u1",
+          password: "Pw1!",
+        });
+      expect(res.status).toBe(302);
+      const location = new URL(res.header.location);
+      const fragment = new URLSearchParams(location.hash.slice(1));
+      expect(location.search).toBe("");
+      expect(fragment.get("access_token")).toBe("access-token");
+      expect(fragment.get("id_token")).toBe("id-token");
+      expect(fragment.get("state")).toBe("s1");
+      expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        [],
+        appClient,
+        undefined,
+        "HostedAuth",
+        ["openid", "email"],
+      );
+    });
+  });
+
+  describe("POST /oauth2/token", () => {
+    const codeFor = (
+      codeStore: AuthorizationCodeStore,
+      overrides: Partial<Parameters<AuthorizationCodeStore["create"]>[0]> = {},
+    ) =>
+      codeStore.create({
+        clientId: "conf-client",
+        userPoolId: "us-east-1_test",
+        username: "u1",
+        redirectUri: "http://localhost:9999/cb",
+        codeChallenge: undefined,
+        scope: "openid email profile phone",
+        state: "s1",
+        ...overrides,
+      });
+
+    const backendTokenBody = (code: string) => ({
+      grant_type: "authorization_code",
+      client_id: "conf-client",
+      redirect_uri: "http://localhost:9999/cb",
+      code,
+    });
+
+    it("accepts the client secret in HTTP Basic auth, without PKCE", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "s3cret"))
+        .type("form")
+        .send(backendTokenBody(codeFor(codeStore)));
+      expect(res.status).toBe(200);
+      expect(res.body.id_token).toBe("id-token");
+      expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        [],
+        appClient,
+        undefined,
+        "HostedAuth",
+        ["openid", "email", "profile", "phone"],
+      );
+    });
+
+    it("accepts client_id and client_secret in the body", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .type("form")
+        .send({
+          ...backendTokenBody(codeFor(codeStore)),
+          client_secret: "s3cret",
+        });
+      expect(res.status).toBe(200);
+    });
+
+    it("returns invalid_client for a wrong secret", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "wrong"))
+        .type("form")
+        .send(backendTokenBody(codeFor(codeStore)));
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_client");
+    });
+
+    it("returns invalid_client when a confidential client sends no secret", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .type("form")
+        .send(backendTokenBody(codeFor(codeStore)));
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_client");
+    });
+
+    it("returns invalid_client when the body client_id differs from the Basic one", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "s3cret"))
+        .type("form")
+        .send({ ...backendTokenBody(codeFor(codeStore)), client_id: "other" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_client");
+    });
+
+    it("requires code_verifier when the code was issued with a code_challenge", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const code = codeFor(codeStore, { codeChallenge: CHALLENGE });
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "s3cret"))
+        .type("form")
+        .send(backendTokenBody(code));
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_grant");
+    });
+
+    it("accepts the matching code_verifier for a PKCE code", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const code = codeFor(codeStore, { codeChallenge: CHALLENGE });
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "s3cret"))
+        .type("form")
+        .send({ ...backendTokenBody(code), code_verifier: VERIFIER });
+      expect(res.status).toBe(200);
+    });
+
+    it("omits the id_token when openid was not granted", async () => {
+      const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
+      const code = codeFor(codeStore, {
+        scope: "aws.cognito.signin.user.admin",
+      });
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "s3cret"))
+        .type("form")
+        .send(backendTokenBody(code));
+      expect(res.status).toBe(200);
+      expect(res.body.id_token).toBeUndefined();
+      expect(res.body.access_token).toBe("access-token");
+    });
+
+    it("authenticates the client on refresh_token grants too", async () => {
+      mockUserPoolService.getUserByRefreshToken.mockResolvedValue(
+        TDB.user({ Username: "u1" }),
+      );
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const body = {
+        grant_type: "refresh_token",
+        client_id: "conf-client",
+        refresh_token: "refresh-token",
+      };
+      const unauthed = await supertest(app)
+        .post("/oauth2/token")
+        .type("form")
+        .send(body);
+      expect(unauthed.body.error).toBe("invalid_client");
+      const authed = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("conf-client", "s3cret"))
+        .type("form")
+        .send(body);
+      expect(authed.status).toBe(200);
+    });
   });
 });

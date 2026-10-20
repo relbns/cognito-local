@@ -129,8 +129,8 @@ All `List*` APIs support pagination via `NextToken` / `MaxResults`.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/oauth2/authorize` | GET, POST | Authorization endpoint with PKCE support |
-| `/oauth2/token` | POST | Token exchange (authorization_code, refresh_token, client_credentials) |
+| `/oauth2/authorize` | GET, POST | Authorization endpoint: `code` and `token` response types (any case), optional PKCE (S256), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. `identity_provider=COGNITO` shows the built-in login; a federated IdP returns 501 (not implemented yet) |
+| `/oauth2/token` | POST | Token exchange (authorization_code, refresh_token). Clients with a secret authenticate with HTTP Basic or `client_secret` in the body |
 | `/oauth2/userInfo` | GET | OpenID Connect UserInfo |
 | `/oauth2/revoke` | POST | Token revocation |
 | `/logout` | GET | End session / logout |
