@@ -17,11 +17,13 @@ import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
   InvalidParameterError,
+  InvalidPasswordError,
   UserLambdaValidationError,
   UsernameExistsError,
 } from "../errors";
 import { type Config, DefaultConfig } from "../server/config";
 import type { Messages, Triggers, UserPoolService } from "../services";
+import { attribute } from "../services/userPoolService";
 import { SignUp, type SignUpTarget } from "./signUp";
 
 describe("SignUp target", () => {
@@ -59,7 +61,7 @@ describe("SignUp target", () => {
     await expect(
       signUp(TestContext, {
         ClientId: "clientId",
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: user.Username,
         UserAttributes: [],
       }),
@@ -72,7 +74,7 @@ describe("SignUp target", () => {
 
     await signUp(TestContext, {
       ClientId: "clientId",
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       Username: "user-supplied",
       UserAttributes: [{ Name: "email", Value: "example@example.com" }],
     });
@@ -86,7 +88,7 @@ describe("SignUp target", () => {
         { Name: "email", Value: "example@example.com" },
       ],
       Enabled: true,
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       UserCreateDate: now,
       UserLastModifiedDate: now,
       UserStatus: "UNCONFIRMED",
@@ -102,7 +104,7 @@ describe("SignUp target", () => {
     await expect(
       signUp(TestContext, {
         ClientId: "clientId",
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [{ Name: "email", Value: "example@example.com" }],
       }),
@@ -114,7 +116,7 @@ describe("SignUp target", () => {
 
     await signUp(TestContext, {
       ClientId: "clientId",
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       Username: "example@example.com",
       UserAttributes: [{ Name: "email", Value: "example@example.com" }],
     });
@@ -128,7 +130,7 @@ describe("SignUp target", () => {
         { Name: "email", Value: "example@example.com" },
       ],
       Enabled: true,
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       UserCreateDate: now,
       UserLastModifiedDate: now,
       UserStatus: "UNCONFIRMED",
@@ -157,7 +159,7 @@ describe("SignUp target", () => {
         ClientMetadata: {
           client: "metadata",
         },
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -193,7 +195,7 @@ describe("SignUp target", () => {
         ClientMetadata: {
           client: "metadata",
         },
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "example@example.com",
         UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -225,7 +227,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -249,7 +251,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -277,7 +279,7 @@ describe("SignUp target", () => {
             ClientMetadata: {
               client: "metadata",
             },
-            Password: "pwd",
+            Password: "pwd-Aa1!",
             Username: "user-supplied",
             UserAttributes: [{ Name: "email", Value: "example@example.com" }],
             ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -311,7 +313,7 @@ describe("SignUp target", () => {
             ClientMetadata: {
               client: "metadata",
             },
-            Password: "pwd",
+            Password: "pwd-Aa1!",
             Username: "example@example.com",
             UserAttributes: [{ Name: "email", Value: "example@example.com" }],
             ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -349,7 +351,7 @@ describe("SignUp target", () => {
               ClientMetadata: {
                 client: "metadata",
               },
-              Password: "pwd",
+              Password: "pwd-Aa1!",
               Username: "user-supplied",
               UserAttributes: [{ Name: "email", Value: "example@example.com" }],
               ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -375,7 +377,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -394,7 +396,7 @@ describe("SignUp target", () => {
 
         await signUp(TestContext, {
           ClientId: "clientId",
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         });
@@ -416,7 +418,7 @@ describe("SignUp target", () => {
         ClientMetadata: {
           client: "metadata",
         },
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -449,7 +451,7 @@ describe("SignUp target", () => {
         ClientMetadata: {
           client: "metadata",
         },
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [],
         ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -478,7 +480,7 @@ describe("SignUp target", () => {
         ClientMetadata: {
           client: "metadata",
         },
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
         ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -511,7 +513,7 @@ describe("SignUp target", () => {
         ClientMetadata: {
           client: "metadata",
         },
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [],
         ValidationData: [{ Name: "another", Value: "attribute" }],
@@ -532,7 +534,7 @@ describe("SignUp target", () => {
 
       await signUp(TestContext, {
         ClientId: "clientId",
-        Password: "pwd",
+        Password: "pwd-Aa1!",
         Username: "user-supplied",
         UserAttributes: [{ Name: "email", Value: "example@example.com" }],
       });
@@ -556,7 +558,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         });
@@ -579,7 +581,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         });
@@ -590,7 +592,7 @@ describe("SignUp target", () => {
             { Name: "email", Value: "example@example.com" },
           ],
           Enabled: true,
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           UserCreateDate: now,
           UserLastModifiedDate: now,
           UserStatus: "UNCONFIRMED",
@@ -620,7 +622,7 @@ describe("SignUp target", () => {
         await expect(
           signUp(TestContext, {
             ClientId: "clientId",
-            Password: "pwd",
+            Password: "pwd-Aa1!",
             Username: "user-supplied",
             UserAttributes: [],
           }),
@@ -648,7 +650,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
         });
@@ -659,7 +661,7 @@ describe("SignUp target", () => {
             { Name: "phone_number", Value: "0400000000" },
           ],
           Enabled: true,
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           UserCreateDate: now,
           UserLastModifiedDate: now,
           UserStatus: "UNCONFIRMED",
@@ -689,7 +691,7 @@ describe("SignUp target", () => {
         await expect(
           signUp(TestContext, {
             ClientId: "clientId",
-            Password: "pwd",
+            Password: "pwd-Aa1!",
             Username: "user-supplied",
             UserAttributes: [],
           }),
@@ -720,7 +722,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [
             { Name: "email", Value: "example@example.com" },
@@ -735,7 +737,7 @@ describe("SignUp target", () => {
             { Name: "phone_number", Value: "0400000000" },
           ],
           Enabled: true,
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           UserCreateDate: now,
           UserLastModifiedDate: now,
           UserStatus: "UNCONFIRMED",
@@ -770,7 +772,7 @@ describe("SignUp target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
         });
@@ -781,7 +783,7 @@ describe("SignUp target", () => {
             { Name: "email", Value: "example@example.com" },
           ],
           Enabled: true,
-          Password: "pwd",
+          Password: "pwd-Aa1!",
           UserCreateDate: now,
           UserLastModifiedDate: now,
           UserStatus: "UNCONFIRMED",
@@ -811,7 +813,7 @@ describe("SignUp target", () => {
         await expect(
           signUp(TestContext, {
             ClientId: "clientId",
-            Password: "pwd",
+            Password: "pwd-Aa1!",
             Username: "user-supplied",
             UserAttributes: [],
           }),
@@ -832,7 +834,7 @@ describe("SignUp target", () => {
 
     await signUp(TestContext, {
       ClientId: "clientId",
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       Username: "user-supplied",
       UserAttributes: [{ Name: "email", Value: "example@example.com" }],
     });
@@ -844,12 +846,172 @@ describe("SignUp target", () => {
       ],
       ConfirmationCode: "123456",
       Enabled: true,
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       UserCreateDate: now,
       UserLastModifiedDate: now,
       UserStatus: "UNCONFIRMED",
       Username: "user-supplied",
       RefreshTokens: [],
+    });
+  });
+
+  describe("password policy", () => {
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+    });
+
+    it("rejects a password that breaks the pool's policy", async () => {
+      await expect(
+        signUp(TestContext, {
+          ClientId: "clientId",
+          Password: "Passw0rd",
+          Username: "jane",
+        }),
+      ).rejects.toEqual(
+        new InvalidPasswordError(
+          "Password did not conform with policy: Password must have symbol characters",
+        ),
+      );
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
+    it("accepts a weak password when enforcement is off", async () => {
+      signUp = SignUp({
+        cognito: newMockCognitoService(mockUserPoolService),
+        clock: new ClockFake(now),
+        messages: mockMessages,
+        otp: mockOtp,
+        config: { ...DefaultConfig, PasswordPolicyConfig: { Enforce: false } },
+        triggers: mockTriggers,
+      });
+
+      await signUp(TestContext, {
+        ClientId: "clientId",
+        Password: "x",
+        Username: "jane",
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalled();
+    });
+  });
+
+  describe("uniqueness", () => {
+    const phone = "+15555555555";
+
+    it("throws UsernameExistsException when a username attribute is already in use", async () => {
+      mockUserPoolService.options.UsernameAttributes = ["email"];
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ Attributes: [attribute("email", "a@example.com")] }),
+      );
+
+      await expect(
+        signUp(TestContext, {
+          ClientId: "clientId",
+          Password: "Passw0rd!",
+          Username: "a@example.com",
+        }),
+      ).rejects.toEqual(
+        new UsernameExistsError(
+          "An account with the given email already exists.",
+        ),
+      );
+    });
+
+    it("accepts a phone number another user has verified as an alias, leaving it unverified", async () => {
+      mockUserPoolService.options.UsernameAttributes = [];
+      mockUserPoolService.options.AliasAttributes = ["phone_number"];
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+      mockUserPoolService.listUsers.mockResolvedValue([
+        TDB.user({
+          Username: "other",
+          Attributes: [
+            attribute("phone_number", phone),
+            attribute("phone_number_verified", "true"),
+          ],
+        }),
+      ]);
+
+      const result = await signUp(TestContext, {
+        ClientId: "clientId",
+        Password: "Passw0rd!",
+        Username: "jane",
+        UserAttributes: [attribute("phone_number", phone)],
+      });
+
+      expect(result.UserConfirmed).toBe(false);
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledTimes(1);
+    });
+
+    describe("PreSignUp auto-verifies and auto-confirms a phone-only user", () => {
+      beforeEach(() => {
+        mockUserPoolService.options.UsernameAttributes = [];
+        mockUserPoolService.options.AliasAttributes = ["phone_number"];
+        mockUserPoolService.options.AutoVerifiedAttributes = ["email"];
+        mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+        mockTriggers.enabled.mockImplementation((name) => name === "PreSignUp");
+        mockTriggers.preSignUp.mockResolvedValue({
+          autoConfirmUser: true,
+          autoVerifyPhone: true,
+          autoVerifyEmail: false,
+        });
+      });
+
+      it("confirms the user without sending a code", async () => {
+        const result = await signUp(TestContext, {
+          ClientId: "clientId",
+          Password: "Passw0rd!",
+          Username: "jane",
+          UserAttributes: [attribute("phone_number", phone)],
+        });
+
+        expect(result).toEqual({
+          CodeDeliveryDetails: undefined,
+          UserConfirmed: true,
+          UserSub: expect.stringMatching(UUID),
+        });
+        expect(mockMessages.deliver).not.toHaveBeenCalled();
+      });
+
+      it("moves the phone alias from the user who had it verified", async () => {
+        const other = TDB.user({
+          Username: "other",
+          Attributes: [
+            attribute("phone_number", phone),
+            attribute("phone_number_verified", "true"),
+          ],
+        });
+        mockUserPoolService.listUsers.mockResolvedValue([other]);
+        mockUserPoolService.getUserByUsername.mockImplementation(
+          async (_, username) => (username === "other" ? other : null),
+        );
+
+        await signUp(TestContext, {
+          ClientId: "clientId",
+          Password: "Passw0rd!",
+          Username: "jane",
+          UserAttributes: [attribute("phone_number", phone)],
+        });
+
+        expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+          TestContext,
+          expect.objectContaining({
+            Username: "other",
+            Attributes: [
+              attribute("phone_number", phone),
+              attribute("phone_number_verified", "false"),
+            ],
+          }),
+        );
+        expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+          TestContext,
+          expect.objectContaining({
+            Username: "jane",
+            Attributes: expect.arrayContaining([
+              attribute("phone_number_verified", "true"),
+            ]),
+          }),
+        );
+      });
     });
   });
 });

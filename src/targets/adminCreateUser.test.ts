@@ -6,9 +6,15 @@ import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { UUID } from "../__tests__/patterns";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { InvalidParameterError, UsernameExistsError } from "../errors";
+import {
+  AliasExistsError,
+  InvalidParameterError,
+  InvalidPasswordError,
+  UsernameExistsError,
+} from "../errors";
 import { type Config, DefaultConfig } from "../server/config";
 import type { Messages, UserPoolService } from "../services";
+import { attribute } from "../services/userPoolService";
 import { AdminCreateUser, type AdminCreateUserTarget } from "./adminCreateUser";
 
 const originalDate = new Date();
@@ -33,7 +39,7 @@ describe("AdminCreateUser target", () => {
 
   it("saves a new user with a provided temporary password when the user pool has no username attributes", async () => {
     await adminCreateUser(TestContext, {
-      TemporaryPassword: "pwd",
+      TemporaryPassword: "pwd-Aa1!",
       UserAttributes: [
         { Name: "email", Value: "example@example.com" },
         { Name: "phone_number", Value: "0400000000" },
@@ -52,7 +58,7 @@ describe("AdminCreateUser target", () => {
         },
       ],
       Enabled: true,
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       UserCreateDate: originalDate,
       UserLastModifiedDate: originalDate,
       UserStatus: "FORCE_CHANGE_PASSWORD",
@@ -65,7 +71,7 @@ describe("AdminCreateUser target", () => {
     mockUserPoolService.options.UsernameAttributes = ["email"];
 
     await adminCreateUser(TestContext, {
-      TemporaryPassword: "pwd",
+      TemporaryPassword: "pwd-Aa1!",
       UserAttributes: [
         { Name: "email", Value: "example@example.com" },
         { Name: "phone_number", Value: "0400000000" },
@@ -84,7 +90,7 @@ describe("AdminCreateUser target", () => {
         },
       ],
       Enabled: true,
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       UserCreateDate: originalDate,
       UserLastModifiedDate: originalDate,
       UserStatus: "FORCE_CHANGE_PASSWORD",
@@ -130,7 +136,7 @@ describe("AdminCreateUser target", () => {
             client: "metadata",
           },
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "pwd",
+          TemporaryPassword: "pwd-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "user-supplied",
           UserPoolId: "test",
@@ -141,8 +147,8 @@ describe("AdminCreateUser target", () => {
           "AdminCreateUser",
           null,
           "test",
-          { ...response.User, Password: "pwd", RefreshTokens: [] },
-          "pwd",
+          { ...response.User, Password: "pwd-Aa1!", RefreshTokens: [] },
+          "pwd-Aa1!",
           {
             client: "metadata",
           },
@@ -160,7 +166,7 @@ describe("AdminCreateUser target", () => {
         await expect(
           adminCreateUser(TestContext, {
             DesiredDeliveryMediums: ["EMAIL"],
-            TemporaryPassword: "pwd",
+            TemporaryPassword: "pwd-Aa1!",
             UserAttributes: [],
             Username: "user-supplied",
             UserPoolId: "test",
@@ -182,7 +188,7 @@ describe("AdminCreateUser target", () => {
             client: "metadata",
           },
           DesiredDeliveryMediums: ["SMS"],
-          TemporaryPassword: "pwd",
+          TemporaryPassword: "pwd-Aa1!",
           UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
           Username: "user-supplied",
           UserPoolId: "test",
@@ -193,8 +199,8 @@ describe("AdminCreateUser target", () => {
           "AdminCreateUser",
           null,
           "test",
-          { ...response.User, Password: "pwd", RefreshTokens: [] },
-          "pwd",
+          { ...response.User, Password: "pwd-Aa1!", RefreshTokens: [] },
+          "pwd-Aa1!",
           {
             client: "metadata",
           },
@@ -210,7 +216,7 @@ describe("AdminCreateUser target", () => {
         await expect(
           adminCreateUser(TestContext, {
             DesiredDeliveryMediums: ["SMS"],
-            TemporaryPassword: "pwd",
+            TemporaryPassword: "pwd-Aa1!",
             UserAttributes: [],
             Username: "user-supplied",
             UserPoolId: "test",
@@ -231,7 +237,7 @@ describe("AdminCreateUser target", () => {
           ClientMetadata: {
             client: "metadata",
           },
-          TemporaryPassword: "pwd",
+          TemporaryPassword: "pwd-Aa1!",
           UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
           Username: "user-supplied",
           UserPoolId: "test",
@@ -242,8 +248,8 @@ describe("AdminCreateUser target", () => {
           "AdminCreateUser",
           null,
           "test",
-          { ...response.User, Password: "pwd", RefreshTokens: [] },
-          "pwd",
+          { ...response.User, Password: "pwd-Aa1!", RefreshTokens: [] },
+          "pwd-Aa1!",
           {
             client: "metadata",
           },
@@ -261,7 +267,7 @@ describe("AdminCreateUser target", () => {
             ClientMetadata: {
               client: "metadata",
             },
-            TemporaryPassword: "pwd",
+            TemporaryPassword: "pwd-Aa1!",
             UserAttributes: [],
             Username: "user-supplied",
             UserPoolId: "test",
@@ -283,7 +289,7 @@ describe("AdminCreateUser target", () => {
             client: "metadata",
           },
           DesiredDeliveryMediums: ["EMAIL", "SMS"],
-          TemporaryPassword: "pwd",
+          TemporaryPassword: "pwd-Aa1!",
           UserAttributes: [
             { Name: "email", Value: "example@example.com" },
             { Name: "phone_number", Value: "0400000000" },
@@ -297,8 +303,8 @@ describe("AdminCreateUser target", () => {
           "AdminCreateUser",
           null,
           "test",
-          { ...response.User, Password: "pwd", RefreshTokens: [] },
-          "pwd",
+          { ...response.User, Password: "pwd-Aa1!", RefreshTokens: [] },
+          "pwd-Aa1!",
           {
             client: "metadata",
           },
@@ -316,7 +322,7 @@ describe("AdminCreateUser target", () => {
             client: "metadata",
           },
           DesiredDeliveryMediums: ["EMAIL", "SMS"],
-          TemporaryPassword: "pwd",
+          TemporaryPassword: "pwd-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "user-supplied",
           UserPoolId: "test",
@@ -327,8 +333,8 @@ describe("AdminCreateUser target", () => {
           "AdminCreateUser",
           null,
           "test",
-          { ...response.User, Password: "pwd", RefreshTokens: [] },
-          "pwd",
+          { ...response.User, Password: "pwd-Aa1!", RefreshTokens: [] },
+          "pwd-Aa1!",
           {
             client: "metadata",
           },
@@ -346,7 +352,7 @@ describe("AdminCreateUser target", () => {
         await expect(
           adminCreateUser(TestContext, {
             DesiredDeliveryMediums: ["EMAIL", "SMS"],
-            TemporaryPassword: "pwd",
+            TemporaryPassword: "pwd-Aa1!",
             UserAttributes: [],
             Username: "user-supplied",
             UserPoolId: "test",
@@ -362,7 +368,113 @@ describe("AdminCreateUser target", () => {
     });
   });
 
-  it.todo("can create an alias to an existing user");
+  describe("aliases", () => {
+    const phone = "+15555555555";
+    const other = TDB.user({
+      Username: "other",
+      Attributes: [
+        attribute("phone_number", phone),
+        attribute("phone_number_verified", "true"),
+      ],
+    });
+    const request = {
+      MessageAction: "SUPPRESS",
+      UserAttributes: [
+        attribute("phone_number", phone),
+        attribute("phone_number_verified", "true"),
+      ],
+      Username: "dup-phone",
+      UserPoolId: "test",
+    };
+
+    beforeEach(() => {
+      mockUserPoolService.options.AliasAttributes = ["phone_number"];
+      mockUserPoolService.listUsers.mockResolvedValue([other]);
+      mockUserPoolService.getUserByUsername.mockImplementation(
+        async (_, username) => (username === "other" ? other : null),
+      );
+    });
+
+    it("throws AliasExistsException for a verified phone number another user has as an alias", async () => {
+      await expect(adminCreateUser(TestContext, request)).rejects.toEqual(
+        new AliasExistsError("phone_number"),
+      );
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
+    it("moves the alias with ForceAliasCreation", async () => {
+      await adminCreateUser(TestContext, {
+        ...request,
+        ForceAliasCreation: true,
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          Username: "other",
+          Attributes: [
+            attribute("phone_number", phone),
+            attribute("phone_number_verified", "false"),
+          ],
+        }),
+      );
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({ Username: "dup-phone" }),
+      );
+    });
+
+    it("accepts the same phone number when it is not marked verified", async () => {
+      await adminCreateUser(TestContext, {
+        ...request,
+        UserAttributes: [attribute("phone_number", phone)],
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("throws UsernameExistsException when an email username attribute is in use", async () => {
+    mockUserPoolService.options.UsernameAttributes = ["email"];
+    mockUserPoolService.getUserByUsername.mockResolvedValue(TDB.user());
+
+    await expect(
+      adminCreateUser(TestContext, {
+        MessageAction: "SUPPRESS",
+        Username: "a@example.com",
+        UserPoolId: "test",
+      }),
+    ).rejects.toEqual(
+      new UsernameExistsError(
+        "An account with the given email already exists.",
+      ),
+    );
+  });
+
+  it("rejects a TemporaryPassword that breaks the password policy", async () => {
+    await expect(
+      adminCreateUser(TestContext, {
+        MessageAction: "SUPPRESS",
+        TemporaryPassword: "short",
+        Username: "user-supplied",
+        UserPoolId: "test",
+      }),
+    ).rejects.toEqual(
+      new InvalidPasswordError(
+        "Password does not conform to policy: Password not long enough",
+      ),
+    );
+  });
+
+  it("does not check a generated temporary password", async () => {
+    await adminCreateUser(TestContext, {
+      MessageAction: "SUPPRESS",
+      Username: "user-supplied",
+      UserPoolId: "test",
+    });
+
+    expect(mockUserPoolService.saveUser).toHaveBeenCalled();
+  });
   it.todo("can resend the welcome message");
 
   it("can suppress the welcome message", async () => {
@@ -371,7 +483,7 @@ describe("AdminCreateUser target", () => {
         client: "metadata",
       },
       MessageAction: "SUPPRESS",
-      TemporaryPassword: "pwd",
+      TemporaryPassword: "pwd-Aa1!",
       UserAttributes: [{ Name: "email", Value: "example@example.com" }],
       Username: "user-supplied",
       UserPoolId: "test",
@@ -388,7 +500,7 @@ describe("AdminCreateUser target", () => {
         },
       ],
       Enabled: true,
-      Password: "pwd",
+      Password: "pwd-Aa1!",
       UserCreateDate: originalDate,
       UserLastModifiedDate: originalDate,
       UserStatus: "FORCE_CHANGE_PASSWORD",
@@ -403,7 +515,7 @@ describe("AdminCreateUser target", () => {
 
     await expect(
       adminCreateUser(TestContext, {
-        TemporaryPassword: "pwd",
+        TemporaryPassword: "pwd-Aa1!",
         UserAttributes: existingUser.Attributes,
         Username: existingUser.Username,
         UserPoolId: "test",

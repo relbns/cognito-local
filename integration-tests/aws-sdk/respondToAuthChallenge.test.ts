@@ -25,7 +25,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -38,7 +38,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "def",
+            PASSWORD: "def-Aa1!",
           },
         })
         .promise();
@@ -50,7 +50,7 @@ describe(
           Session: initiateAuthResponse.Session,
           ChallengeResponses: {
             USERNAME: "abc",
-            NEW_PASSWORD: "new_password",
+            NEW_PASSWORD: "new_password-Aa1",
           },
         })
         .promise();
@@ -85,7 +85,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -188,7 +188,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "a@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,

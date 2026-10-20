@@ -9,6 +9,7 @@ import * as TDB from "../__tests__/testDataBuilder";
 import {
   CodeMismatchError,
   InvalidParameterError,
+  InvalidPasswordError,
   NotAuthorizedError,
 } from "../errors";
 import {
@@ -209,6 +210,26 @@ describe("AdminRespondToAuthChallenge target", () => {
       mockUserPoolService.getUserByUsername.mockResolvedValue(user);
     });
 
+    it("rejects a new password that breaks the password policy", async () => {
+      await expect(
+        adminRespondToAuthChallenge(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          UserPoolId: userPoolClient.UserPoolId,
+          ChallengeName: "NEW_PASSWORD_REQUIRED",
+          ChallengeResponses: {
+            USERNAME: user.Username,
+            NEW_PASSWORD: "newpass",
+          },
+          Session: "Session",
+        }),
+      ).rejects.toEqual(
+        new InvalidPasswordError(
+          "Password does not conform to policy: Password not long enough",
+        ),
+      );
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
     it("updates the user's password and status", async () => {
       const newDate = clock.advanceBy(1200);
 
@@ -218,14 +239,14 @@ describe("AdminRespondToAuthChallenge target", () => {
         ChallengeName: "NEW_PASSWORD_REQUIRED",
         ChallengeResponses: {
           USERNAME: user.Username,
-          NEW_PASSWORD: "newpass",
+          NEW_PASSWORD: "newpass-Aa1",
         },
         Session: "Session",
       });
 
       expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
         ...user,
-        Password: "newpass",
+        Password: "newpass-Aa1",
         UserLastModifiedDate: newDate,
         UserStatus: "CONFIRMED",
       });
@@ -245,7 +266,7 @@ describe("AdminRespondToAuthChallenge target", () => {
         ChallengeName: "NEW_PASSWORD_REQUIRED",
         ChallengeResponses: {
           USERNAME: user.Username,
-          NEW_PASSWORD: "newpass",
+          NEW_PASSWORD: "newpass-Aa1",
         },
         Session: "Session",
       });

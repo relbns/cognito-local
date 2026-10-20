@@ -278,9 +278,13 @@ export class UserPoolServiceImpl implements UserPoolService {
     groupName: string,
   ): Promise<Group | null> {
     ctx.logger.debug("UserPoolServiceImpl.getGroupByGroupName");
-    const result = await this.dataStore.get<Group>(ctx, ["Groups", groupName]);
+    const groups = await this.dataStore.get<Record<string, Group>>(
+      ctx,
+      "Groups",
+      {},
+    );
 
-    return result ?? null;
+    return Object.hasOwn(groups, groupName) ? groups[groupName] : null;
   }
 
   public async getUserByUsername(
@@ -562,6 +566,7 @@ export class UserPoolServiceFactoryImpl implements UserPoolServiceFactory {
 export const validatePermittedAttributeChanges = (
   requestAttributes: AttributeListType,
   schemaAttributes: SchemaAttributesListType,
+  { admin = false }: { admin?: boolean } = {},
 ): AttributeListType => {
   for (const attr of requestAttributes) {
     const attrSchema = schemaAttributes.find((x) => x.Name === attr.Name);
@@ -575,6 +580,11 @@ export const validatePermittedAttributeChanges = (
         `user.${attr.Name}: Attribute cannot be updated. (changing an immutable attribute)`,
       );
     }
+  }
+
+  // An administrator may mark the existing email or phone number verified on its own.
+  if (admin) {
+    return requestAttributes;
   }
 
   if (

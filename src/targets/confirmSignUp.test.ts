@@ -5,7 +5,11 @@ import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { CodeMismatchError, NotAuthorizedError } from "../errors";
+import {
+  AliasExistsError,
+  CodeMismatchError,
+  NotAuthorizedError,
+} from "../errors";
 import type { Triggers, UserPoolService } from "../services";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import { ConfirmSignUp, type ConfirmSignUpTarget } from "./confirmSignUp";
@@ -145,6 +149,108 @@ describe("ConfirmSignUp target", () => {
 
         expect(mockTriggers.postConfirmation).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe("aliases", () => {
+    const email = "jane@example.com";
+    const other = TDB.user({
+      Username: "other",
+      Attributes: [
+        attribute("email", email),
+        attribute("email_verified", "true"),
+      ],
+    });
+    const pending = TDB.user({
+      Username: "jane",
+      ConfirmationCode: "456789",
+      UserStatus: "UNCONFIRMED",
+      Attributes: [attribute("email", email)],
+    });
+
+    beforeEach(() => {
+      mockUserPoolService.options.AliasAttributes = ["email"];
+      mockUserPoolService.options.AutoVerifiedAttributes = ["email"];
+      mockUserPoolService.getUserByUsername.mockImplementation(async (_, u) =>
+        u === other.Username ? other : pending,
+      );
+      mockUserPoolService.listUsers.mockResolvedValue([other, pending]);
+    });
+
+    it("verifies the attribute the confirmation code was sent to", async () => {
+      mockUserPoolService.listUsers.mockResolvedValue([pending]);
+
+      await confirmSignUp(TestContext, {
+        ClientId: "clientId",
+        Username: pending.Username,
+        ConfirmationCode: "456789",
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          Attributes: attributesAppend(
+            pending.Attributes,
+            attribute("email_verified", "true"),
+          ),
+          UserStatus: "CONFIRMED",
+        }),
+      );
+    });
+
+    it("throws AliasExistsException when another user has the email verified", async () => {
+      await expect(
+        confirmSignUp(TestContext, {
+          ClientId: "clientId",
+          Username: pending.Username,
+          ConfirmationCode: "456789",
+        }),
+      ).rejects.toEqual(new AliasExistsError("email"));
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    });
+
+    it("moves the alias with ForceAliasCreation and marks it unverified on the other user", async () => {
+      await confirmSignUp(TestContext, {
+        ClientId: "clientId",
+        Username: pending.Username,
+        ConfirmationCode: "456789",
+        ForceAliasCreation: true,
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
+        ...other,
+        Attributes: attributesAppend(
+          other.Attributes,
+          attribute("email_verified", "false"),
+        ),
+        UserLastModifiedDate: clock.get(),
+      });
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          Username: pending.Username,
+          UserStatus: "CONFIRMED",
+        }),
+      );
+    });
+
+    it("confirms when the other user's email is not verified", async () => {
+      const unverifiedOther = TDB.user({
+        Username: "other",
+        Attributes: [attribute("email", email)],
+      });
+      mockUserPoolService.listUsers.mockResolvedValue([
+        unverifiedOther,
+        pending,
+      ]);
+
+      await confirmSignUp(TestContext, {
+        ClientId: "clientId",
+        Username: pending.Username,
+        ConfirmationCode: "456789",
+      });
+
+      expect(mockUserPoolService.saveUser).toHaveBeenCalledTimes(1);
     });
   });
 });

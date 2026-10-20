@@ -4,6 +4,10 @@ import type {
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
+import {
+  aliasAttributesTouchedBy,
+  enforceAliasUniqueness,
+} from "../services/aliases";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
@@ -81,6 +85,7 @@ export const AdminUpdateUserAttributes =
         userPool.options.SchemaAttributes ??
           USER_POOL_AWS_DEFAULTS.SchemaAttributes ??
           [],
+        { admin: true },
       ),
     );
 
@@ -89,6 +94,15 @@ export const AdminUpdateUserAttributes =
       Attributes: attributesAppend(user.Attributes, ...userAttributesToSet),
       UserLastModifiedDate: clock.get(),
     };
+
+    await enforceAliasUniqueness(
+      ctx,
+      userPool,
+      clock,
+      updatedUser.Username,
+      updatedUser.Attributes,
+      { attributeNames: aliasAttributesTouchedBy(req.UserAttributes) },
+    );
 
     await userPool.saveUser(ctx, updatedUser);
 

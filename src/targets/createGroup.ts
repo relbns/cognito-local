@@ -2,6 +2,7 @@ import type {
   CreateGroupRequest,
   CreateGroupResponse,
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import { GroupExistsError } from "../errors";
 import type { Services } from "../services";
 import type { Group } from "../services/userPoolService";
 import { groupToResponseObject } from "./responses";
@@ -15,6 +16,9 @@ export const CreateGroup =
   ({ cognito, clock }: CreateGroupServices): CreateGroupTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
+    if (await userPool.getGroupByGroupName(ctx, req.GroupName)) {
+      throw new GroupExistsError(req.GroupName);
+    }
 
     const now = clock.get();
     const group: Group = {

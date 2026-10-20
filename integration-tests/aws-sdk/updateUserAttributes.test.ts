@@ -31,7 +31,7 @@ describe(
           ],
           Username: "abc",
           UserPoolId: userPoolId,
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
         })
         .promise();
 
@@ -39,7 +39,7 @@ describe(
         .adminSetUserPassword({
           UserPoolId: userPoolId,
           Username: "abc",
-          Password: "def",
+          Password: "def-Aa1!",
           Permanent: true,
         })
         .promise();
@@ -50,7 +50,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "def",
+            PASSWORD: "def-Aa1!",
           },
           ClientId: upc.UserPoolClient?.ClientId as string,
         })
@@ -95,7 +95,7 @@ describe(
     it("delays updating a user's attributes when they're in AttributesRequireVerificationBeforeUpdate until verification is complete", async () => {
       const originalEmail = "example@example.com";
       const newEmail = "new@example.com";
-      const password = "abcdef";
+      const password = "abcdef-Aa1";
 
       const client = Cognito();
 

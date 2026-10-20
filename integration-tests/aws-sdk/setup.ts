@@ -7,7 +7,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { createServer } from "../../src";
 import { FakeMessageDeliveryService } from "../../src/__tests__/FakeMessageDeliveryService";
 import { MockLogger } from "../../src/__tests__/mockLogger";
-import { DefaultConfig } from "../../src/server/config";
+import { type Config, DefaultConfig } from "../../src/server/config";
 import { Router } from "../../src/server/Router";
 import {
   type Clock,
@@ -42,7 +42,13 @@ export const withCognitoSdk =
       logger = MockLogger as any,
       clock = new DateClock(),
       lambda,
-    }: { logger?: Logger; clock?: Clock; lambda?: () => Lambda } = {},
+      config = DefaultConfig,
+    }: {
+      logger?: Logger;
+      clock?: Clock;
+      lambda?: () => Lambda;
+      config?: Config;
+    } = {},
   ) =>
   () => {
     let dataDirectory: string;
@@ -78,7 +84,7 @@ export const withCognitoSdk =
         authSessions: new InMemoryAuthSessions(clock),
         clock,
         cognito: cognitoClient,
-        config: DefaultConfig,
+        config,
         messages: new MessagesService(triggers, fakeMessageDeliveryService),
         otp,
         triggers,

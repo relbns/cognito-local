@@ -17,6 +17,10 @@ export interface AuthSessionConfig {
   AuthSessionValidity: number;
 }
 
+export interface PasswordPolicyConfig {
+  Enforce: boolean;
+}
+
 export interface Config {
   LambdaClient: AWS.Lambda.ClientConfiguration;
   TriggerFunctions: FunctionConfig;
@@ -25,6 +29,7 @@ export interface Config {
   ServerConfig: ServerOptions;
   TokenConfig: TokenConfig;
   AuthSessionConfig: AuthSessionConfig;
+  PasswordPolicyConfig: PasswordPolicyConfig;
 }
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
@@ -47,6 +52,9 @@ export const DefaultConfig: Config = {
   },
   AuthSessionConfig: {
     AuthSessionValidity: DEFAULT_AUTH_SESSION_VALIDITY_MINUTES,
+  },
+  PasswordPolicyConfig: {
+    Enforce: true,
   },
   KMSConfig: {
     credentials: {

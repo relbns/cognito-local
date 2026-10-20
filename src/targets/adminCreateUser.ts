@@ -11,8 +11,10 @@ import {
   UsernameExistsError,
 } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
+import { enforceAliasUniqueness } from "../services/aliases";
 import type { Context } from "../services/context";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import {
   attributesInclude,
   attributeValue,
@@ -100,9 +102,17 @@ export const AdminCreateUser =
     clock,
     cognito,
     messages,
+    config,
   }: AdminCreateUserServices): AdminCreateUserTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
+    if (req.TemporaryPassword !== undefined) {
+      assertPasswordConformsToPolicy(
+        config,
+        userPool.options,
+        req.TemporaryPassword,
+      );
+    }
     const existingUser = await userPool.getUserByUsername(ctx, req.Username);
     const supressWelcomeMessage = req.MessageAction === "SUPPRESS";
 
@@ -132,7 +142,12 @@ export const AdminCreateUser =
         User: userToResponseObject(updatedUser),
       };
     } else if (existingUser) {
-      throw new UsernameExistsError();
+      throw new UsernameExistsError(
+        userPool.options.UsernameAttributes?.includes("email") &&
+          req.Username.includes("@")
+          ? "An account with the given email already exists."
+          : undefined,
+      );
     }
 
     const sub = uuid.v4();
@@ -173,12 +188,17 @@ export const AdminCreateUser =
       UserLastModifiedDate: now,
       RefreshTokens: [],
     };
+
+    await enforceAliasUniqueness(ctx, userPool, clock, username, attributes, {
+      forceAliasCreation: req.ForceAliasCreation,
+      usernameConflict: "UsernameExistsException",
+    });
+
     await userPool.saveUser(ctx, user);
 
     // TODO: should throw InvalidParameterException when a non-email is supplied as the Username when the pool has email as a UsernameAttribute
     // TODO: support MessageAction=="RESEND"
     // TODO: should generate a TemporaryPassword if one isn't set
-    // TODO: support ForceAliasCreation
     // TODO: support PreSignIn lambda and ValidationData
 
     if (!supressWelcomeMessage) {

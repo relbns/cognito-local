@@ -17,7 +17,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -79,7 +79,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "a@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -127,7 +127,7 @@ describe(
         await client
           .adminCreateUser({
             DesiredDeliveryMediums: ["EMAIL"],
-            TemporaryPassword: "def",
+            TemporaryPassword: "def-Aa1!",
             UserAttributes: [{ Name: "email", Value: "a@example.com" }],
             Username: "abc",
             UserPoolId: userPoolId,

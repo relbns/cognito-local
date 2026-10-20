@@ -8,6 +8,7 @@ import type { AppClient } from "./appClient";
 import type { Context } from "./context";
 import type { DataStore } from "./dataStore/dataStore";
 import type { DataStoreFactory } from "./dataStore/factory";
+import { AWS_DEFAULT_PASSWORD_POLICY } from "./passwordPolicy";
 import type {
   UserPool,
   UserPoolService,
@@ -23,14 +24,7 @@ const CLIENTS_DATABASE_NAME = "clients";
 // and remove the Id, Arn, and Name from the response.
 export const USER_POOL_AWS_DEFAULTS: UserPoolDefaults = {
   Policies: {
-    PasswordPolicy: {
-      MinimumLength: 8,
-      RequireUppercase: true,
-      RequireLowercase: true,
-      RequireNumbers: true,
-      RequireSymbols: true,
-      TemporaryPasswordValidityDays: 7,
-    },
+    PasswordPolicy: { ...AWS_DEFAULT_PASSWORD_POLICY },
   },
   LambdaConfig: {},
   SchemaAttributes: [

@@ -9,6 +9,7 @@ import {
   NotAuthorizedError,
 } from "../errors";
 import type { Services } from "../services";
+import { enforceAliasUniqueness } from "../services/aliases";
 import type { Token } from "../services/tokenGenerator";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -50,31 +51,33 @@ export const VerifyUserAttribute =
       ...(user.UnverifiedAttributeChanges ?? []),
     ];
 
-    if (req.AttributeName === "email") {
-      await userPool.saveUser(ctx, {
-        ...user,
-        Attributes: attributesAppend(
-          attributesToUpdate,
-          attribute("email_verified", "true"),
-        ),
-        UserLastModifiedDate: clock.get(),
-        UnverifiedAttributeChanges: undefined,
-        AttributeVerificationCode: undefined,
-      });
-    } else if (req.AttributeName === "phone_number") {
-      await userPool.saveUser(ctx, {
-        ...user,
-        Attributes: attributesAppend(
-          attributesToUpdate,
-          attribute("phone_number_verified", "true"),
-        ),
-        UserLastModifiedDate: clock.get(),
-        UnverifiedAttributeChanges: undefined,
-        AttributeVerificationCode: undefined,
-      });
-    } else {
+    if (req.AttributeName !== "email" && req.AttributeName !== "phone_number") {
       // not sure what to do here
+      return {};
     }
+
+    const verifiedAttributes = attributesAppend(
+      attributesToUpdate,
+      attribute(`${req.AttributeName}_verified`, "true"),
+    );
+
+    // Verifying a value that is another user's verified alias moves the alias, without AliasExistsException.
+    await enforceAliasUniqueness(
+      ctx,
+      userPool,
+      clock,
+      user.Username,
+      verifiedAttributes,
+      { attributeNames: [req.AttributeName], forceAliasCreation: true },
+    );
+
+    await userPool.saveUser(ctx, {
+      ...user,
+      Attributes: verifiedAttributes,
+      UserLastModifiedDate: clock.get(),
+      UnverifiedAttributeChanges: undefined,
+      AttributeVerificationCode: undefined,
+    });
 
     return {};
   };

@@ -26,7 +26,7 @@ describe(
       await client
         .adminCreateUser({
           DesiredDeliveryMediums: ["EMAIL"],
-          TemporaryPassword: "def",
+          TemporaryPassword: "def-Aa1!",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
           UserPoolId: userPoolId,
@@ -35,7 +35,7 @@ describe(
 
       await client
         .adminSetUserPassword({
-          Password: "newPassword",
+          Password: "newPassword-Aa1",
           Permanent: true,
           Username: "abc",
           UserPoolId: userPoolId,
@@ -49,7 +49,7 @@ describe(
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: "abc",
-            PASSWORD: "newPassword",
+            PASSWORD: "newPassword-Aa1",
           },
         })
         .promise();

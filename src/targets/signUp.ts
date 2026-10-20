@@ -6,9 +6,11 @@ import type {
 import * as uuid from "uuid";
 import { InvalidParameterError, UsernameExistsError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
+import { enforceAliasUniqueness } from "../services/aliases";
 import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import {
   attribute,
   attributesAppend,
@@ -78,8 +80,20 @@ export const SignUp =
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
     const existingUser = await userPool.getUserByUsername(ctx, req.Username);
     if (existingUser) {
-      throw new UsernameExistsError();
+      throw new UsernameExistsError(
+        userPool.options.UsernameAttributes?.includes("email") &&
+          req.Username.includes("@")
+          ? "An account with the given email already exists."
+          : undefined,
+      );
     }
+
+    assertPasswordConformsToPolicy(
+      config,
+      userPool.options,
+      req.Password,
+      "signUp",
+    );
 
     const sub = uuid.v4();
     const attributes =
@@ -216,17 +230,27 @@ export const SignUp =
       UserStatus: userStatus,
     };
 
+    // PreSignUp auto-verification moves an existing alias instead of failing (pre sign-up trigger docs).
+    await enforceAliasUniqueness(ctx, userPool, clock, username, attributes, {
+      forceAliasCreation: true,
+      usernameConflict: "UsernameExistsException",
+    });
+
     const code = otp();
 
-    const deliveryDetails = await deliverWelcomeMessage(
-      ctx,
-      code,
-      req.ClientId,
-      updatedUser,
-      userPool,
-      messages,
-      req.ClientMetadata,
-    );
+    // An auto-confirmed user is not sent a confirmation code.
+    const deliveryDetails =
+      userStatus === "CONFIRMED"
+        ? null
+        : await deliverWelcomeMessage(
+            ctx,
+            code,
+            req.ClientId,
+            updatedUser,
+            userPool,
+            messages,
+            req.ClientMetadata,
+          );
 
     await userPool.saveUser(ctx, {
       ...updatedUser,

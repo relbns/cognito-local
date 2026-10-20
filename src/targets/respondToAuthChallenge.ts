@@ -16,6 +16,7 @@ import {
   isCustomAuthSession,
   respondToCustomAuthChallenge,
 } from "../services/customAuth";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verify as verifyTotp } from "../services/totp";
 import {
   attributeValue,
@@ -38,7 +39,8 @@ type RespondToAuthChallengeService = Pick<
   | "otp"
   | "triggers"
   | "tokenGenerator"
->;
+> &
+  Partial<Pick<Services, "config">>;
 
 const sendSmsMfaChallenge = async (
   ctx: Parameters<RespondToAuthChallengeTarget>[0],
@@ -200,7 +202,12 @@ export const RespondToAuthChallenge =
         );
       }
 
-      // TODO: validate the password?
+      assertPasswordConformsToPolicy(
+        services.config,
+        userPool.options,
+        req.ChallengeResponses.NEW_PASSWORD,
+      );
+
       await userPool.saveUser(ctx, {
         ...user,
         Password: req.ChallengeResponses.NEW_PASSWORD,

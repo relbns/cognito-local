@@ -4,6 +4,7 @@ import type {
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import type { Target } from "./Target";
 
 export type AdminSetUserPasswordTarget = Target<
@@ -11,12 +12,14 @@ export type AdminSetUserPasswordTarget = Target<
   AdminSetUserPasswordResponse
 >;
 
-type AdminSetUserPasswordServices = Pick<Services, "clock" | "cognito">;
+type AdminSetUserPasswordServices = Pick<Services, "clock" | "cognito"> &
+  Partial<Pick<Services, "config">>;
 
 export const AdminSetUserPassword =
   ({
     cognito,
     clock,
+    config,
   }: AdminSetUserPasswordServices): AdminSetUserPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
@@ -24,6 +27,8 @@ export const AdminSetUserPassword =
     if (!user) {
       throw new UserNotFoundError("User does not exist");
     }
+
+    assertPasswordConformsToPolicy(config, userPool.options, req.Password);
 
     await userPool.saveUser(ctx, {
       ...user,

@@ -6,6 +6,7 @@ import type {
 import shortUUID from "short-uuid";
 import type { Services } from "../services";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
+import { normalizePasswordPolicy } from "../services/passwordPolicy";
 import { userPoolToResponseObject } from "./responses";
 import type { Target } from "./Target";
 
@@ -96,7 +97,10 @@ export const CreateUserPool =
       LastModifiedDate: now,
       MfaConfiguration: req.MfaConfiguration,
       Name: req.PoolName,
-      Policies: req.Policies,
+      Policies: req.Policies && {
+        ...req.Policies,
+        PasswordPolicy: normalizePasswordPolicy(req.Policies.PasswordPolicy),
+      },
       SchemaAttributes: createSchemaAttributes(
         USER_POOL_AWS_DEFAULTS.SchemaAttributes ?? [],
         req.Schema ?? [],

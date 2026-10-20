@@ -9,6 +9,7 @@ import {
   NotAuthorizedError,
 } from "../errors";
 import type { Services } from "../services";
+import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import type { Token } from "../services/tokenGenerator";
 import type { Target } from "./Target";
 
@@ -17,10 +18,11 @@ export type ChangePasswordTarget = Target<
   ChangePasswordResponse
 >;
 
-type ChangePasswordServices = Pick<Services, "cognito" | "clock">;
+type ChangePasswordServices = Pick<Services, "cognito" | "clock"> &
+  Partial<Pick<Services, "config">>;
 
 export const ChangePassword =
-  ({ cognito, clock }: ChangePasswordServices): ChangePasswordTarget =>
+  ({ cognito, clock, config }: ChangePasswordServices): ChangePasswordTarget =>
   async (ctx, req) => {
     const decodedToken = jwt.decode(req.AccessToken) as Token | null;
     if (!decodedToken) {
@@ -40,6 +42,12 @@ export const ChangePassword =
     if (req.PreviousPassword !== user.Password) {
       throw new InvalidPasswordError();
     }
+
+    assertPasswordConformsToPolicy(
+      config,
+      userPool.options,
+      req.ProposedPassword,
+    );
 
     await userPool.saveUser(ctx, {
       ...user,
