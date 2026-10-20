@@ -110,7 +110,11 @@ describe("decideAuthorize", () => {
         client,
         providers,
       ),
-    ).toEqual({ kind: "federated", providerName: "Google" });
+    ).toMatchObject({
+      kind: "federated",
+      providerName: "Google",
+      responseType: "code",
+    });
   });
 
   it("resolves idp_identifier through IdpIdentifiers", () => {
@@ -121,7 +125,7 @@ describe("decideAuthorize", () => {
         withExampleSaml,
         providers,
       ),
-    ).toEqual({ kind: "federated", providerName: "examplesaml" });
+    ).toMatchObject({ kind: "federated", providerName: "examplesaml" });
   });
 });
 

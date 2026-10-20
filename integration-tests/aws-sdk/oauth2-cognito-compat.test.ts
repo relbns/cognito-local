@@ -214,7 +214,7 @@ describe(
       expect(location.searchParams.get("state")).toBe("s1");
     });
 
-    it("shows the login for identity_provider=COGNITO and 501 for a federated IdP", async () => {
+    it("shows the login for identity_provider=COGNITO and the mock IdP for a federated IdP", async () => {
       const { clientId } = await setup();
       const cognito = await fetch(
         backendAuthorizeUrl(
@@ -234,8 +234,10 @@ describe(
         ),
         { redirect: "manual" },
       );
-      expect(federated.status).toBe(501);
-      expect(await federated.text()).toContain("examplesaml");
+      expect(federated.status).toBe(302);
+      expect(federated.headers.get("location")).toMatch(
+        /^\/mock-idp\/examplesaml\/authorize\?/,
+      );
     });
 
     it("returns implicit-grant tokens in the URL fragment", async () => {

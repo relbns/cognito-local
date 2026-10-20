@@ -329,7 +329,7 @@ export class LambdaService implements Lambda {
 
         if (parsedPayload.errorMessage) {
           throw new UserLambdaValidationError(
-            `${functionName} failed with error ${parsedPayload.errorMessage}.`,
+            `${trigger} failed with error ${parsedPayload.errorMessage}.`,
           );
         }
       }

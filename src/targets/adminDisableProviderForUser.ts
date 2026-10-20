@@ -64,9 +64,20 @@ export const AdminDisableProviderForUser =
       ),
     );
 
+    const attributeName = req.User?.ProviderAttributeName;
+    const links = (user.ProviderLinks ?? []).filter(
+      (link) =>
+        !(
+          link.providerName === providerName &&
+          link.attributeValue === providerValue &&
+          (!attributeName || link.attributeName === attributeName)
+        ),
+    );
+
     await userPool.saveUser(ctx, {
       ...user,
       Attributes: updatedAttributes,
+      ProviderLinks: user.ProviderLinks ? links : undefined,
       UserLastModifiedDate: clock.get(),
     });
 

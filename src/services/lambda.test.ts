@@ -181,7 +181,7 @@ describe("Lambda function invoker", () => {
           }),
         ).rejects.toEqual(
           new UserLambdaValidationError(
-            "MyLambdaName failed with error Something bad in Userland.",
+            "UserMigration failed with error Something bad in Userland.",
           ),
         );
       });
