@@ -102,9 +102,6 @@ These apply to every SDK, since they are server behaviour:
 - **`USER_AUTH` does not offer `WEB_AUTHN`**, and does not take the `SESSION` parameter that signs a
   user in after ConfirmSignUp. `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP` and `SMS_OTP` work.
 - **`CUSTOM_AUTH` ignores devices.** It returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
-- **Request parameters are not validated against the API model.** A missing required parameter
-  yields whatever the handler does next (for example `UserNotFoundException` for `AdminGetUser`
-  without `Username`) instead of `InvalidParameterException`.
 - **The default pool uses email as the username** (`UserPoolDefaults.UsernameAttributes:
   ["email"]`), where Cognito defaults to free-form usernames. Pass `UsernameAttributes: []` to
   `CreateUserPool`, or set the default in `.cognito/config.json`.

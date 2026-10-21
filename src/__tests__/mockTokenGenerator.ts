@@ -9,4 +9,9 @@ export const newMockTokenGenerator = (): MockedObject<TokenGenerator> => ({
     ExpiresIn: 3600,
     TokenType: "Bearer",
   }),
+  generateClientCredentials: vi.fn().mockResolvedValue({
+    AccessToken: "access",
+    ExpiresIn: 3600,
+    TokenType: "Bearer",
+  }),
 });

@@ -13,6 +13,7 @@ export interface AuthorizeParams {
   code_challenge_method?: string;
   identity_provider?: string;
   idp_identifier?: string;
+  prompt?: string;
 }
 
 export interface FederatedProvider {
@@ -36,6 +37,10 @@ export type AuthorizeDecision =
   | { kind: "redirectError"; error: string; description: string }
   | (FederatedTarget & AuthorizeFlow)
   | ({ kind: "login" } & AuthorizeFlow);
+
+/** The space-separated values of the OIDC prompt parameter. */
+export const parsePrompt = (prompt: unknown): string[] =>
+  typeof prompt === "string" ? prompt.split(/[\s+]+/).filter(Boolean) : [];
 
 export const parseScopes = (scope: string | undefined): string[] => [
   ...new Set((scope ?? "").split(/[\s+]+/).filter(Boolean)),
@@ -195,7 +200,7 @@ export function buildErrorRedirect(
 ): string {
   const url = new URL(redirectUri);
   url.searchParams.set("error", error);
-  url.searchParams.set("error_description", description);
+  if (description) url.searchParams.set("error_description", description);
   if (state) url.searchParams.set("state", state);
   return url.toString();
 }
@@ -238,3 +243,80 @@ export const isClientAuthenticated = (
   presentedSecret: string | undefined,
 ): boolean =>
   !appClient.ClientSecret || presentedSecret === appClient.ClientSecret;
+
+export interface ResourceServerScopes {
+  Identifier?: string;
+  Scopes?: readonly { ScopeName?: string }[];
+}
+
+export type ClientCredentialsDecision =
+  | { kind: "grant"; scopes: string[] }
+  | {
+      kind: "error";
+      error: "unauthorized_client" | "invalid_scope" | "invalid_grant";
+    };
+
+const customScopesOf = (
+  resourceServers: readonly ResourceServerScopes[],
+): Set<string> =>
+  new Set(
+    resourceServers.flatMap((server) =>
+      (server.Scopes ?? []).map((s) => `${server.Identifier}/${s.ScopeName}`),
+    ),
+  );
+
+/** client_credentials checks after client authentication: the flow, then the custom scopes. */
+export function decideClientCredentials(
+  appClient: Pick<
+    AppClient,
+    | "AllowedOAuthFlows"
+    | "AllowedOAuthFlowsUserPoolClient"
+    | "AllowedOAuthScopes"
+  >,
+  scope: string | undefined,
+  resourceServers: readonly ResourceServerScopes[],
+): ClientCredentialsDecision {
+  if (
+    appClient.AllowedOAuthFlowsUserPoolClient !== true ||
+    !(appClient.AllowedOAuthFlows ?? []).includes("client_credentials")
+  ) {
+    return { kind: "error", error: "unauthorized_client" };
+  }
+  const custom = customScopesOf(resourceServers);
+  const allowed = appClient.AllowedOAuthScopes ?? [];
+  const requested = parseScopes(scope);
+  if (requested.length === 0) {
+    const scopes = allowed.filter((s) => custom.has(s));
+    return scopes.length
+      ? { kind: "grant", scopes }
+      : { kind: "error", error: "invalid_scope" };
+  }
+  if (requested.some((s) => !custom.has(s))) {
+    return { kind: "error", error: "invalid_scope" };
+  }
+  if (requested.some((s) => !allowed.includes(s))) {
+    return { kind: "error", error: "invalid_grant" };
+  }
+  return { kind: "grant", scopes: requested };
+}
+
+/** aws_client_metadata: a URL-encoded JSON object of strings for the pre token generation trigger. */
+export function parseClientMetadata(
+  value: string | undefined,
+): Record<string, string> | undefined | null {
+  if (value === undefined || value === "") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return Object.fromEntries(
+      Object.entries(parsed).map(([k, v]) => [
+        k,
+        typeof v === "string" ? v : JSON.stringify(v),
+      ]),
+    );
+  } catch {
+    return null;
+  }
+}

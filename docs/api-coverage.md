@@ -49,14 +49,15 @@ ConfirmForgotPassword, AdminResetUserPassword, GlobalSignOut, AdminUserGlobalSig
 | `USER_PASSWORD_AUTH` | InitiateAuth | Checks the password. Runs UserMigration for an unknown user. |
 | `ADMIN_USER_PASSWORD_AUTH`, `ADMIN_NO_SRP_AUTH` | AdminInitiateAuth | Checks the password. Runs UserMigration for an unknown user. |
 | `USER_SRP_AUTH` | both | Runs Cognito's SRP-6a (3072-bit group, `g` = 2, SHA-256) against a verifier derived from the stored password, so the same client code that signs in to Cognito works. The `PASSWORD_VERIFIER` response is checked against `PASSWORD_CLAIM_SIGNATURE`, and a wrong password returns `NotAuthorizedException` ("Incorrect username or password."). The server state behind `SECRET_BLOCK` is in memory, can be used once, and expires after the client's `AuthSessionValidity`, so a restart invalidates a pending challenge. `Session` is optional on that response. |
-| `REFRESH_TOKEN_AUTH`, `REFRESH_TOKEN` | both | Verifies the refresh token and returns new access and ID tokens. No new refresh token is issued. |
+| `REFRESH_TOKEN_AUTH`, `REFRESH_TOKEN` | both | Verifies the refresh token and returns new access and ID tokens. No new refresh token is issued. A client with refresh token rotation refuses the flow with `InvalidParameterException`. |
 | `CUSTOM_AUTH` | both | Runs DefineAuthChallenge, CreateAuthChallenge and VerifyAuthChallengeResponse over several rounds, keeps the challenge history, issues a new `Session` after a wrong answer, and accepts `SRP_A` + `PASSWORD_VERIFIER` before the custom challenge, checking the password as `USER_SRP_AUTH` does: a wrong one ends the sign-in with `NotAuthorizedException` before DefineAuthChallenge runs again. Sessions are in memory and expire after the client's `AuthSessionValidity`. |
 | `USER_AUTH` | both | Choice-based sign-in. Needs `ALLOW_USER_AUTH` in the client's `ExplicitAuthFlows` (a client without `ExplicitAuthFlows` has Cognito's defaults, which leave it out), otherwise `InvalidParameterException` ("USER_AUTH flow not enabled for this client"). The factors are `PASSWORD` and `PASSWORD_SRP` for a user with a password, plus `EMAIL_OTP` and `SMS_OTP` when the pool's `Policies.SignInPolicy.AllowedFirstAuthFactors` lists them, the user has an `email` or `phone_number`, and the user does not have to pass MFA. An available `PREFERRED_CHALLENGE` starts at once: `PASSWORD` with `PASSWORD`, `PASSWORD_SRP` with `SRP_A` (answered by `PASSWORD_VERIFIER`), or a one-time code sent through message delivery. Otherwise the response is `SELECT_CHALLENGE` with `AvailableChallenges`. `WEB_AUTHN` is never offered. |
 
 Every flow refuses a disabled user with `NotAuthorizedException` ("User is disabled."). The password
 flows check the password first, so a wrong password still returns "Incorrect username or password.".
 A `FORCE_CHANGE_PASSWORD` user gets the `NEW_PASSWORD_REQUIRED` challenge only after the temporary
-password matches, before MFA.
+password matches, before MFA. In the password, SRP and `USER_AUTH` flows a `RESET_REQUIRED` user
+(migrated or imported) gets `PasswordResetRequiredException` before any password is checked.
 
 RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`,
 `SELECT_CHALLENGE`, `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP`, `SMS_MFA`,
@@ -84,7 +85,9 @@ RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`
   emulator did not issue.
 - When the pool tracks devices, see [Devices](#devices), sign-in returns `NewDeviceMetadata` unless
   the request carried a `DEVICE_KEY`, and a remembered device answers `DEVICE_SRP_AUTH`.
-- GetTokensFromRefreshToken returns access and ID tokens only.
+- GetTokensFromRefreshToken returns access and ID tokens, and a new refresh token when the client
+  has `RefreshTokenRotation` enabled (see [tokens.md](tokens.md#refresh-token-rotation)). Its
+  `ClientMetadata` reaches the pre token generation trigger.
 - GlobalSignOut, AdminUserGlobalSignOut and RevokeToken revoke tokens as described in
   [tokens.md](tokens.md#revocation).
 
@@ -111,6 +114,8 @@ DeleteUserAttributes, GetUserAttributeVerificationCode, VerifyUserAttribute, Set
 - AdminDisableUser revokes the user's tokens.
 - Every `Admin*` operation that takes a `Username` returns `UserNotFoundException` ("User does not
   exist.") when no user matches.
+- GetUser returns only the attributes in the token's app client `ReadAttributes`, plus `sub`, when the
+  client sets them (see [tokens.md](tokens.md#readattributes)).
 
 ## Groups
 
@@ -128,6 +133,8 @@ CreateUserPoolClient, DescribeUserPoolClient, UpdateUserPoolClient, DeleteUserPo
 ListUserPoolClients, AddCustomAttributes, AddUserPoolClientSecret, DeleteUserPoolClientSecret,
 ListUserPoolClientSecrets.
 
+- Clients store `RefreshTokenRotation`; `RetryGracePeriodSeconds` above 60, below 0 or a `Feature`
+  other than `ENABLED` or `DISABLED` returns `InvalidParameterException`.
 - A client has at most one secret. AddUserPoolClientSecret replaces it, and ListUserPoolClientSecrets
   returns that one secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the
@@ -261,13 +268,14 @@ ListUserPoolClientSecrets return everything in one response.
 
 | Endpoint | Method | Behaviour |
 | --- | --- | --- |
-| `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. |
-| `/oauth2/token` | POST | `authorization_code` and `refresh_token` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` returns `unsupported_grant_type`. |
-| `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token. |
+| `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form, or issues the code at once when the browser has a session for the pool. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. `prompt=login` always shows the form, and `prompt=none` uses the session or redirects with `error=login_required`. |
+| `/login` | GET | The same as `/oauth2/authorize`; `/logout` sends the browser here. |
+| `/oauth2/token` | POST | `authorization_code`, `refresh_token` and `client_credentials` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` issues an M2M access token for custom scopes (see [tokens.md](tokens.md#client-credentials)). |
+| `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token, limited to the app client's `ReadAttributes` when it sets them. |
 | `/oauth2/revoke` | POST | Revokes a refresh token and the access tokens issued from it. |
-| `/logout` | GET | Takes `client_id` and `logout_uri` and redirects to `logout_uri` when it is one of the client's `LogoutURLs`. The `redirect_uri` + `response_type` form is not supported. |
+| `/logout` | GET | Ends the browser session for the client's pool, then redirects to `logout_uri` when it is one of the client's `LogoutURLs`, or, with `redirect_uri` (one of the `CallbackURLs`) and `response_type`, to `/login` with `client_id`, `response_type`, `redirect_uri`, `state`, `scope` and `nonce`. `logout_uri` wins when both are sent. An unregistered URL answers HTTP 400 `redirect_mismatch` and keeps the session. |
 | `/{poolId}/.well-known/jwks.json` | GET | JSON Web Key Set. Every pool uses the same signing key. |
-| `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`. |
+| `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`, or on the request's scheme and `Host` header with `TokenConfig.IssuerFromRequest`. |
 | `/oauth2/idpresponse` | GET, POST | Return leg of a federated sign-in. |
 
 The built-in login form checks the password, then follows the user's state:
@@ -288,6 +296,14 @@ scope and state come from the server, not from the page. The form has no sign-up
 pages. PreAuthentication runs before the password is checked, and an error it throws is shown on the
 form.
 
+A sign-in through the form or a federated provider sets a `cognito` cookie (HttpOnly, `SameSite=Lax`,
+`Path=/`) for one hour, as Cognito's managed login does. While it is valid, `/oauth2/authorize` for
+any app client of the same pool issues the code or tokens without the form and without running
+PostAuthentication. A disabled or deleted user's session is ignored. A new sign-in, including after
+`prompt=login`, gives a new cookie. Sessions are kept in memory, so a restart ends them, and one
+cookie holds the sessions of every pool on the emulator, where Cognito gives each pool its own
+domain.
+
 The emulator also serves `/mock-idp/{providerName}/authorize` (the [mock IdP](federation.md) form),
 `/health`, and the admin UI and its API under `/_admin` (see [oauth-callback.md](oauth-callback.md)
 for `/_admin/callback`).
@@ -303,7 +319,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
 | PreAuthentication | Every sign-in attempt before the password or challenge is checked: InitiateAuth and AdminInitiateAuth with a password, SRP, `CUSTOM_AUTH` or `USER_AUTH` (once, before any factor is chosen), and the built-in login form (`PreAuthentication_Authentication`). `validationData` is the request's `ClientMetadata`. An unknown user triggers it only when the app client has `PreventUserExistenceErrors: ENABLED`, with `userNotFound: true`. A thrown error fails the sign-in with `UserLambdaValidationException` ("PreAuthentication failed with error ..."). Refresh-token and federated sign-ins do not run it. |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
-| PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
+| PreTokenGeneration | Every token issue. Sends the event version set in `PreTokenGenerationConfig.LambdaVersion` (`V1_0`, `V2_0`, `V3_0`) with the user's groups and roles; version 2 and 3 responses customize the ID token, the access token and its scopes. See [tokens.md](tokens.md#pre-token-generation). |
 | UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. The forgot-password flow does not run it. |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA, and the `EMAIL_OTP` and `SMS_OTP` codes of `USER_AUTH` |

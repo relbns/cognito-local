@@ -12,7 +12,11 @@ import type { Clock } from "./clock";
 import type { CognitoService } from "./cognitoService";
 import type { Context } from "./context";
 import type { TokenConfig } from "./tokenGenerator";
-import { epochSeconds, isTokenOriginActive } from "./tokenRevocation";
+import {
+  epochSeconds,
+  isRefreshTokenRetired,
+  isTokenOriginActive,
+} from "./tokenRevocation";
 import {
   attributeValue,
   type User,
@@ -43,6 +47,8 @@ export interface VerifiedAccessToken {
 }
 
 export interface VerifiedRefreshToken {
+  /** The refresh token as sent, which rotation retires. */
+  token: string;
   claims: RefreshTokenClaims;
   user: User;
   userPool: UserPoolService;
@@ -154,6 +160,23 @@ const signatureValid = (token: string): boolean => {
   }
 };
 
+/** An issuer built from a request host: `http(s)://<host>/<poolId>` and nothing else. */
+export const isRequestIssuerFor = (iss: string, poolId: string): boolean => {
+  try {
+    const url = new URL(iss);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.pathname === `/${poolId}` &&
+      !url.search &&
+      !url.hash &&
+      !url.username &&
+      iss === `${url.origin}/${poolId}`
+    );
+  } catch {
+    return false;
+  }
+};
+
 const sameSubject = (user: User, sub: unknown): boolean => {
   const userSub = attributeValue("sub", user.Attributes);
   return !userSub || typeof sub !== "string" || userSub === sub;
@@ -178,8 +201,14 @@ export class JwtTokenVerifier implements TokenVerifier {
     return this.tokenConfig.Verify !== false;
   }
 
-  private issuerFor(userPool: UserPoolService): string {
-    return `${this.tokenConfig.IssuerDomain}/${userPool.options.Id}`;
+  private issuedBy(iss: unknown, userPool: UserPoolService): boolean {
+    const poolId = userPool.options.Id;
+    if (iss === `${this.tokenConfig.IssuerDomain}/${poolId}`) return true;
+    return (
+      this.tokenConfig.IssuerFromRequest === true &&
+      typeof iss === "string" &&
+      isRequestIssuerFor(iss, poolId)
+    );
   }
 
   public async verifyAccessToken(
@@ -203,11 +232,17 @@ export class JwtTokenVerifier implements TokenVerifier {
       ctx,
       claims.client_id,
     );
-    if (claims.iss !== this.issuerFor(userPool)) throw invalid();
+    if (!this.issuedBy(claims.iss, userPool)) throw invalid();
 
     const now = this.clock.get();
     if (typeof claims.exp !== "number" || claims.exp <= epochSeconds(now)) {
       throw new NotAuthorizedError(TokenErrorMessages.expiredAccessToken);
+    }
+
+    if (claims.username === undefined && claims.sub === claims.client_id) {
+      throw requireAdminScope
+        ? new NotAuthorizedError(TokenErrorMessages.missingScope)
+        : invalid();
     }
 
     const user = await userPool.getUserByUsername(
@@ -264,9 +299,10 @@ export class JwtTokenVerifier implements TokenVerifier {
       const user = token
         ? await userPool.getUserByRefreshToken(ctx, token)
         : null;
-      if (!user) throw new NotAuthorizedError();
+      if (!user || !token) throw new NotAuthorizedError();
       return {
-        claims: (decodeObject(token ?? "") ?? {}) as RefreshTokenClaims,
+        token,
+        claims: (decodeObject(token) ?? {}) as RefreshTokenClaims,
         user,
         userPool,
       };
@@ -279,7 +315,7 @@ export class JwtTokenVerifier implements TokenVerifier {
     if (
       claims.token_use !== undefined ||
       typeof claims["cognito:username"] !== "string" ||
-      claims.iss !== this.issuerFor(userPool) ||
+      !this.issuedBy(claims.iss, userPool) ||
       (claims.client_id !== undefined && claims.client_id !== clientId)
     ) {
       throw invalid();
@@ -302,11 +338,14 @@ export class JwtTokenVerifier implements TokenVerifier {
     if (!user.Enabled) {
       throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
     }
-    if (!(user.RefreshTokens ?? []).includes(token)) {
+    if (
+      !(user.RefreshTokens ?? []).includes(token) ||
+      isRefreshTokenRetired(user, token, this.clock.get())
+    ) {
       throw new NotAuthorizedError(TokenErrorMessages.revokedRefreshToken);
     }
 
-    return { claims: claims as RefreshTokenClaims, user, userPool };
+    return { token, claims: claims as RefreshTokenClaims, user, userPool };
   }
 
   public verifySecretHash(

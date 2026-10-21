@@ -905,6 +905,38 @@ describe("InitiateAuth target", () => {
     });
   });
 
+  it("refuses REFRESH_TOKEN_AUTH when the client rotates refresh tokens", async () => {
+    const cognito = newMockCognitoService(mockUserPoolService);
+    cognito.getAppClient.mockResolvedValue({
+      ...userPoolClient,
+      RefreshTokenRotation: { Feature: "ENABLED" },
+    });
+    const target = InitiateAuth({
+      authSessions,
+      cognito,
+      messages: mockMessages,
+      otp: mockOtp,
+      srpSessions,
+      triggers: mockTriggers,
+      tokenGenerator: mockTokenGenerator,
+      tokenVerifier: mockTokenVerifier,
+      clock,
+    });
+
+    await expect(
+      target(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        AuthFlow: "REFRESH_TOKEN_AUTH",
+        AuthParameters: { REFRESH_TOKEN: "refresh token" },
+      }),
+    ).rejects.toEqual(
+      new InvalidParameterError(
+        "REFRESH_TOKEN_AUTH flow not enabled for this client",
+      ),
+    );
+    expect(mockTokenVerifier.verifyRefreshToken).not.toHaveBeenCalled();
+  });
+
   describe("REFRESH_TOKEN_AUTH auth flow", () => {
     const existingUser = TDB.user({
       RefreshTokens: ["refresh token"],
@@ -915,6 +947,7 @@ describe("InitiateAuth target", () => {
 
     beforeEach(() => {
       mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+        token: "refresh token",
         claims: { "cognito:username": existingUser.Username, jti: "origin" },
         user: existingUser,
         userPool: mockUserPoolService,
@@ -956,6 +989,7 @@ describe("InitiateAuth target", () => {
     it("registers the session of a refresh token issued before sessions were tracked", async () => {
       const legacyUser = { ...existingUser, TokenOrigins: undefined };
       mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+        token: "refresh token",
         claims: {
           "cognito:username": legacyUser.Username,
           jti: "legacy",

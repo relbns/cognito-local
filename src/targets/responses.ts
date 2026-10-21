@@ -29,6 +29,7 @@ export const appClientToResponseObject = (
   LogoutURLs: appClient.LogoutURLs,
   PreventUserExistenceErrors: appClient.PreventUserExistenceErrors,
   ReadAttributes: appClient.ReadAttributes,
+  RefreshTokenRotation: appClient.RefreshTokenRotation,
   RefreshTokenValidity: appClient.RefreshTokenValidity,
   SupportedIdentityProviders: appClient.SupportedIdentityProviders,
   TokenValidityUnits: appClient.TokenValidityUnits,

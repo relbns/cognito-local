@@ -1,24 +1,33 @@
 import type { TimeUnitsType } from "@aws-sdk/client-cognito-identity-provider";
-import type { StringMap } from "aws-lambda/trigger/cognito-user-pool-trigger/_common";
-import type { GroupOverrideDetails } from "aws-lambda/trigger/cognito-user-pool-trigger/pre-token-generation";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import * as uuid from "uuid";
 import { InvalidParameterError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import { identitiesClaim } from "../oauth2/federation";
-import type { AppClient } from "./appClient";
+import { type AppClient, readableAttributes } from "./appClient";
 import type { Clock } from "./clock";
+import type { CognitoService } from "./cognitoService";
 import type { Context } from "./context";
+import type { Attribute } from "./sdkTypes";
+import {
+  applyGroupClaims,
+  applyPreTokenGenerationResponse,
+  type Claims,
+  groupConfigurationFor,
+} from "./tokenCustomization";
 import type { Triggers } from "./triggers";
 import {
   attributesToRecord,
   attributeValue,
   customAttributes,
+  type Group,
   type User,
 } from "./userPoolService";
 
 export interface TokenConfig {
   IssuerDomain?: string;
+  /** Issue tokens and discovery for `<scheme>://<Host header>` of each request instead of IssuerDomain. */
+  IssuerFromRequest?: boolean;
   /** Verify signature, expiry and revocation of tokens sent to the API; false decodes them unchecked. */
   Verify?: boolean;
   /** Require SECRET_HASH / ClientSecret from app clients that have a secret. */
@@ -38,32 +47,6 @@ export interface Token {
   origin_jti?: string;
   exp?: number;
 }
-
-interface TokenOverrides {
-  claimsToAddOrOverride?: StringMap | undefined;
-  claimsToSuppress?: string[] | undefined;
-  groupOverrideDetails?: GroupOverrideDetails | undefined;
-}
-
-const RESERVED_CLAIMS = [
-  "acr",
-  "amr",
-  "aud",
-  "at_hash",
-  "auth_time",
-  "azp",
-  "cognito:username",
-  "exp",
-  "iat",
-  "identities",
-  "iss",
-  "jti",
-  "nbf",
-  "nonce",
-  "origin_jti",
-  "sub",
-  "token_use",
-];
 
 type RawToken = Record<
   string,
@@ -88,46 +71,20 @@ const STANDARD_ID_TOKEN_CLAIMS = [
   "phone_number",
 ];
 
-function standardClaims(user: User): RawToken {
+function standardClaims(attributes: Attribute[]): RawToken {
   const claims: RawToken = {};
   for (const name of STANDARD_ID_TOKEN_CLAIMS) {
-    const value = attributeValue(name, user.Attributes);
+    const value = attributeValue(name, attributes);
     if (value !== undefined) claims[name] = value;
   }
-  const phoneVerified = attributeValue(
-    "phone_number_verified",
-    user.Attributes,
-  );
+  const phoneVerified = attributeValue("phone_number_verified", attributes);
   if (phoneVerified !== undefined) {
     claims.phone_number_verified = phoneVerified === "true";
   }
-  const address = attributeValue("address", user.Attributes);
+  const address = attributeValue("address", attributes);
   if (address !== undefined) claims.address = { formatted: address };
-  const identities = identitiesClaim(user.Attributes);
-  if (identities) claims.identities = identities;
   return claims;
 }
-
-const applyTokenOverrides = (
-  token: RawToken,
-  overrides: TokenOverrides,
-): RawToken => {
-  // TODO: support group overrides
-
-  const claimsToSuppress = (overrides?.claimsToSuppress ?? []).filter(
-    (claim) => !RESERVED_CLAIMS.includes(claim),
-  );
-
-  const claimsToOverride = Object.entries(
-    overrides?.claimsToAddOrOverride ?? [],
-  ).filter(([claim]) => !RESERVED_CLAIMS.includes(claim));
-
-  return Object.fromEntries(
-    [...Object.entries(token), ...claimsToOverride].filter(
-      ([claim]) => !claimsToSuppress.includes(claim),
-    ),
-  );
-};
 
 export interface Tokens {
   readonly AccessToken: string;
@@ -138,9 +95,17 @@ export interface Tokens {
   readonly TokenType: "Bearer";
 }
 
+export interface ClientCredentialsToken {
+  readonly AccessToken: string;
+  readonly ExpiresIn: number;
+  readonly TokenType: "Bearer";
+}
+
 export interface GenerateOptions {
   /** Reuse the session of an existing refresh token instead of starting a new one. */
   originJti?: string;
+  /** A rotated refresh token keeps the expiry (epoch seconds) of the one it replaces. */
+  refreshTokenExpiresAt?: number;
 }
 
 export interface TokenGenerator {
@@ -159,6 +124,13 @@ export interface TokenGenerator {
     scopes?: readonly string[],
     options?: GenerateOptions,
   ): Promise<Tokens>;
+  /** An access token for an app client (M2M): sub and client_id are the client id, no user claims. */
+  generateClientCredentials(
+    ctx: Context,
+    userPoolClient: AppClient,
+    scopes: readonly string[],
+    clientMetadata: Record<string, string> | undefined,
+  ): Promise<ClientCredentialsToken>;
 }
 
 const UNIT_SECONDS: Record<TimeUnitsType, number> = {
@@ -229,19 +201,51 @@ export const assertTokenValidity = (
   }
 };
 
+/** The groups of a user pool, for the role claims of ID tokens. */
+export type GroupLookup = (
+  ctx: Context,
+  userPoolId: string,
+) => Promise<readonly Group[]>;
+
+export const poolGroups =
+  (cognito: Pick<CognitoService, "getUserPool">): GroupLookup =>
+  async (ctx, userPoolId) =>
+    (await cognito.getUserPool(ctx, userPoolId)).listGroups(ctx);
+
 export class JwtTokenGenerator implements TokenGenerator {
   private readonly clock: Clock;
   private readonly triggers: Triggers;
   private readonly tokenConfig: TokenConfig;
+  private readonly groupLookup: GroupLookup | undefined;
 
   public constructor(
     clock: Clock,
     triggers: Triggers,
     tokenConfig: TokenConfig,
+    groupLookup?: GroupLookup,
   ) {
     this.clock = clock;
     this.triggers = triggers;
     this.tokenConfig = tokenConfig;
+    this.groupLookup = groupLookup;
+  }
+
+  private issuer(ctx: Context, userPoolId: string): string {
+    return `${ctx.issuerDomain ?? this.tokenConfig.IssuerDomain}/${userPoolId}`;
+  }
+
+  private async groupsOf(
+    ctx: Context,
+    userPoolId: string,
+    userGroups: readonly string[],
+  ): Promise<Pick<Group, "GroupName" | "RoleArn" | "Precedence">[]> {
+    const poolGroups = this.groupLookup
+      ? await this.groupLookup(ctx, userPoolId)
+      : [];
+    return userGroups.map(
+      (name) =>
+        poolGroups.find((g) => g.GroupName === name) ?? { GroupName: name },
+    );
   }
 
   public async generate(
@@ -278,49 +282,69 @@ export class JwtTokenGenerator implements TokenGenerator {
       token_use: "access",
       username: user.Username,
     };
-    let idToken: RawToken = {
-      ...standardClaims(user),
+    const readable = readableAttributes(userPoolClient, user.Attributes);
+    const email = attributeValue("email", readable);
+    const emailVerified = attributeValue("email_verified", readable);
+    const identities = identitiesClaim(user.Attributes);
+    const idToken: RawToken = {
+      ...standardClaims(readable),
+      ...(identities ? { identities } : {}),
       "cognito:username": user.Username,
       auth_time: authTime,
-      email: attributeValue("email", user.Attributes),
-      email_verified:
-        attributeValue("email_verified", user.Attributes) === "true",
+      ...(email !== undefined || !userPoolClient.ReadAttributes?.length
+        ? { email }
+        : {}),
+      ...(emailVerified !== undefined || !userPoolClient.ReadAttributes?.length
+        ? { email_verified: emailVerified === "true" }
+        : {}),
       event_id: eventId,
       iat: authTime,
       jti: uuid.v4(),
       origin_jti: originJti,
       sub,
       token_use: "id",
-      ...attributesToRecord(customAttributes(user.Attributes)),
+      ...attributesToRecord(customAttributes(readable)),
     };
 
-    if (userGroups.length) {
-      accessToken["cognito:groups"] = userGroups;
-      idToken["cognito:groups"] = userGroups;
-    }
+    const groupConfiguration = groupConfigurationFor(
+      await this.groupsOf(ctx, userPoolClient.UserPoolId, userGroups),
+    );
+    applyGroupClaims(idToken, accessToken, groupConfiguration);
 
+    let claims: { idToken: Claims; accessToken: Claims } = {
+      idToken,
+      accessToken,
+    };
     if (
       this.triggers.enabled("PreTokenGeneration", userPoolClient.UserPoolId)
     ) {
-      const result = await this.triggers.preTokenGeneration(ctx, {
+      const version =
+        this.triggers.preTokenGenerationVersion(userPoolClient.UserPoolId) ??
+        "1";
+      const response = await this.triggers.preTokenGeneration(ctx, {
         clientId: userPoolClient.ClientId,
         clientMetadata,
         source,
+        version,
         userAttributes: user.Attributes,
         username: user.Username,
-        groupConfiguration: {
-          // TODO: this should be populated from the user's groups
-          groupsToOverride: undefined,
-          iamRolesToOverride: undefined,
-          preferredRole: undefined,
-        },
+        groupConfiguration,
+        scopes: String(accessToken.scope).split(" "),
         userPoolId: userPoolClient.UserPoolId,
       });
-
-      idToken = applyTokenOverrides(idToken, result.claimsOverrideDetails);
+      const customized = applyPreTokenGenerationResponse(
+        version,
+        response,
+        claims,
+        userPoolClient.ClientId,
+      );
+      claims = {
+        idToken: customized.idToken ?? idToken,
+        accessToken: customized.accessToken,
+      };
     }
 
-    const issuer = `${this.tokenConfig.IssuerDomain}/${userPoolClient.UserPoolId}`;
+    const issuer = this.issuer(ctx, userPoolClient.UserPoolId);
 
     const accessTokenSeconds = tokenValiditySeconds(
       userPoolClient,
@@ -328,13 +352,13 @@ export class JwtTokenGenerator implements TokenGenerator {
     );
 
     return {
-      AccessToken: jwt.sign(accessToken, PrivateKey.pem, {
+      AccessToken: jwt.sign(claims.accessToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
         expiresIn: accessTokenSeconds,
         keyid: "CognitoLocal",
       } satisfies SignOptions),
-      IdToken: jwt.sign(idToken, PrivateKey.pem, {
+      IdToken: jwt.sign(claims.idToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
         expiresIn: tokenValiditySeconds(userPoolClient, "IdToken"),
@@ -350,16 +374,78 @@ export class JwtTokenGenerator implements TokenGenerator {
           iat: authTime,
           jti: originJti,
           ...(scopes?.length ? { scope: scopes.join(" ") } : {}),
+          ...(options.refreshTokenExpiresAt === undefined
+            ? {}
+            : { event_id: eventId, exp: options.refreshTokenExpiresAt }),
         },
         PrivateKey.pem,
         {
           algorithm: "RS256",
           issuer,
-          expiresIn: tokenValiditySeconds(userPoolClient, "RefreshToken"),
+          ...(options.refreshTokenExpiresAt === undefined
+            ? {
+                expiresIn: tokenValiditySeconds(userPoolClient, "RefreshToken"),
+              }
+            : {}),
           keyid: "CognitoLocal",
         } satisfies SignOptions,
       ),
       ExpiresIn: accessTokenSeconds,
+      TokenType: "Bearer",
+    };
+  }
+
+  public async generateClientCredentials(
+    ctx: Context,
+    userPoolClient: AppClient,
+    scopes: readonly string[],
+    clientMetadata: Record<string, string> | undefined,
+  ): Promise<ClientCredentialsToken> {
+    const now = Math.floor(this.clock.get().getTime() / 1000);
+    let accessToken: Claims = {
+      sub: userPoolClient.ClientId,
+      token_use: "access",
+      scope: scopes.join(" "),
+      auth_time: now,
+      iat: now,
+      version: 2,
+      jti: uuid.v4(),
+      client_id: userPoolClient.ClientId,
+    };
+
+    const userPoolId = userPoolClient.UserPoolId;
+    if (
+      this.triggers.enabled("PreTokenGeneration", userPoolId) &&
+      this.triggers.preTokenGenerationVersion(userPoolId) === "3"
+    ) {
+      const response = await this.triggers.preTokenGeneration(ctx, {
+        clientId: userPoolClient.ClientId,
+        clientMetadata,
+        source: "ClientCredentials",
+        version: "3",
+        userAttributes: [],
+        username: "ClientCredentials",
+        groupConfiguration: null,
+        scopes,
+        userPoolId,
+      });
+      accessToken = applyPreTokenGenerationResponse(
+        "3",
+        response,
+        { accessToken },
+        userPoolClient.ClientId,
+      ).accessToken;
+    }
+
+    const expiresIn = tokenValiditySeconds(userPoolClient, "AccessToken");
+    return {
+      AccessToken: jwt.sign(accessToken, PrivateKey.pem, {
+        algorithm: "RS256",
+        issuer: this.issuer(ctx, userPoolId),
+        expiresIn,
+        keyid: "CognitoLocal",
+      } satisfies SignOptions),
+      ExpiresIn: expiresIn,
       TokenType: "Bearer",
     };
   }

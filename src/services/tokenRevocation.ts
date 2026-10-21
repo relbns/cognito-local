@@ -82,9 +82,46 @@ export const withRefreshToken = (
   );
 };
 
+/** Adds the rotated refresh token and retires the one it replaces now, or after the grace period. */
+export const withRefreshTokenRotated = (
+  user: User,
+  previous: string,
+  next: string,
+  now: Date,
+  graceSeconds: number,
+): User => {
+  const nowSeconds = epochSeconds(now);
+  const withNext = withRefreshToken(user, next, now);
+  const periods = withNext.RefreshTokenGracePeriods ?? [];
+  const ended = new Set(
+    periods.filter((p) => p.ExpiresAt <= nowSeconds).map((p) => p.Token),
+  );
+  if (graceSeconds <= 0) ended.add(previous);
+  const kept = periods.filter((p) => !ended.has(p.Token));
+  const RefreshTokenGracePeriods =
+    graceSeconds > 0 && !kept.some((p) => p.Token === previous)
+      ? [...kept, { Token: previous, ExpiresAt: nowSeconds + graceSeconds }]
+      : kept;
+  return {
+    ...withNext,
+    RefreshTokens: withNext.RefreshTokens.filter((t) => !ended.has(t)),
+    RefreshTokenGracePeriods,
+  };
+};
+
+export const isRefreshTokenRetired = (
+  user: User,
+  refreshToken: string,
+  now: Date,
+): boolean =>
+  (user.RefreshTokenGracePeriods ?? []).some(
+    (p) => p.Token === refreshToken && p.ExpiresAt <= epochSeconds(now),
+  );
+
 export const withAllTokensRevoked = (user: User): User => ({
   ...user,
   RefreshTokens: [],
+  RefreshTokenGracePeriods: undefined,
   TokenOrigins: [],
 });
 
@@ -100,6 +137,9 @@ export const withRefreshTokenRevoked = (
   return {
     ...user,
     RefreshTokens: (user.RefreshTokens ?? []).filter((t) => t !== refreshToken),
+    RefreshTokenGracePeriods: user.RefreshTokenGracePeriods?.filter(
+      (p) => p.Token !== refreshToken,
+    ),
     TokenOrigins: (user.TokenOrigins ?? []).filter((o) => o.Jti !== originJti),
   };
 };

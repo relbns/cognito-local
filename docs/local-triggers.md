@@ -36,6 +36,19 @@ Or for every pool, in `<data>/config.json`:
   `VerifyAuthChallengeResponse`, `PreTokenGeneration`, `UserMigration`, `CustomMessage`,
   `CustomEmailSender`, `CustomSMSSender`).
 
+A `PreTokenGeneration` trigger receives the event version of the pool's
+`PreTokenGenerationConfig.LambdaVersion`, whether it is a `file:` target or a Lambda reached through
+`TriggerFunctions`:
+
+```json
+"LambdaConfig": {
+  "PreTokenGenerationConfig": { "LambdaArn": "file:./triggers/pre-token.js", "LambdaVersion": "V2_0" }
+}
+```
+
+A pool with only `PreTokenGeneration`, or with no `LambdaVersion`, gets version 1 events. See
+[tokens.md](tokens.md#pre-token-generation) for what each version can change.
+
 ## Modules and handlers
 
 - CommonJS (`.js` in a CommonJS package, `.cjs`) and ES modules (`.mjs`, or `.js` in a package with

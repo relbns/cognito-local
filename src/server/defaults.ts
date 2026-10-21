@@ -24,7 +24,7 @@ import { MessageDeliveryService } from "../services/messageDelivery/messageDeliv
 import type { MessageSender } from "../services/messageDelivery/messageSender";
 import { SmtpMessageSender } from "../services/messageDelivery/smtpMessageSender";
 import { otp } from "../services/otp";
-import { JwtTokenGenerator } from "../services/tokenGenerator";
+import { JwtTokenGenerator, poolGroups } from "../services/tokenGenerator";
 import { JwtTokenVerifier } from "../services/tokenVerifier";
 import { UserPoolServiceFactoryImpl } from "../services/userPoolService";
 import { type ConfigOverrides, loadConfig } from "./config";
@@ -146,7 +146,12 @@ export const createDefaultServices = async (
       clock,
       config.AuthSessionConfig.AuthSessionValidity,
     ),
-    tokenGenerator: new JwtTokenGenerator(clock, triggers, config.TokenConfig),
+    tokenGenerator: new JwtTokenGenerator(
+      clock,
+      triggers,
+      config.TokenConfig,
+      poolGroups(cognitoClient),
+    ),
     tokenVerifier: new JwtTokenVerifier(
       clock,
       cognitoClient,

@@ -4,7 +4,7 @@ import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { ResourceNotFoundError } from "../errors";
+import { InvalidParameterError, ResourceNotFoundError } from "../errors";
 import type { CognitoService, UserPoolService } from "../services";
 import {
   UpdateUserPoolClient,
@@ -99,6 +99,53 @@ describe("UpdateUserPoolClient target", () => {
       AuthSessionValidity: 12,
     });
     expect(changed.UserPoolClient?.AuthSessionValidity).toEqual(12);
+  });
+
+  it("updates RefreshTokenRotation and keeps it when omitted", async () => {
+    const existingAppClient = TDB.appClient({ UserPoolId: "test" });
+    mockCognitoService.getAppClient.mockResolvedValue(existingAppClient);
+
+    const changed = await updateUserPoolClient(TestContext, {
+      ClientId: existingAppClient.ClientId,
+      UserPoolId: existingAppClient.UserPoolId,
+      RefreshTokenRotation: { Feature: "ENABLED", RetryGracePeriodSeconds: 30 },
+    });
+    expect(changed.UserPoolClient?.RefreshTokenRotation).toEqual({
+      Feature: "ENABLED",
+      RetryGracePeriodSeconds: 30,
+    });
+
+    mockCognitoService.getAppClient.mockResolvedValue({
+      ...existingAppClient,
+      RefreshTokenRotation: { Feature: "ENABLED", RetryGracePeriodSeconds: 30 },
+    });
+    const kept = await updateUserPoolClient(TestContext, {
+      ClientId: existingAppClient.ClientId,
+      UserPoolId: existingAppClient.UserPoolId,
+    });
+    expect(kept.UserPoolClient?.RefreshTokenRotation?.Feature).toBe("ENABLED");
+  });
+
+  it.each([
+    [
+      { Feature: "ENABLED", RetryGracePeriodSeconds: 61 },
+      "1 validation error detected: Value '61' at 'refreshTokenRotation.retryGracePeriodSeconds' failed to satisfy constraint: Member must have value less than or equal to 60",
+    ],
+    [
+      { Feature: "ON", RetryGracePeriodSeconds: -1 },
+      "2 validation errors detected: Value 'ON' at 'refreshTokenRotation.feature' failed to satisfy constraint: Member must satisfy enum value set: [ENABLED, DISABLED]; Value '-1' at 'refreshTokenRotation.retryGracePeriodSeconds' failed to satisfy constraint: Member must have value greater than or equal to 0",
+    ],
+  ])("refuses RefreshTokenRotation %j", async (rotation, message) => {
+    const existingAppClient = TDB.appClient({ UserPoolId: "test" });
+    mockCognitoService.getAppClient.mockResolvedValue(existingAppClient);
+
+    await expect(
+      updateUserPoolClient(TestContext, {
+        ClientId: existingAppClient.ClientId,
+        UserPoolId: existingAppClient.UserPoolId,
+        RefreshTokenRotation: rotation as never,
+      }),
+    ).rejects.toEqual(new InvalidParameterError(message));
   });
 
   it("throws if the user pool client doesn't exist", async () => {

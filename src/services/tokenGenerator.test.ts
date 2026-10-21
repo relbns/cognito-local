@@ -179,6 +179,309 @@ describe("JwtTokenGenerator", () => {
     });
   });
 
+  describe("groups and event versions", () => {
+    const groups = [
+      TDB.group({ GroupName: "admins", RoleArn: "role-admins", Precedence: 1 }),
+      TDB.group({
+        GroupName: "readers",
+        RoleArn: "role-readers",
+        Precedence: 5,
+      }),
+    ];
+    let generator: TokenGenerator;
+
+    beforeEach(() => {
+      generator = new JwtTokenGenerator(
+        clock,
+        mockTriggers,
+        { IssuerDomain: "http://example.com" },
+        async () => groups,
+      );
+    });
+
+    it("puts the group roles in the ID token and the groups in both tokens", async () => {
+      mockTriggers.enabled.mockReturnValue(false);
+
+      const tokens = await generator.generate(
+        TestContext,
+        user,
+        ["admins", "readers"],
+        TDB.appClient(),
+        undefined,
+        "Authentication",
+      );
+
+      expect(jwt.decode(tokens.IdToken)).toMatchObject({
+        "cognito:groups": ["admins", "readers"],
+        "cognito:roles": ["role-admins", "role-readers"],
+        "cognito:preferred_role": "role-admins",
+      });
+      const access = jwt.decode(tokens.AccessToken) as Record<string, unknown>;
+      expect(access["cognito:groups"]).toEqual(["admins", "readers"]);
+      expect(access).not.toHaveProperty("cognito:roles");
+    });
+
+    it("sends the version, the group configuration and the scopes to the trigger", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "PreTokenGeneration",
+      );
+      mockTriggers.preTokenGenerationVersion.mockReturnValue("2");
+      mockTriggers.preTokenGeneration.mockResolvedValue({});
+      const client = TDB.appClient();
+
+      await generator.generate(
+        TestContext,
+        user,
+        ["admins"],
+        client,
+        { key: "value" },
+        "HostedAuth",
+        ["openid", "email"],
+      );
+
+      expect(mockTriggers.preTokenGenerationVersion).toHaveBeenCalledWith(
+        client.UserPoolId,
+      );
+      expect(mockTriggers.preTokenGeneration).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          version: "2",
+          source: "HostedAuth",
+          clientMetadata: { key: "value" },
+          scopes: ["openid", "email"],
+          groupConfiguration: {
+            groupsToOverride: ["admins"],
+            iamRolesToOverride: ["role-admins"],
+            preferredRole: "role-admins",
+          },
+        }),
+      );
+    });
+
+    it("applies a version 2 response to both tokens", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "PreTokenGeneration",
+      );
+      mockTriggers.preTokenGenerationVersion.mockReturnValue("2");
+      mockTriggers.preTokenGeneration.mockResolvedValue({
+        claimsAndScopeOverrideDetails: {
+          idTokenGeneration: { claimsToAddOrOverride: { tenant: "t1" } },
+          accessTokenGeneration: {
+            claimsToAddOrOverride: { tenant: { id: "t1" } },
+            scopesToAdd: ["example.test/read"],
+          },
+          groupOverrideDetails: { groupsToOverride: ["override"] },
+        },
+      });
+
+      const tokens = await generator.generate(
+        TestContext,
+        user,
+        ["admins"],
+        TDB.appClient(),
+        undefined,
+        "Authentication",
+      );
+
+      const id = jwt.decode(tokens.IdToken) as Record<string, unknown>;
+      expect(id).toMatchObject({
+        tenant: "t1",
+        "cognito:groups": ["override"],
+      });
+      expect(id).not.toHaveProperty("cognito:roles");
+      expect(jwt.decode(tokens.AccessToken)).toMatchObject({
+        tenant: { id: "t1" },
+        "cognito:groups": ["override"],
+        scope: "aws.cognito.signin.user.admin example.test/read",
+      });
+    });
+  });
+
+  it("keeps the expiry of a rotated refresh token and makes it unique", async () => {
+    mockTriggers.enabled.mockReturnValue(false);
+    const client = TDB.appClient();
+    const original = await tokenGenerator.generate(
+      TestContext,
+      user,
+      [],
+      client,
+      undefined,
+      "Authentication",
+    );
+    const originalClaims = jwt.decode(original.RefreshToken) as {
+      jti: string;
+      exp: number;
+    };
+
+    const rotated = await tokenGenerator.generate(
+      TestContext,
+      user,
+      [],
+      client,
+      undefined,
+      "RefreshTokens",
+      [],
+      {
+        originJti: originalClaims.jti,
+        refreshTokenExpiresAt: originalClaims.exp,
+      },
+    );
+
+    expect(rotated.RefreshToken).not.toEqual(original.RefreshToken);
+    expect(jwt.decode(rotated.RefreshToken)).toMatchObject({
+      jti: originalClaims.jti,
+      exp: originalClaims.exp,
+      event_id: expect.stringMatching(UUID),
+    });
+  });
+
+  describe("ReadAttributes", () => {
+    const reader = TDB.user({
+      Attributes: [
+        { Name: "sub", Value: "user-sub" },
+        { Name: "email", Value: "jane@example.test" },
+        { Name: "email_verified", Value: "true" },
+        { Name: "phone_number", Value: "+15555550100" },
+        { Name: "given_name", Value: "Jane" },
+        { Name: "custom:tier", Value: "gold" },
+        { Name: "custom:secret", Value: "s" },
+      ],
+    });
+    const idClaims = async (ReadAttributes?: string[]) => {
+      mockTriggers.enabled.mockReturnValue(false);
+      const tokens = await tokenGenerator.generate(
+        TestContext,
+        reader,
+        [],
+        TDB.appClient({ ReadAttributes }),
+        undefined,
+        "Authentication",
+      );
+      return jwt.decode(tokens.IdToken) as Record<string, unknown>;
+    };
+
+    it("puts every attribute in the ID token when ReadAttributes is unset", async () => {
+      expect(await idClaims()).toMatchObject({
+        email: "jane@example.test",
+        email_verified: true,
+        phone_number: "+15555550100",
+        given_name: "Jane",
+        "custom:tier": "gold",
+        "custom:secret": "s",
+      });
+    });
+
+    it("keeps only the attributes the client can read", async () => {
+      const claims = await idClaims(["email", "given_name", "custom:tier"]);
+
+      expect(claims).toMatchObject({
+        sub: "user-sub",
+        email: "jane@example.test",
+        given_name: "Jane",
+        "custom:tier": "gold",
+      });
+      for (const hidden of [
+        "email_verified",
+        "phone_number",
+        "custom:secret",
+      ]) {
+        expect(claims).not.toHaveProperty(hidden);
+      }
+    });
+  });
+
+  describe("generateClientCredentials", () => {
+    const client = TDB.appClient({
+      ClientId: "m2m-client",
+      UserPoolId: "pool-1",
+      AccessTokenValidity: 30,
+      TokenValidityUnits: { AccessToken: "minutes" },
+    });
+
+    it("issues an access token for the client", async () => {
+      mockTriggers.enabled.mockReturnValue(false);
+
+      const token = await tokenGenerator.generateClientCredentials(
+        TestContext,
+        client,
+        ["example.test/read", "example.test/write"],
+        undefined,
+      );
+
+      expect(token.ExpiresIn).toBe(30 * ONE_MINUTE);
+      expect(token.TokenType).toBe("Bearer");
+      const claims = jwt.decode(token.AccessToken) as Record<string, unknown>;
+      expect(claims).toEqual({
+        sub: "m2m-client",
+        client_id: "m2m-client",
+        token_use: "access",
+        scope: "example.test/read example.test/write",
+        auth_time: Math.floor(originalDate.getTime() / 1000),
+        iat: Math.floor(originalDate.getTime() / 1000),
+        exp: Math.floor(originalDate.getTime() / 1000) + 30 * ONE_MINUTE,
+        version: 2,
+        jti: expect.stringMatching(UUID),
+        iss: "http://example.com/pool-1",
+      });
+    });
+
+    it("runs a version 3 trigger with the client credentials event", async () => {
+      mockTriggers.enabled.mockReturnValue(true);
+      mockTriggers.preTokenGenerationVersion.mockReturnValue("3");
+      mockTriggers.preTokenGeneration.mockResolvedValue({
+        claimsAndScopeOverrideDetails: {
+          accessTokenGeneration: {
+            claimsToAddOrOverride: { tenant: "t1" },
+            scopesToSuppress: ["example.test/write"],
+          },
+        },
+      });
+
+      const token = await tokenGenerator.generateClientCredentials(
+        TestContext,
+        client,
+        ["example.test/read", "example.test/write"],
+        { ip: "192.0.2.1" },
+      );
+
+      expect(mockTriggers.preTokenGeneration).toHaveBeenCalledWith(
+        TestContext,
+        {
+          clientId: "m2m-client",
+          clientMetadata: { ip: "192.0.2.1" },
+          source: "ClientCredentials",
+          version: "3",
+          userAttributes: [],
+          username: "ClientCredentials",
+          groupConfiguration: null,
+          scopes: ["example.test/read", "example.test/write"],
+          userPoolId: "pool-1",
+        },
+      );
+      expect(jwt.decode(token.AccessToken)).toMatchObject({
+        tenant: "t1",
+        scope: "example.test/read",
+      });
+    });
+
+    it.each(["1", "2"] as const)(
+      "does not run a version %s trigger",
+      async (version) => {
+        mockTriggers.enabled.mockReturnValue(true);
+        mockTriggers.preTokenGenerationVersion.mockReturnValue(version);
+
+        await tokenGenerator.generateClientCredentials(
+          TestContext,
+          client,
+          ["example.test/read"],
+          undefined,
+        );
+
+        expect(mockTriggers.preTokenGeneration).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe("TokenGeneration lambda is not configured", () => {
     it("generates the default tokens", async () => {
       mockTriggers.enabled.mockReturnValue(false);

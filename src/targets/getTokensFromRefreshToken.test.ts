@@ -51,6 +51,7 @@ describe("GetTokensFromRefreshToken target", () => {
       ],
     });
     mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+      token: "refresh token",
       claims: { "cognito:username": user.Username, jti: "origin" },
       user,
       userPool: mockUserPoolService,
@@ -90,6 +91,73 @@ describe("GetTokensFromRefreshToken target", () => {
       [],
       { originJti: "origin" },
     );
+  });
+
+  it("rotates the refresh token when the client enables rotation", async () => {
+    const rotatingClient = {
+      ...userPoolClient,
+      RefreshTokenRotation: {
+        Feature: "ENABLED" as const,
+        RetryGracePeriodSeconds: 10,
+      },
+    };
+    mockCognitoService.getAppClient.mockResolvedValue(rotatingClient);
+    const user = TDB.user({
+      RefreshTokens: ["old-refresh-token"],
+      TokenOrigins: [
+        { Jti: "origin", ClientId: "test-client", ExpiresAt: 4e9 },
+      ],
+    });
+    mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+      token: "old-refresh-token",
+      claims: {
+        "cognito:username": user.Username,
+        jti: "origin",
+        exp: 4e9,
+      },
+      user,
+      userPool: mockUserPoolService,
+    });
+    mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+    mockTokenGenerator.generate.mockResolvedValue({
+      AccessToken: "new-access-token",
+      IdToken: "new-id-token",
+      RefreshToken: "new-refresh-token",
+      ExpiresIn: 900,
+      TokenType: "Bearer",
+    });
+    let stored = user;
+    mockUserPoolService.updateUser.mockImplementation(
+      async (_ctx, current, update) => {
+        stored = update(current);
+        return stored;
+      },
+    );
+
+    const result = await getTokensFromRefreshToken(TestContext, {
+      RefreshToken: "old-refresh-token",
+      ClientId: "test-client",
+      ClientMetadata: { key: "value" },
+    });
+
+    expect(result.AuthenticationResult?.RefreshToken).toBe("new-refresh-token");
+    expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
+      TestContext,
+      user,
+      [],
+      rotatingClient,
+      { key: "value" },
+      "RefreshTokens",
+      [],
+      { originJti: "origin", refreshTokenExpiresAt: 4e9 },
+    );
+    expect(stored.RefreshTokens).toEqual([
+      "old-refresh-token",
+      "new-refresh-token",
+    ]);
+    expect(stored.RefreshTokenGracePeriods).toEqual([
+      { Token: "old-refresh-token", ExpiresAt: expect.any(Number) },
+    ]);
   });
 
   it("passes on the verifier's error for an unusable refresh token", async () => {

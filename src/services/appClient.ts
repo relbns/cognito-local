@@ -3,6 +3,7 @@ import type {
   ExplicitAuthFlowsType,
   OAuthFlowType,
   PreventUserExistenceErrorTypes,
+  RefreshTokenRotationType,
   TokenValidityUnitsType,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { createTranslator } from "short-uuid";
@@ -95,7 +96,22 @@ export interface AppClient {
   EnableTokenRevocation?: boolean;
   /** Minutes (3-15) an auth flow session stays valid; AuthSessionConfig.AuthSessionValidity when unset. */
   AuthSessionValidity?: number;
+  /** When Feature is ENABLED, every refresh issues a new refresh token and retires the one sent. */
+  RefreshTokenRotation?: RefreshTokenRotationType;
 }
+
+/** The attributes a client can read: every one when ReadAttributes is unset, else those listed and sub. */
+export const readableAttributes = <T extends { Name?: string }>(
+  client: Pick<AppClient, "ReadAttributes"> | null | undefined,
+  attributes: readonly T[],
+): T[] => {
+  const allowed = client?.ReadAttributes;
+  if (!allowed?.length) return [...attributes];
+  return attributes.filter(
+    (a) =>
+      a.Name === "sub" || (a.Name !== undefined && allowed.includes(a.Name)),
+  );
+};
 
 export const AUTH_SESSION_VALIDITY_MIN = 3;
 export const AUTH_SESSION_VALIDITY_MAX = 15;
@@ -116,6 +132,45 @@ export const assertAuthSessionValidity = (value: number | undefined): void => {
     );
   }
 };
+
+export const RETRY_GRACE_PERIOD_MAX_SECONDS = 60;
+
+export const assertRefreshTokenRotation = (
+  value: RefreshTokenRotationType | undefined,
+): void => {
+  if (value === undefined) return;
+  const problems: string[] = [];
+  if (value.Feature !== "ENABLED" && value.Feature !== "DISABLED") {
+    problems.push(
+      `Value '${value.Feature}' at 'refreshTokenRotation.feature' failed to satisfy constraint: Member must satisfy enum value set: [ENABLED, DISABLED]`,
+    );
+  }
+  const grace = value.RetryGracePeriodSeconds;
+  if (grace !== undefined) {
+    const constraint =
+      grace < 0
+        ? "greater than or equal to 0"
+        : grace > RETRY_GRACE_PERIOD_MAX_SECONDS
+          ? `less than or equal to ${RETRY_GRACE_PERIOD_MAX_SECONDS}`
+          : !Number.isInteger(grace)
+            ? "an integer value"
+            : undefined;
+    if (constraint) {
+      problems.push(
+        `Value '${grace}' at 'refreshTokenRotation.retryGracePeriodSeconds' failed to satisfy constraint: Member must have value ${constraint}`,
+      );
+    }
+  }
+  if (problems.length) {
+    throw new InvalidParameterError(
+      `${problems.length} validation error${problems.length > 1 ? "s" : ""} detected: ${problems.join("; ")}`,
+    );
+  }
+};
+
+export const refreshTokenRotationEnabled = (
+  client: Pick<AppClient, "RefreshTokenRotation">,
+): boolean => client.RefreshTokenRotation?.Feature === "ENABLED";
 
 const generator = createTranslator("0123456789abcdefghijklmnopqrstuvwxyz");
 

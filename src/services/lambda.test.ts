@@ -555,7 +555,12 @@ describe("Lambda function invoker", () => {
       ${"TokenGeneration"} | ${"TokenGeneration_NewPasswordChallenge"}
       ${"TokenGeneration"} | ${"TokenGeneration_RefreshTokens"}
     `("$source", ({ trigger, source }) => {
-      it("invokes the lambda", async () => {
+      const groupConfiguration = {
+        groupsToOverride: ["admins"],
+        iamRolesToOverride: ["arn:aws:iam::000000000000:role/admins"],
+        preferredRole: "arn:aws:iam::000000000000:role/admins",
+      };
+      const invoke = async (version: "1" | "2" | "3") => {
         const response = Promise.resolve({
           StatusCode: 200,
           Payload: encode('{ "some": "json" }'),
@@ -579,13 +584,19 @@ describe("Lambda function invoker", () => {
           clientMetadata: {
             client: "metadata",
           },
+          groupConfiguration,
+          scopes: ["aws.cognito.signin.user.admin"],
+          version,
         });
+        return invokedWith(mockLambdaClient);
+      };
 
-        expect(invokedWith(mockLambdaClient)).toEqual({
+      it("invokes the lambda with a version 1 event", async () => {
+        expect(await invoke("1")).toEqual({
           FunctionName: "MyLambdaName",
           InvocationType: "RequestResponse",
           Payload: {
-            version: "0",
+            version: "1",
             callerContext: {
               awsSdkVersion: "aws-sdk-unknown-unknown",
               clientId: "clientId",
@@ -600,12 +611,61 @@ describe("Lambda function invoker", () => {
               clientMetadata: {
                 client: "metadata",
               },
-              groupConfiguration: {},
+              groupConfiguration,
             },
             response: { claimsOverrideDetails: {} },
             userName: "username",
           },
         });
+      });
+
+      it("adds the scopes and the version 2 response to a version 2 event", async () => {
+        const { Payload } = await invoke("2");
+        expect(Payload).toMatchObject({
+          version: "2",
+          request: {
+            groupConfiguration,
+            scopes: ["aws.cognito.signin.user.admin"],
+          },
+          response: { claimsAndScopeOverrideDetails: null },
+        });
+      });
+    });
+
+    it("sends a client credentials event without a user", async () => {
+      mockLambdaClient.invoke.mockReturnValue(
+        Promise.resolve({
+          StatusCode: 200,
+          Payload: encode('{ "response": {} }'),
+        }) as any,
+      );
+      const lambda = new LambdaService(
+        { PreTokenGeneration: "MyLambdaName" },
+        mockLambdaClient,
+      );
+
+      await lambda.invoke(TestContext, "PreTokenGeneration", {
+        clientId: "clientId",
+        triggerSource: "TokenGeneration_ClientCredentials",
+        username: "ClientCredentials",
+        userPoolId: "userPoolId",
+        userAttributes: {},
+        clientMetadata: undefined,
+        groupConfiguration: null,
+        scopes: ["example.test/read"],
+        version: "3",
+      });
+
+      expect(invokedWith(mockLambdaClient).Payload).toMatchObject({
+        version: "3",
+        triggerSource: "TokenGeneration_ClientCredentials",
+        userName: "ClientCredentials",
+        request: {
+          userAttributes: {},
+          groupConfiguration: null,
+          scopes: ["example.test/read"],
+        },
+        response: { claimsAndScopeOverrideDetails: null },
       });
     });
 

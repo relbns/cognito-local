@@ -312,12 +312,12 @@ timeouts and hot reload: [docs/local-triggers.md](docs/local-triggers.md).
 ### Hosted login and OAuth with `/_admin/callback`
 
 `/oauth2/authorize`, `/oauth2/token`, `/oauth2/userInfo`, `/oauth2/revoke` and `/logout` follow the
-Cognito contract (code and implicit grants, PKCE, scopes, client secret by Basic auth or body). To try
-them without writing a client, add `http://localhost:9229/_admin/callback` to the client's
-`CallbackURLs` (`seed.basic.json` already does), open <http://localhost:9229/_admin/callback>, build
-the authorize URL, sign in as `admin@example.test`, and exchange the code. The page shows the token
-response and the decoded tokens checked against the pool's JWKS. See
-[docs/oauth-callback.md](docs/oauth-callback.md).
+Cognito contract (code, implicit and `client_credentials` grants, PKCE, scopes, client secret by
+Basic auth or body). To try them without writing a client, add
+`http://localhost:9229/_admin/callback` to the client's `CallbackURLs` (`seed.basic.json` already
+does), open <http://localhost:9229/_admin/callback>, build the authorize URL, sign in as
+`admin@example.test`, and exchange the code. The page shows the token response and the decoded
+tokens checked against the pool's JWKS. See [docs/oauth-callback.md](docs/oauth-callback.md).
 
 <p align="center">
   <img src="docs/images/hosted-login.png" alt="Hosted login" width="520">
@@ -479,16 +479,16 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 ### Not supported yet
 
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
-- The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
 - Passkey (`WEB_AUTHN`) sign-in in the `USER_AUTH` flow, and its `SESSION` parameter that signs a
   user in after ConfirmSignUp.
 - Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
-- Refresh token rotation.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no
   effect.
 - The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
   for a new password and for SMS or TOTP MFA codes, and runs PreAuthentication and
   PostAuthentication, but has no sign-up, forgot-password or MFA setup pages.
+- Hosted login sessions (the `cognito` cookie) live in memory: a restart signs browsers out, and one
+  cookie covers every pool, where Cognito sets one per user pool domain.
 
 ### Stricter than upstream cognito-local
 
@@ -502,10 +502,13 @@ Each row below has a switch that restores upstream's lenient behaviour:
 | Requests checked against the API model (`InvalidParameterException`)             | `ValidationConfig.Enabled: false`              |
 | Admin UI on, codes recorded                                                      | `AdminUIConfig.Enabled: false` or `--no-admin` |
 
-### A default that differs from Cognito
+### Defaults that differ from Cognito
 
 Pools default to email as the username
 (`UserPoolDefaults.UsernameAttributes: ["email"]`), where Cognito defaults to free-form usernames.
+
+An app client without `ReadAttributes` reads every attribute, `custom:` ones included, in ID tokens,
+`GetUser` and `/oauth2/userInfo`; Cognito then exposes the standard attributes only.
 
 ## Troubleshooting
 

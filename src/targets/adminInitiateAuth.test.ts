@@ -378,6 +378,26 @@ describe("AdminInitiateAuth target", () => {
     });
   });
 
+  it("refuses REFRESH_TOKEN_AUTH when the client rotates refresh tokens", async () => {
+    mockCognitoService.getAppClient.mockResolvedValue({
+      ...userPoolClient,
+      RefreshTokenRotation: { Feature: "ENABLED", RetryGracePeriodSeconds: 5 },
+    });
+
+    await expect(
+      adminInitiateAuth(TestContext, {
+        AuthFlow: "REFRESH_TOKEN_AUTH",
+        ClientId: userPoolClient.ClientId,
+        UserPoolId: userPoolClient.UserPoolId,
+        AuthParameters: { REFRESH_TOKEN: "refresh token" },
+      }),
+    ).rejects.toEqual(
+      new InvalidParameterError(
+        "REFRESH_TOKEN_AUTH flow not enabled for this client",
+      ),
+    );
+  });
+
   it("supports REFRESH_TOKEN_AUTH", async () => {
     const existingUser = TDB.user({
       RefreshTokens: ["refresh token"],
@@ -386,6 +406,7 @@ describe("AdminInitiateAuth target", () => {
       ],
     });
     mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+      token: "refresh token",
       claims: { "cognito:username": existingUser.Username, jti: "origin" },
       user: existingUser,
       userPool: mockUserPoolService,

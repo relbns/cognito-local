@@ -1,7 +1,7 @@
 import type { Application, Request, Response } from "express";
 import { CognitoError } from "../errors";
 import type { Services } from "../services";
-import type { Context } from "../services/context";
+import { type Context, requestContext } from "../services/context";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { sendAuthorizationResponse } from "./authorizationResponse";
 import { federatedSignIn } from "./federatedSignIn";
@@ -153,11 +153,19 @@ export function beginFederation(
   );
 }
 
+export type OnFederatedSignIn = (
+  req: Request,
+  res: Response,
+  userPoolId: string,
+  username: string,
+) => void;
+
 export function attachFederationRoutes(
   app: Application,
   services: Services,
   codeStore: AuthorizationCodeStore,
   store: FederationStore,
+  onSignIn?: OnFederatedSignIn,
 ): void {
   const loadProvider = async (
     ctx: Context,
@@ -175,7 +183,7 @@ export function attachFederationRoutes(
   app.get(
     "/mock-idp/:providerName/authorize",
     async (req: Request, res: Response) => {
-      const ctx: Context = { logger: req.log };
+      const ctx = requestContext(req, services.config?.TokenConfig);
       const pending = store.peek(req.query.state as string | undefined);
       if (!pending || pending.providerName !== req.params.providerName) {
         return res
@@ -206,7 +214,7 @@ export function attachFederationRoutes(
   );
 
   const idpResponse = async (req: Request, res: Response) => {
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
     const input = (req.method === "POST" ? req.body : req.query) as Record<
       string,
       unknown
@@ -282,6 +290,7 @@ export function attachFederationRoutes(
         provider,
         claims,
       );
+      onSignIn?.(req, res, userPool.options.Id, user.Username);
       return await sendAuthorizationResponse(ctx, res, services, codeStore, {
         appClient,
         userPool,

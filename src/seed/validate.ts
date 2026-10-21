@@ -228,6 +228,13 @@ const client = entity(
     AnalyticsConfiguration: obj,
     PreventUserExistenceErrors: oneOf("LEGACY", "ENABLED"),
     EnableTokenRevocation: bool,
+    RefreshTokenRotation: entity(
+      {
+        Feature: oneOf("ENABLED", "DISABLED"),
+        RetryGracePeriodSeconds: num,
+      },
+      ["Feature"],
+    ),
   },
   ["ClientName"],
   (v, path, issues) => {
