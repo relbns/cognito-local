@@ -39,7 +39,7 @@ and tests, and [the differences](#compatibility-and-differences-from-aws) are li
   signature, origin and relying party checked as Cognito checks them, and passkey buttons on the
   hosted login page and `/passkeys/add`. Tests can use a software authenticator, no browser needed.
 - **Federated sign-in without a provider.** A mock IdP page stands in for social, OIDC and SAML
-  providers, with attribute mapping and linked users.
+  providers, with an account chooser, predefined accounts, attribute mapping and linked users.
 - **Tokens checked as Cognito checks them.** Signature, issuer, expiry, user and revocation of access
   and refresh tokens, and `SECRET_HASH`. A `config.json` switch restores the lenient behaviour.
 - **Admin UI with a codes viewer.** Pools, clients, users, groups, a token decoder, and the recent
@@ -335,9 +335,12 @@ tokens checked against the pool's JWKS. See [docs/oauth-callback.md](docs/oauth-
 ### Federated sign-in
 
 Sign-in through Google, Facebook, Apple, Amazon, OIDC or SAML providers is emulated by a mock IdP
-page: `identity_provider=<name>` on `/oauth2/authorize` redirects to a form where you type the
-federated subject and claims. `AttributeMapping`, `EXTERNAL_PROVIDER` users (`Google_<sub>`), linked
-users, the `identities` claim and the triggers then behave as in Cognito.
+page: `identity_provider=<name>` on `/oauth2/authorize` redirects to a page that looks like the
+provider's sign-in, with an account chooser and **Use another account**. The same email always signs
+in as the same federated user, accounts can be predefined in `config.json`
+(`FederationConfig.MockAccounts`), and **Developer options** opens a form that sets the subject and
+every claim. `AttributeMapping`, `EXTERNAL_PROVIDER` users (`Google_<sub>`), linked users, the
+`identities` claim and the triggers then behave as in Cognito.
 [`seed.federation.json`](examples/seed.federation.json) has a Google and a generic OIDC provider; start
 it and use `/_admin/callback` with identity provider `Google`. See [docs/federation.md](docs/federation.md).
 
@@ -461,6 +464,10 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `FileTriggerConfig.HotReload`                | `true`                 | Reload a `file:` trigger when the file changes                                                                                                                                               |
 | `FederationConfig.Mode`                      | `"mock"`               | `"real"` signs federated users in through the OIDC or social provider itself instead of the mock IdP page: see [docs/federation.md](docs/federation.md#real-providers)                     |
 | `FederationConfig.Providers.<name>.Mode`     | unset                  | `"mock"` or `"real"` for one `ProviderName`, over `FederationConfig.Mode`                                                                                                                    |
+| `FederationConfig.MockAccounts`              | unset                  | Accounts the mock IdP lists in its account chooser for every provider: see [Mock accounts](docs/federation.md#mock-accounts)                                                                 |
+| `FederationConfig.Providers.<name>.MockAccounts` | unset                  | Accounts for one `ProviderName`, instead of `FederationConfig.MockAccounts`                                                                                                                  |
+| `FederationConfig.MockView`                  | `"signin"`             | `"developer"` opens the mock IdP form that sets the subject and every claim, instead of the provider sign-in view                                                                            |
+| `FederationConfig.Providers.<name>.MockView` | unset                  | `"signin"` or `"developer"` for one `ProviderName`                                                                                                                                           |
 | `TriggerFunctions`                           | `{}`                   | Triggers for every pool: Lambda names, or `file:` paths resolved against the data directory                                                                                                  |
 | `UserPoolDefaults.UsernameAttributes`        | `["email"]`            | Pools created without `UsernameAttributes` use email as the username; `[]` gives free-form usernames as in Cognito                                                                           |
 | `LambdaClient`, `KMSConfig`                  | local credentials      | AWS SDK v3 client options; v2 names are translated with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md)                                                                |

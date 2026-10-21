@@ -2,6 +2,7 @@ import type { CognitoIdentityServiceProvider } from "aws-sdk";
 import * as jwt from "jsonwebtoken";
 import { describe, expect, it, vi } from "vitest";
 import { UserLambdaValidationError } from "../../src/errors";
+import { DefaultConfig } from "../../src/server/config";
 import type { Lambda } from "../../src/services";
 import { withCognitoSdk } from "./setup";
 
@@ -426,5 +427,141 @@ describe(
       });
     },
     { lambda: () => lambda },
+  ),
+);
+
+describe(
+  "The mock IdP's provider sign-in view",
+  withCognitoSdk(
+    (Cognito, { serverUrl }) => {
+      async function openPage(url: string, cookie = "", dev = "") {
+        const authorize = await fetch(url, { redirect: "manual" });
+        const location = new URL(
+          authorize.headers.get("location")!,
+          serverUrl(),
+        );
+        if (dev) location.searchParams.set("dev", dev);
+        const page = await fetch(location, { headers: { cookie } });
+        expect(page.status).toBe(200);
+        return {
+          stateId: location.searchParams.get("state")!,
+          html: await page.text(),
+        };
+      }
+
+      async function signInAs(
+        stateId: string,
+        email: string,
+        name = "",
+        cookie = "",
+      ) {
+        const res = await fetch(`${serverUrl()}/oauth2/idpresponse`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            cookie,
+          },
+          body: new URLSearchParams({
+            state: stateId,
+            account_email: email,
+            account_name: name,
+          }).toString(),
+          redirect: "manual",
+        });
+        expect(res.status).toBe(302);
+        const remembered = (res.headers.get("set-cookie") ?? "").split(";")[0];
+        return { redirect: new URL(res.headers.get("location")!), remembered };
+      }
+
+      it("signs in a configured account, then remembers a new one with a stable subject", async () => {
+        const app = await setupPool(Cognito());
+        const url = hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google");
+
+        const first = await openPage(url);
+        expect(first.html).toContain("Choose an account");
+        expect(first.html).toContain("Ada Admin");
+        const configured = await signInAs(first.stateId, "admin@example.test");
+        const adminToken = await exchange(
+          serverUrl(),
+          app,
+          configured.redirect.searchParams.get("code")!,
+        );
+        expect(adminToken["cognito:username"]).toBe(
+          "Google_100000000000000000001",
+        );
+        expect(adminToken.email).toBe("admin@example.test");
+        expect(adminToken.name).toBe("Ada Admin");
+        expect(adminToken.email_verified).toBe(true);
+
+        const second = await openPage(url, configured.remembered);
+        const another = await signInAs(
+          second.stateId,
+          "new.person@example.test",
+          "",
+          configured.remembered,
+        );
+        const newToken = await exchange(
+          serverUrl(),
+          app,
+          another.redirect.searchParams.get("code")!,
+        );
+        expect(newToken["cognito:username"]).toMatch(/^Google_1\d{20}$/);
+        expect(newToken.name).toBe("New Person");
+
+        const third = await openPage(url, another.remembered);
+        expect(third.html.indexOf("new.person@example.test")).toBeLessThan(
+          third.html.indexOf("admin@example.test"),
+        );
+        const again = await signInAs(third.stateId, "New.Person@example.test");
+        const againToken = await exchange(
+          serverUrl(),
+          app,
+          again.redirect.searchParams.get("code")!,
+        );
+        expect(againToken["cognito:username"]).toBe(
+          newToken["cognito:username"],
+        );
+      });
+
+      it("keeps the developer form at ?dev=1 with its field names", async () => {
+        const app = await setupPool(Cognito());
+        const url = hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google");
+        const { html, stateId } = await openPage(url, "", "1");
+        expect(html).toContain('name="subject"');
+        expect(html).toContain('name="claim_name"');
+        expect(html).toContain("Simulate IdP error (access_denied)");
+        const redirect = await postIdpResponse(serverUrl(), [
+          ["state", stateId],
+          ["subject", "dev-1"],
+          ["claim_name", "email"],
+          ["claim_value", "dev@example.test"],
+        ]);
+        const idToken = await exchange(
+          serverUrl(),
+          app,
+          redirect.searchParams.get("code")!,
+        );
+        expect(idToken["cognito:username"]).toBe("Google_dev-1");
+      });
+    },
+    {
+      config: {
+        ...DefaultConfig,
+        FederationConfig: {
+          Mode: "mock",
+          Providers: {
+            Google: {
+              MockAccounts: [
+                {
+                  email: "admin@example.test",
+                  name: "Ada Admin",
+                  sub: "100000000000000000001",
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
   ),
 );

@@ -19,6 +19,16 @@ import {
 } from "./federation";
 import type { FederationStore, PendingFederation } from "./federationStore";
 import { escapeHtml, hiddenInput } from "./html";
+import {
+  chooserAccounts,
+  isMockAccountEmail,
+  type MockAccount,
+  mockAccountClaims,
+  mockIdpView,
+  rememberMockAccount,
+  resolveMockAccount,
+} from "./mockIdpAccounts";
+import { mockIdpSignInPage } from "./mockIdpSignInPage";
 import { type AuthorizeFlow, buildErrorRedirect } from "./oauthRequest";
 import {
   federationModeFor,
@@ -69,6 +79,8 @@ const STYLE = `
   button { padding: 9px 16px; border-radius: 4px; border: 1px solid #1f6feb; background: #1f6feb; color: #fff; font-size: 14px; cursor: pointer; }
   button.secondary { background: #fff; color: #b42318; border-color: #b42318; }
   details { margin-top: 16px; font-size: 13px; }
+  .back { margin: 0 0 12px; font-size: 13px; }
+  .back a { color: #1f6feb; }
   .badge { display: inline-block; font-size: 11px; background: #fff4d6; color: #7a4d00; border-radius: 10px; padding: 2px 8px; margin-inline-start: 6px; vertical-align: middle; }
 `;
 
@@ -106,6 +118,7 @@ export function mockIdpPage(
   provider: IdentityProviderConfig,
   stateId: string,
   target?: MockIdpTarget,
+  signInHref?: string,
 ): string {
   const defaults = mockIdpDefaults(provider);
   const rows = [
@@ -127,7 +140,7 @@ export function mockIdpPage(
   const name = escapeHtml(provider.ProviderName);
   return page(
     `Sign in with ${provider.ProviderName} (mock)`,
-    `<h1>Sign in with ${name}<span class="badge">mock ${escapeHtml(provider.ProviderType)} IdP</span></h1>
+    `${signInHref ? `<p class="back"><a href="${escapeHtml(signInHref)}">Back to the ${name} sign-in page</a></p>\n` : ""}<h1>Sign in with ${name}<span class="badge">mock ${escapeHtml(provider.ProviderType)} IdP</span></h1>
 <div class="explain">
   <p>This page plays the role of ${name}'s login page, so no real ${name} account is needed and nothing leaves this machine.</p>
   <p>Pick who signs in: Subject is the user's id at ${name}, the rows are the claims ${name} would return. Press <strong>Sign in</strong> to continue to the app as that user; the same Subject signs in as the same user next time.</p>
@@ -250,12 +263,84 @@ export function attachFederationRoutes(
     );
   };
 
+  const renderMockIdp = async (
+    req: Request,
+    res: Response,
+    ctx: Context,
+    pending: PendingFederation,
+    query: Record<string, unknown>,
+    problem?: { error: string; email: string; name: string },
+  ) => {
+    const stateId = String(query.state);
+    const viewHref = (dev: "0" | "1") => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (key !== "dev" && typeof value === "string") params.set(key, value);
+      }
+      params.set("dev", dev);
+      return `/mock-idp/${encodeURIComponent(pending.providerName)}/authorize?${params}`;
+    };
+    const provider = await loadProvider(ctx, pending).catch(() => undefined);
+    if (!provider) {
+      return res
+        .status(400)
+        .type("text/html")
+        .send(
+          errorPage(
+            `Identity provider ${pending.providerName} no longer exists.`,
+          ),
+        );
+    }
+    const appClient = await services.cognito
+      .getAppClient(ctx, pending.clientId)
+      .catch(() => null);
+    const federation = services.config?.FederationConfig;
+    const view = problem
+      ? "signin"
+      : mockIdpView(federation, provider, query.dev);
+    if (view === "developer") {
+      return res
+        .status(200)
+        .type("text/html")
+        .send(
+          mockIdpPage(
+            provider,
+            stateId,
+            {
+              clientId: pending.clientId,
+              clientName: appClient?.ClientName,
+              userPoolId: pending.userPoolId,
+              redirectUri: pending.redirectUri,
+            },
+            viewHref("0"),
+          ),
+        );
+    }
+    return res
+      .status(problem ? 400 : 200)
+      .type("text/html")
+      .send(
+        mockIdpSignInPage({
+          provider,
+          stateId,
+          accounts: chooserAccounts(req, federation, provider),
+          appName: appClient?.ClientName || pending.clientId,
+          redirectUri: pending.redirectUri,
+          realUrl: realAuthorizeUrl(provider),
+          developerHref: viewHref("1"),
+          ...problem,
+        }),
+      );
+  };
+
   app.get(
     "/mock-idp/:providerName/authorize",
     async (req: Request, res: Response) => {
       const ctx = requestContext(req, services.config?.TokenConfig);
-      const pending = store.peek(req.query.state as string | undefined);
+      const stateId = req.query.state as string | undefined;
+      const pending = store.peek(stateId);
       if (
+        !stateId ||
         !pending ||
         pending.real ||
         pending.providerName !== req.params.providerName
@@ -269,31 +354,7 @@ export function attachFederationRoutes(
             ),
           );
       }
-      const provider = await loadProvider(ctx, pending).catch(() => undefined);
-      if (!provider) {
-        return res
-          .status(400)
-          .type("text/html")
-          .send(
-            errorPage(
-              `Identity provider ${pending.providerName} no longer exists.`,
-            ),
-          );
-      }
-      const appClient = await services.cognito
-        .getAppClient(ctx, pending.clientId)
-        .catch(() => null);
-      return res
-        .status(200)
-        .type("text/html")
-        .send(
-          mockIdpPage(provider, req.query.state as string, {
-            clientId: pending.clientId,
-            clientName: appClient?.ClientName,
-            userPoolId: pending.userPoolId,
-            redirectUri: pending.redirectUri,
-          }),
-        );
+      return renderMockIdp(req, res, ctx, pending, req.query);
     },
   );
 
@@ -303,9 +364,37 @@ export function attachFederationRoutes(
       string,
       unknown
     >;
-    const pending = store.consume(
-      typeof input?.state === "string" ? input.state : undefined,
-    );
+    const stateId = typeof input?.state === "string" ? input.state : undefined;
+    const accountEmail =
+      req.method === "POST" && typeof input?.account_email === "string"
+        ? input.account_email.trim()
+        : undefined;
+    const accountName =
+      typeof input?.account_name === "string" ? input.account_name : "";
+    if (
+      accountEmail !== undefined &&
+      !input.error &&
+      !isMockAccountEmail(accountEmail)
+    ) {
+      const waiting = store.peek(stateId);
+      if (stateId && waiting && !waiting.real) {
+        return renderMockIdp(
+          req,
+          res,
+          ctx,
+          waiting,
+          { state: stateId },
+          {
+            error: accountEmail
+              ? "Enter a valid email address."
+              : "Enter an email address.",
+            email: accountEmail,
+            name: accountName,
+          },
+        );
+      }
+    }
+    const pending = store.consume(stateId);
     if (!pending) {
       return res
         .status(400)
@@ -372,6 +461,16 @@ export function attachFederationRoutes(
         );
       }
 
+      let account: MockAccount | undefined;
+      if (!pending.real && accountEmail !== undefined) {
+        account = resolveMockAccount(
+          req,
+          services.config?.FederationConfig,
+          provider,
+          accountEmail,
+          accountName,
+        );
+      }
       const claims = pending.real
         ? await realIdp.complete(
             provider,
@@ -379,7 +478,9 @@ export function attachFederationRoutes(
             code,
             typeof input.user === "string" ? input.user : undefined,
           )
-        : claimsFromForm(provider, input);
+        : account
+          ? mockAccountClaims(provider, account)
+          : claimsFromForm(provider, input);
       const { user } = await federatedSignIn(
         ctx,
         services,
@@ -389,6 +490,7 @@ export function attachFederationRoutes(
         claims,
       );
       onSignIn?.(req, res, userPool.options.Id, user.Username);
+      if (account) rememberMockAccount(req, res, provider, account);
       return await sendAuthorizationResponse(ctx, res, services, codeStore, {
         appClient,
         userPool,

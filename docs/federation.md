@@ -19,13 +19,20 @@ provider follows the Cognito contract.
    usual `client_id`, `redirect_uri`, `response_type`, `scope`, `state` and optional PKCE. The
    request is kept server-side (10 minutes, single use) and the browser is redirected to
    `/mock-idp/<name>/authorize`, with the parameters Cognito would send to the real IdP.
-2. The mock IdP page asks for the federated identity: the subject (`sub`, `id` for Facebook,
-   `user_id` for LoginWithAmazon, `NameID` for SAML) and a table of IdP claims. The claim names
-   are prefilled from the IdP's `AttributeMapping`, so the mapping picks them up, and the subject
-   is a fixed example, so pressing **Sign in** twice signs in the same user. The page names the app
-   client and the redirect URI it returns to. **Simulate IdP error** returns `access_denied`
-   instead.
-3. The form posts to `/oauth2/idpresponse`, which:
+2. The mock IdP page looks like the provider's own sign-in page: "Sign in with <ProviderName>", the
+   app client it continues to, and an account chooser. The end user picks an account, or chooses
+   **Use another account** and types an email and an optional name. See
+   [Mock accounts](#mock-accounts) for the accounts it lists and the claims it returns.
+   **Cancel** returns `access_denied`, as if the user cancelled at the provider.
+
+   **Developer options: set the subject and every claim** opens the developer form: the subject
+   (`sub`, `id` for Facebook, `user_id` for LoginWithAmazon, `NameID` for SAML) and a table of IdP
+   claims. The claim names are prefilled from the IdP's `AttributeMapping`, so the mapping picks
+   them up, and the subject is a fixed example, so pressing **Sign in** twice signs in the same
+   user. It names the app client and the redirect URI it returns to. **Simulate IdP error** returns
+   `access_denied` with the description typed on the form. `?dev=1` on the mock IdP URL, or
+   `MockView: "developer"` in `config.json`, opens this form directly, and `?dev=0` goes back.
+3. Either view posts to `/oauth2/idpresponse`, which:
    - applies `AttributeMapping` (`<pool attribute>: <IdP claim>`); unmapped claims are dropped;
    - signs in a native user linked with `AdminLinkProviderForUser`
      (`ProviderAttributeName: Cognito_Subject`, or a claim name for OIDC/SAML), updating it with
@@ -37,6 +44,55 @@ provider follows the Cognito contract.
      `response_type=token`), exactly like the hosted login.
 
 Mapped attributes are refreshed on every sign-in, as Cognito does.
+
+## Mock accounts
+
+The sign-in view of the mock IdP builds the provider's claims from an email and a name:
+
+| Claim | Value |
+| --- | --- |
+| subject (`sub`, `id`, `user_id` or `NameID`) | the account's `sub`, else derived from the `ProviderName` and the lowercased email, shaped like the provider's ids (21 digits for Google, 17 for Facebook, `amzn1.account.…` for LoginWithAmazon, `000000.<hex>.0000` for SignInWithApple, a UUID for OIDC, the email for SAML) |
+| `email` | the email, in lower case unless it is a configured account's |
+| `email_verified` | `"true"` |
+| `name` | the name typed or configured, else the one this browser remembers for the email, else one made from the email (`jane.doe@example.test` gives `Jane Doe`) |
+| `given_name`, `family_name` | the first word of the name, and the rest when there is more than one word |
+
+Each of these claims is also returned under the IdP claim name that `AttributeMapping` reads for
+it, so a SAML mapping such as `"email": "http://schemas.example.test/claims/emailaddress"` picks
+the email up. The account's `claims` then add to or override them. The same email always gives the
+same subject, so it signs in as the same federated user every time, in every view and every run.
+
+The chooser lists the accounts this browser signed in with through the provider, most recent first
+(up to five per `ProviderName`, kept in the `cognito_emulator_mock_idp_accounts` cookie of the
+emulator for a year), then the accounts configured in `<data>/config.json`:
+
+```json
+{
+  "FederationConfig": {
+    "MockAccounts": [{ "email": "tester@example.test", "name": "Test User" }],
+    "Providers": {
+      "Google": {
+        "MockAccounts": [
+          { "email": "admin@example.test", "name": "Ada Admin", "sub": "100000000000000000001" },
+          { "email": "member@example.test", "claims": { "locale": "en" } }
+        ]
+      }
+    }
+  }
+}
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `FederationConfig.MockAccounts` | unset | Accounts the chooser of every provider lists, unless the provider has its own |
+| `FederationConfig.Providers.<name>.MockAccounts` | unset | Accounts for the provider with that `ProviderName`, instead of `FederationConfig.MockAccounts` |
+| `FederationConfig.MockView` | `"signin"` | `"developer"` opens the developer form instead of the sign-in view |
+| `FederationConfig.Providers.<name>.MockView` | unset | `"signin"` or `"developer"` for one `ProviderName` |
+
+An account has `email` (required), `name`, `sub` and `claims` (an object of strings). An account
+signed in by email from **Use another account** takes the configured account's name, `sub` and
+`claims` when the email matches one. An invalid entry, an unknown key or an email listed twice
+stops the server at startup.
 
 ## Real providers
 

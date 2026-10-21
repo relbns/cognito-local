@@ -53,8 +53,23 @@ export interface FileTriggerConfig {
 
 export type FederationMode = "mock" | "real";
 
+/** "signin" looks like the provider's own sign-in page; "developer" is the form that sets every claim. */
+export type MockIdpView = "signin" | "developer";
+
+/** A person the mock IdP offers in its account chooser. */
+export interface MockAccountConfig {
+  email: string;
+  name?: string;
+  /** The subject at the provider; derived from the provider and the email when unset. */
+  sub?: string;
+  /** Extra or overriding IdP claims. */
+  claims?: Record<string, string>;
+}
+
 export interface FederationProviderConfig {
   Mode?: FederationMode;
+  MockAccounts?: MockAccountConfig[];
+  MockView?: MockIdpView;
 }
 
 export interface FederationConfig {
@@ -62,6 +77,9 @@ export interface FederationConfig {
   Mode: FederationMode;
   /** Per-provider override, keyed by ProviderName. */
   Providers: Record<string, FederationProviderConfig>;
+  /** Accounts of every provider without its own MockAccounts. */
+  MockAccounts?: MockAccountConfig[];
+  MockView?: MockIdpView;
 }
 
 export interface ConfigOverrides {
@@ -154,6 +172,69 @@ export const DefaultConfig: Config = {
 };
 
 const FEDERATION_MODES: readonly unknown[] = ["mock", "real"];
+const MOCK_IDP_VIEWS: readonly unknown[] = ["signin", "developer"];
+const MOCK_ACCOUNT_KEYS = new Set(["email", "name", "sub", "claims"]);
+export const MOCK_ACCOUNT_EMAIL = /^[^\s@]+@[^\s@]+$/;
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+function assertMockView(path: string, value: unknown): void {
+  if (value !== undefined && !MOCK_IDP_VIEWS.includes(value)) {
+    throw new Error(
+      `${path} must be "signin" or "developer", got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+function assertMockAccounts(path: string, value: unknown): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    throw new Error(`${path} must be a list of accounts`);
+  }
+  const emails = new Set<string>();
+  value.forEach((account: unknown, index) => {
+    const at = `${path}[${index}]`;
+    if (!isObject(account)) {
+      throw new Error(`${at} must be an object with an email`);
+    }
+    const unknown = Object.keys(account).find(
+      (key) => !MOCK_ACCOUNT_KEYS.has(key),
+    );
+    if (unknown) {
+      throw new Error(
+        `${at}.${unknown} is not a mock account key (email, name, sub, claims)`,
+      );
+    }
+    const { email, name, sub, claims } = account;
+    if (typeof email !== "string" || !MOCK_ACCOUNT_EMAIL.test(email.trim())) {
+      throw new Error(
+        `${at}.email must be an email address, got ${JSON.stringify(email)}`,
+      );
+    }
+    const key = email.trim().toLowerCase();
+    if (emails.has(key)) {
+      throw new Error(`${at}.email ${JSON.stringify(email)} is listed twice`);
+    }
+    emails.add(key);
+    if (name !== undefined && typeof name !== "string") {
+      throw new Error(`${at}.name must be a string`);
+    }
+    if (sub !== undefined && (typeof sub !== "string" || !sub.trim())) {
+      throw new Error(`${at}.sub must be a non-empty string`);
+    }
+    if (claims !== undefined) {
+      if (!isObject(claims)) {
+        throw new Error(`${at}.claims must be an object of strings`);
+      }
+      for (const [claim, claimValue] of Object.entries(claims)) {
+        if (typeof claimValue !== "string") {
+          throw new Error(`${at}.claims.${claim} must be a string`);
+        }
+      }
+    }
+  });
+}
 
 function assertFederationConfig(federation: FederationConfig): void {
   if (!FEDERATION_MODES.includes(federation.Mode)) {
@@ -161,6 +242,8 @@ function assertFederationConfig(federation: FederationConfig): void {
       `FederationConfig.Mode must be "mock" or "real", got ${JSON.stringify(federation.Mode)}`,
     );
   }
+  assertMockAccounts("FederationConfig.MockAccounts", federation.MockAccounts);
+  assertMockView("FederationConfig.MockView", federation.MockView);
   for (const [name, provider] of Object.entries(federation.Providers ?? {})) {
     if (
       provider?.Mode !== undefined &&
@@ -170,6 +253,14 @@ function assertFederationConfig(federation: FederationConfig): void {
         `FederationConfig.Providers.${name}.Mode must be "mock" or "real", got ${JSON.stringify(provider.Mode)}`,
       );
     }
+    assertMockAccounts(
+      `FederationConfig.Providers.${name}.MockAccounts`,
+      provider?.MockAccounts,
+    );
+    assertMockView(
+      `FederationConfig.Providers.${name}.MockView`,
+      provider?.MockView,
+    );
   }
 }
 

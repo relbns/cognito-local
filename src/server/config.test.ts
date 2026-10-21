@@ -205,6 +205,33 @@ describe("DefaultConfig", () => {
     });
   });
 
+  it("reads MockAccounts and MockView, globally and per provider", async () => {
+    const FederationConfig = {
+      MockAccounts: [{ email: "everyone@example.test" }],
+      MockView: "developer",
+      Providers: {
+        Google: {
+          MockView: "signin",
+          MockAccounts: [
+            {
+              email: "jane@example.test",
+              name: "Jane Doe",
+              sub: "100000000000000000001",
+              claims: { locale: "en" },
+            },
+          ],
+        },
+      },
+    };
+    const ds = newMockDataStore();
+    ds.getRoot.mockResolvedValue({ FederationConfig });
+    const config = await loadConfig(TestContext, newMockDataStoreFactory(ds));
+    expect(config.FederationConfig).toEqual({
+      Mode: "mock",
+      ...FederationConfig,
+    });
+  });
+
   it.each([
     [
       { Mode: "live" },
@@ -214,14 +241,56 @@ describe("DefaultConfig", () => {
       { Providers: { CorpIdP: { Mode: "REAL" } } },
       'FederationConfig.Providers.CorpIdP.Mode must be "mock" or "real", got "REAL"',
     ],
-  ])(
-    "rejects an unknown federation mode %j",
-    async (FederationConfig, message) => {
-      const ds = newMockDataStore();
-      ds.getRoot.mockResolvedValue({ FederationConfig });
-      await expect(
-        loadConfig(TestContext, newMockDataStoreFactory(ds)),
-      ).rejects.toThrow(message);
-    },
-  );
+    [
+      { MockView: "pretty" },
+      'FederationConfig.MockView must be "signin" or "developer", got "pretty"',
+    ],
+    [
+      { Providers: { Google: { MockView: "dev" } } },
+      'FederationConfig.Providers.Google.MockView must be "signin" or "developer", got "dev"',
+    ],
+    [
+      { MockAccounts: { email: "a@example.test" } },
+      "FederationConfig.MockAccounts must be a list of accounts",
+    ],
+    [
+      { MockAccounts: ["a@example.test"] },
+      "FederationConfig.MockAccounts[0] must be an object with an email",
+    ],
+    [
+      { Providers: { Google: { MockAccounts: [{ email: "nobody" }] } } },
+      'FederationConfig.Providers.Google.MockAccounts[0].email must be an email address, got "nobody"',
+    ],
+    [
+      { MockAccounts: [{ email: "a@example.test", Name: "A" }] },
+      "FederationConfig.MockAccounts[0].Name is not a mock account key (email, name, sub, claims)",
+    ],
+    [
+      {
+        MockAccounts: [
+          { email: "a@example.test" },
+          { email: "A@example.test" },
+        ],
+      },
+      'FederationConfig.MockAccounts[1].email "A@example.test" is listed twice',
+    ],
+    [
+      { MockAccounts: [{ email: "a@example.test", sub: "" }] },
+      "FederationConfig.MockAccounts[0].sub must be a non-empty string",
+    ],
+    [
+      { MockAccounts: [{ email: "a@example.test", name: 7 }] },
+      "FederationConfig.MockAccounts[0].name must be a string",
+    ],
+    [
+      { MockAccounts: [{ email: "a@example.test", claims: { age: 30 } }] },
+      "FederationConfig.MockAccounts[0].claims.age must be a string",
+    ],
+  ])("rejects the federation config %j", async (FederationConfig, message) => {
+    const ds = newMockDataStore();
+    ds.getRoot.mockResolvedValue({ FederationConfig });
+    await expect(
+      loadConfig(TestContext, newMockDataStoreFactory(ds)),
+    ).rejects.toThrow(message);
+  });
 });
