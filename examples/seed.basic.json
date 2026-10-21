@@ -1,5 +1,5 @@
 {
-  "$comment": "A user pool with a password policy, a custom attribute, a public and a confidential app client, a resource server, groups and users. Apply with: cognito-local start --seed examples/seed.basic.json",
+  "$comment": "A user pool with a password policy, a custom attribute, a public and a confidential app client, a resource server, groups and users. Apply with: cognito-emulator start --seed examples/seed.basic.json",
   "Version": 1,
   "UserPools": [
     {

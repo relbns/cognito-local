@@ -1,3 +1,8 @@
+import {
+  emulatorBanner,
+  emulatorBannerStyle,
+  PRODUCT_NAME,
+} from "../server/emulatorBanner";
 import type { HostedLoginContext } from "./hostedLogin";
 import type { HostedLoginStep } from "./hostedLoginStore";
 import { type FormField, maskDestination } from "./hostedPages";
@@ -37,12 +42,15 @@ const page = (
   notice?: string,
 ) =>
   `<!DOCTYPE html>
-<html>
-<head><title>${escapeHtml(title)}</title></head>
-<body>
+<html lang="en">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(title)} · ${PRODUCT_NAME}</title>${emulatorBannerStyle()}</head>
+<body style="margin:0">
+${emulatorBanner()}
+<main style="padding:16px">
 ${error ? `<p role="alert" style="color:red">${escapeHtml(error)}</p>` : ""}
 ${notice ? `<p role="status">${escapeHtml(notice)}</p>` : ""}
 ${body}
+</main>
 </body>
 </html>`;
 

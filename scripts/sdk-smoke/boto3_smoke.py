@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test of cognito-local through boto3. Usage: boto3_smoke.py [endpoint], default http://localhost:9229."""
+"""Smoke test of cognito-emulator through boto3. Usage: boto3_smoke.py [endpoint], default http://localhost:9229."""
 import os
 import sys
 import uuid

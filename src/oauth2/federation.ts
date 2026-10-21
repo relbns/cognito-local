@@ -199,13 +199,14 @@ export interface MockIdpDefaults {
   extras: Array<[string, string]>;
 }
 
+// Shaped like real subjects of each provider, and fixed, so a re-run signs in the same user.
 const DEFAULT_SUBJECTS: Record<string, string> = {
-  Google: "100000000000000000001",
-  Facebook: "10150000000000001",
-  LoginWithAmazon: "amzn1.account.AEXAMPLE000000000000000000000",
-  SignInWithApple: "000001.0123456789abcdef0123456789abcdef.0001",
+  Google: "108374529016473820195",
+  Facebook: "10158273640192837",
+  LoginWithAmazon: "amzn1.account.AF3KQ7XN2M5RT8VW4YB6ZC9DEXAMPLE",
+  SignInWithApple: "001842.7c9e2f4a1b8d4e6f9a3c5b7d2e8f1a40.1729",
   SAML: "jane.doe@example.com",
-  OIDC: "oidc-user-0001",
+  OIDC: "5f2c8e1a-9b47-4d3e-a6f0-7c1b2d9e4a83",
 };
 
 const DEFAULT_EMAILS: Record<string, string> = {

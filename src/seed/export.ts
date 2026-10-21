@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import type { SchemaAttributeType } from "@aws-sdk/client-cognito-identity-provider";
+import { PRODUCT_NAME } from "../server/emulatorBanner";
 import type { CognitoService } from "../services";
 import type { Clock } from "../services/clock";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
@@ -212,7 +213,7 @@ export const exportSeed = async (
     userPools.push(await exportUserPool(ctx, services.cognito, pool.Id));
   }
   return {
-    $comment: `Exported by cognito-local on ${services.clock.get().toISOString()}. ${PASSWORDS_NOT_EXPORTED}`,
+    $comment: `Exported by ${PRODUCT_NAME} on ${services.clock.get().toISOString()}. ${PASSWORDS_NOT_EXPORTED}`,
     Version: SEED_VERSION,
     UserPools: userPools,
   };

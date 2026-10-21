@@ -645,7 +645,7 @@ describe("seed files", () => {
         .get("/_admin/api/export?download=1")
         .expect(200);
       expect(exported.header["content-disposition"]).toContain(
-        "cognito-local.seed.json",
+        "cognito-emulator.seed.json",
       );
       expect(exported.body.UserPools[0].Id).toBe("local_Example1");
 

@@ -24,6 +24,7 @@ import {
   createDefaultServices,
   resolveDataDirectory,
 } from "../server/defaults";
+import { PRODUCT_NAME } from "../server/emulatorBanner";
 
 export const EXIT = {
   OK: 0,
@@ -73,15 +74,15 @@ export interface RuntimeInfo {
 class UsageError extends Error {}
 
 const USAGE = `cognito-emulator: a local Amazon Cognito User Pools emulator
-Installed as two commands, cognito-emulator and cognito-local, that run the same program.
+Also installed as cognito-local, an alias that runs the same program.
 
 Usage:
-  cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin] [--admin-token <t>]
-  cognito-local seed <file> [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
-  cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
-  cognito-local reset [--yes] [--all] [--data <dir>] [--json]
-  cognito-local status [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
-  cognito-local help [command] | --help | --version
+  cognito-emulator [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin] [--admin-token <t>]
+  cognito-emulator seed <file> [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+  cognito-emulator export [--out <file>] [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+  cognito-emulator reset [--yes] [--all] [--data <dir>] [--json]
+  cognito-emulator status [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+  cognito-emulator help [command] | --help | --version
 
 Commands:
   start    Run the emulator (default). Applies --seed before listening.
@@ -177,7 +178,7 @@ export const parseCli = (argv: readonly string[]) => {
     throw new UsageError(`unexpected argument "${positionals[expected]}"`);
   }
   if (command === "seed" && !positionals.length && !flags.help) {
-    throw new UsageError("seed needs a file: cognito-local seed <file>");
+    throw new UsageError("seed needs a file: cognito-emulator seed <file>");
   }
   return { command, flags, positionals };
 };
@@ -353,7 +354,7 @@ async function commandStart(io: CliIO, flags: Flags): Promise<number> {
   const running = await findRunningServer(dataDirectory);
   if (running) {
     io.stderr(
-      `cognito-local is already serving ${dataDirectory} at ${running.url} (pid ${running.pid}); stop it first.\n`,
+      `${PRODUCT_NAME} is already serving ${dataDirectory} at ${running.url} (pid ${running.pid}); stop it first.\n`,
     );
     return EXIT.ERROR;
   }
@@ -396,7 +397,7 @@ async function commandStart(io: CliIO, flags: Flags): Promise<number> {
   };
   fs.writeFileSync(runtimeFile(dataDirectory), JSON.stringify(info, null, 2));
 
-  logger.info(`Cognito Local running on ${url}`);
+  logger.info(`${PRODUCT_NAME} running on ${url}`);
   const adminToken = server.services.config.AdminUIConfig?.Token;
   if (server.adminUiPath) {
     logger.info(
@@ -460,7 +461,7 @@ async function commandSeed(
     lines = body.lines as string[];
   } else {
     if (flags.url) {
-      throw new Error(`no cognito-local server answers at ${flags.url}`);
+      throw new Error(`no ${PRODUCT_NAME} server answers at ${flags.url}`);
     }
     const { services } = await createDefaultServices(quietLogger(), {
       dataDirectory,
@@ -506,10 +507,10 @@ async function commandExport(io: CliIO, flags: Flags): Promise<number> {
     if (status !== 200) throw new Error(String(body.error ?? `HTTP ${status}`));
     seed = body as unknown as SeedFile;
   } else if (flags.url) {
-    throw new Error(`no cognito-local server answers at ${flags.url}`);
+    throw new Error(`no ${PRODUCT_NAME} server answers at ${flags.url}`);
   } else if (!fs.existsSync(path.join(dataDirectory, "db"))) {
     seed = {
-      $comment: `Exported by cognito-local on ${new Date().toISOString()}. ${PASSWORDS_NOT_EXPORTED}`,
+      $comment: `Exported by ${PRODUCT_NAME} on ${new Date().toISOString()}. ${PASSWORDS_NOT_EXPORTED}`,
       Version: 1,
       UserPools: [],
     };
@@ -551,7 +552,7 @@ async function commandReset(io: CliIO, flags: Flags): Promise<number> {
   const running = await findRunningServer(dataDirectory);
   if (running) {
     io.stderr(
-      `cognito-local is running on ${dataDirectory} at ${running.url} (pid ${running.pid}); stop it before reset.\n`,
+      `${PRODUCT_NAME} is running on ${dataDirectory} at ${running.url} (pid ${running.pid}); stop it before reset.\n`,
     );
     return EXIT.ERROR;
   }
@@ -571,7 +572,7 @@ async function commandReset(io: CliIO, flags: Flags): Promise<number> {
   if (!flags.yes) {
     if (!io.isTTY) {
       io.stderr(
-        `reset deletes ${targets.join(", ")}. Re-run with --yes to confirm (stdin is not a terminal, so cognito-local will not prompt).\n`,
+        `reset deletes ${targets.join(", ")}. Re-run with --yes to confirm (stdin is not a terminal, so ${PRODUCT_NAME} will not prompt).\n`,
       );
       return EXIT.USAGE;
     }
@@ -635,13 +636,13 @@ async function commandStatus(io: CliIO, flags: Flags): Promise<number> {
     json(io, status);
   } else if (running) {
     io.stdout(
-      `cognito-local is running at ${running.url}${running.pid ? ` (pid ${running.pid})` : ""}${pools === undefined ? "" : `, ${pools} user pool(s)`}${status.adminUrl ? `, admin UI ${status.adminUrl}` : ""}.\n`,
+      `${PRODUCT_NAME} is running at ${running.url}${running.pid ? ` (pid ${running.pid})` : ""}${pools === undefined ? "" : `, ${pools} user pool(s)`}${status.adminUrl ? `, admin UI ${status.adminUrl}` : ""}.\n`,
     );
     if (adminTokenRefused)
       io.stderr(`${tokenRequiredError(running).message}.\n`);
   } else {
     io.stdout(
-      `cognito-local is not running${flags.url ? ` at ${flags.url}` : ` for ${dataDirectory}`}${pools === undefined ? "" : ` (${pools} user pool(s) on disk)`}.\n`,
+      `${PRODUCT_NAME} is not running${flags.url ? ` at ${flags.url}` : ` for ${dataDirectory}`}${pools === undefined ? "" : ` (${pools} user pool(s) on disk)`}.\n`,
     );
   }
   return running ? EXIT.OK : EXIT.NOT_RUNNING;

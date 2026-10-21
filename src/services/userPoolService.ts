@@ -120,7 +120,7 @@ export interface User {
   Username: string;
   UserStatus: UserStatusType;
 
-  // extra attributes for Cognito Local
+  // extra attributes for cognito-emulator
   Password: string;
   AttributeVerificationCode?: string;
   ConfirmationCode?: string;

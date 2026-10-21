@@ -19,6 +19,7 @@ import { AuthorizationCodeStore } from "../oauth2/authorizationCodeStore";
 import { attachOAuth2Routes } from "../oauth2/routes";
 import type { Services } from "../services";
 import { requestContext, requestIssuerDomain } from "../services/context";
+import { emulatorNoticePage, PRODUCT_NAME } from "./emulatorBanner";
 import type { Router } from "./Router";
 import { attachUserImportRoutes } from "./userImportRoutes";
 
@@ -116,6 +117,18 @@ export const createServer = (
   const adminUiEnabled = !!services?.config.AdminUIConfig?.Enabled;
   if (services && adminUiEnabled) {
     app.use(ADMIN_UI_PATH, createAdminRouter(services, router));
+  } else {
+    app.get([ADMIN_UI_PATH, `${ADMIN_UI_PATH}/*path`], (_req, res) => {
+      res
+        .status(404)
+        .type("text/html")
+        .send(
+          emulatorNoticePage(
+            "Admin UI is turned off",
+            `This ${PRODUCT_NAME} runs without its admin UI (--no-admin or AdminUIConfig.Enabled false). Start it with --admin to see user pools, users and codes here.`,
+          ),
+        );
+    });
   }
 
   app.post("/", (req, res) => {

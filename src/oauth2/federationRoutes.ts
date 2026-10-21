@@ -1,6 +1,11 @@
 import type { Application, Request, Response } from "express";
 import { CognitoError } from "../errors";
 import type { FederationConfig } from "../server/config";
+import {
+  emulatorBanner,
+  emulatorBannerStyle,
+  PRODUCT_NAME,
+} from "../server/emulatorBanner";
 import type { Services } from "../services";
 import { type Context, requestContext } from "../services/context";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
@@ -44,27 +49,35 @@ function realAuthorizeUrl(provider: IdentityProviderConfig): string {
 }
 
 const STYLE = `
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f5f7; margin: 0; padding: 16px; color: #1d2330; }
-  main { max-width: 560px; margin: 24px auto; background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
-  h1 { font-size: 20px; margin: 0 0 4px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f5f7; margin: 0; color: #1d2330; }
+  main { max-width: 600px; margin: 24px auto; background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  @media (max-width: 640px) { main { margin: 0; border-radius: 0; box-shadow: none; } }
+  h1 { font-size: 20px; margin: 0 0 12px; }
   .note { color: #5b6475; font-size: 13px; margin: 0 0 16px; overflow-wrap: anywhere; }
+  .explain { background: #eef3fd; border: 1px solid #c9d8f5; border-radius: 6px; padding: 10px 14px; font-size: 14px; margin: 0 0 16px; }
+  .explain p { margin: 6px 0; }
+  .target { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; margin: 0 0 12px; }
+  .target dt { color: #5b6475; }
+  .target dd { margin: 0; overflow-wrap: anywhere; }
   label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
   input[type=text] { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #c4c9d4; border-radius: 4px; font-size: 14px; }
   table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 12px; color: #5b6475; font-weight: 600; padding: 8px 4px 2px; }
+  th { text-align: start; font-size: 12px; color: #5b6475; font-weight: 600; padding: 8px 4px 2px; }
   td { padding: 3px 4px; }
   code { background: #eef0f4; padding: 1px 4px; border-radius: 3px; }
   .actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
   button { padding: 9px 16px; border-radius: 4px; border: 1px solid #1f6feb; background: #1f6feb; color: #fff; font-size: 14px; cursor: pointer; }
   button.secondary { background: #fff; color: #b42318; border-color: #b42318; }
   details { margin-top: 16px; font-size: 13px; }
-  .badge { display: inline-block; font-size: 11px; background: #fff4d6; color: #7a4d00; border-radius: 10px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
+  .badge { display: inline-block; font-size: 11px; background: #fff4d6; color: #7a4d00; border-radius: 10px; padding: 2px 8px; margin-inline-start: 6px; vertical-align: middle; }
 `;
 
 const page = (title: string, body: string) => `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(title)}</title><style>${STYLE}</style></head>
-<body><main>
+<html lang="en">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(title)} · ${PRODUCT_NAME}</title>${emulatorBannerStyle()}<style>${STYLE}</style></head>
+<body>
+${emulatorBanner()}
+<main>
 ${body}
 </main></body>
 </html>`;
@@ -72,9 +85,27 @@ ${body}
 const claimRow = (name: string, value: string) =>
   `    <tr><td><input type="text" name="claim_name" value="${escapeHtml(name)}" aria-label="Claim name" /></td><td><input type="text" name="claim_value" value="${escapeHtml(value)}" aria-label="Claim value" /></td></tr>\n`;
 
+/** Where a mock IdP sign-in returns to, shown on the page. */
+export interface MockIdpTarget {
+  clientId: string;
+  clientName?: string;
+  userPoolId: string;
+  redirectUri: string;
+}
+
+const targetList = (target: MockIdpTarget | undefined) =>
+  target
+    ? `<dl class="target">
+  <dt>App client</dt><dd>${target.clientName ? `${escapeHtml(target.clientName)} ` : ""}<code>${escapeHtml(target.clientId)}</code> in user pool <code>${escapeHtml(target.userPoolId)}</code></dd>
+  <dt>Returns to</dt><dd><code>${escapeHtml(target.redirectUri)}</code></dd>
+</dl>
+`
+    : "";
+
 export function mockIdpPage(
   provider: IdentityProviderConfig,
   stateId: string,
+  target?: MockIdpTarget,
 ): string {
   const defaults = mockIdpDefaults(provider);
   const rows = [
@@ -93,21 +124,26 @@ export function mockIdpPage(
         .join("")}</ul>`
     : "<p>No AttributeMapping: only <code>sub</code> and <code>identities</code> are set on the user.</p>";
   const realUrl = realAuthorizeUrl(provider);
+  const name = escapeHtml(provider.ProviderName);
   return page(
-    `Sign in with ${provider.ProviderName}`,
-    `<h1>Sign in with ${escapeHtml(provider.ProviderName)}<span class="badge">mock ${escapeHtml(provider.ProviderType)} IdP</span></h1>
-<p class="note">cognito-local stands in for the identity provider: nothing leaves this machine.${
-      realUrl
-        ? ` Real Cognito would redirect to <code>${escapeHtml(realUrl)}</code>.`
-        : ""
-    }</p>
-<form method="POST" action="/oauth2/idpresponse">
+    `Sign in with ${provider.ProviderName} (mock)`,
+    `<h1>Sign in with ${name}<span class="badge">mock ${escapeHtml(provider.ProviderType)} IdP</span></h1>
+<div class="explain">
+  <p>This page plays the role of ${name}'s login page, so no real ${name} account is needed and nothing leaves this machine.</p>
+  <p>Pick who signs in: Subject is the user's id at ${name}, the rows are the claims ${name} would return. Press <strong>Sign in</strong> to continue to the app as that user; the same Subject signs in as the same user next time.</p>
+  <p><strong>Simulate IdP error</strong> returns to the app as if the user cancelled at ${name}, with <code>error=access_denied</code> and the description below.</p>
+</div>
+${targetList(target)}${
+  realUrl
+    ? `<p class="note">With real Amazon Cognito the browser would go to <code>${escapeHtml(realUrl)}</code> instead.</p>\n`
+    : ""
+}<form method="POST" action="/oauth2/idpresponse">
 ${hiddenInput("state", stateId)}  <label for="subject">Subject (<code>${escapeHtml(defaults.subjectClaim)}</code>)</label>
   <input type="text" id="subject" name="subject" value="${escapeHtml(defaults.subject)}" />
   <table>
     <tr><th>IdP claim</th><th>Value</th></tr>
 ${rows}  </table>
-  <details><summary>Attribute mapping of ${escapeHtml(provider.ProviderName)}</summary>${mappingList}</details>
+  <details><summary>Attribute mapping of ${name}</summary>${mappingList}</details>
   <label for="error_description">Error description (used by "Simulate IdP error")</label>
   <input type="text" id="error_description" name="error_description" value="User cancelled the sign-in" />
   <div class="actions">
@@ -244,10 +280,20 @@ export function attachFederationRoutes(
             ),
           );
       }
+      const appClient = await services.cognito
+        .getAppClient(ctx, pending.clientId)
+        .catch(() => null);
       return res
         .status(200)
         .type("text/html")
-        .send(mockIdpPage(provider, req.query.state as string));
+        .send(
+          mockIdpPage(provider, req.query.state as string, {
+            clientId: pending.clientId,
+            clientName: appClient?.ClientName,
+            userPoolId: pending.userPoolId,
+            redirectUri: pending.redirectUri,
+          }),
+        );
     },
   );
 

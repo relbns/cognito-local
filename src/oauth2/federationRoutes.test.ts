@@ -131,8 +131,19 @@ describe("federated sign-in through the mock IdP", () => {
     const { stateId, page } = await startFlow();
     expect(page).toContain('action="/oauth2/idpresponse"');
     expect(page).toContain(`name="state" value="${stateId}"`);
-    expect(page).toContain('value="100000000000000000001"');
+    expect(page).toContain('value="108374529016473820195"');
     expect(page).toContain("Simulate IdP error (access_denied)");
+    expect(page).toContain("data-emulator-banner");
+    expect(page).toContain(
+      "This page plays the role of Google's login page, so no real Google account is needed",
+    );
+    expect(page).toContain(
+      "Pick who signs in: Subject is the user's id at Google",
+    );
+    expect(page).toContain(
+      `<code>idp-client</code> in user pool <code>us-east-1_fed</code>`,
+    );
+    expect(page).toContain(`Returns to</dt><dd><code>${CALLBACK}</code>`);
     expect(page).not.toContain("<script>x</script>");
     expect(page).toContain("&lt;script&gt;x&lt;/script&gt;");
   });

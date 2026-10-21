@@ -2,7 +2,7 @@
 
 import { runCli } from "../cli";
 
-// Kept for existing setups that run lib/bin/start.js; same as `cognito-local start`.
+// Kept for existing setups that run lib/bin/start.js; same as `cognito-emulator start`.
 runCli(["start", ...process.argv.slice(2)]).then(
   (code) => process.exit(code),
   (err) => {

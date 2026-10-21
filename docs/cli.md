@@ -1,11 +1,11 @@
 # Command line
 
-One program with subcommands, installed as two commands that behave the same: `cognito-emulator`
-and `cognito-local`. This page uses `cognito-local`. Every option has a flag, nothing prompts when stdin
+One program with subcommands, installed as `cognito-emulator` and as the alias `cognito-local`, which
+behaves the same. This page uses `cognito-emulator`. Every option has a flag, nothing prompts when stdin
 is not a terminal, and `status`, `seed`, `export` and `reset` print JSON with `--json`.
 
 ```bash
-npx github:relbns/cognito-local start --seed ./cognito-local.seed.json
+npx github:relbns/cognito-local start --seed ./cognito-emulator.seed.json
 ```
 
 ## Running it
@@ -14,10 +14,10 @@ npx github:relbns/cognito-local start --seed ./cognito-local.seed.json
 |-----|---------|
 | From the npm registry (once published) | `npx cognito-emulator start`, or `npm install -g cognito-emulator` |
 | From GitHub, no clone | `npx github:relbns/cognito-local start` (npm clones the repo, installs its dev dependencies and builds it once; add `#<branch or sha>` to pin a version) |
-| Global command | `npm install -g "$(npm pack github:relbns/cognito-local \| tail -1)"` in an empty directory, then `cognito-local start`. A plain `npm install -g github:relbns/cognito-local` fails with npm 10 (`tsc: command not found`: npm builds the git dependency in global mode without its dev dependencies) |
-| Project dev dependency | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-local start` |
+| Global command | `npm install -g "$(npm pack github:relbns/cognito-local \| tail -1)"` in an empty directory, then `cognito-emulator start`. A plain `npm install -g github:relbns/cognito-local` fails with npm 10 (`tsc: command not found`: npm builds the git dependency in global mode without its dev dependencies) |
+| Project dev dependency | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-emulator start` |
 | From a clone | `npm install` (builds `lib/`), then `node lib/bin/cli.js start`, or `npm run cli -- start` to run the TypeScript source |
-| Old entry point | `node lib/bin/start.js` still works and is the same as `cognito-local start` |
+| Old entry point | `node lib/bin/start.js` still works and is the same as `cognito-emulator start` |
 
 The npm package is `cognito-emulator`, so it does not clash with upstream's `cognito-local`. It is not
 on the npm registry yet; the GitHub commands above work today.
@@ -26,12 +26,12 @@ on the npm registry yet; the GitHub commands above work today.
 
 | Command | What it does |
 |---------|--------------|
-| `cognito-local [start]` | Runs the emulator. `start` is the default, so a bare `cognito-local` behaves like the old start script. Applies `--seed` before listening. |
-| `cognito-local seed <file>` | Applies a [seed file](seed-files.md). When a server is running for the data directory (or `--url` is given), it goes through that server's admin API (`POST /_admin/api/seed`), so the running process sees the change at once; otherwise it writes the data directory directly. |
-| `cognito-local export [--out <file>]` | Prints, or writes to `--out`, a seed file that re-creates the current state. Passwords are never exported. With `--out`, `file:` trigger paths are made relative to the output file when they are at most one directory above it. |
-| `cognito-local reset [--yes] [--all]` | Deletes `<data>/db` (pools, clients, users). `--all` also deletes `config.json`. Refuses while a server is running on the data directory. Asks for confirmation on a terminal; without a terminal it needs `--yes` and exits 2 otherwise. |
-| `cognito-local status` | Reports whether a server is running for the data directory: URL, pid, admin UI, number of user pools. Exit code 3 when it is not running. |
-| `cognito-local help`, `--help`, `--version` | Usage and version. |
+| `cognito-emulator [start]` | Runs the emulator. `start` is the default, so a bare `cognito-emulator` behaves like the old start script. Applies `--seed` before listening. |
+| `cognito-emulator seed <file>` | Applies a [seed file](seed-files.md). When a server is running for the data directory (or `--url` is given), it goes through that server's admin API (`POST /_admin/api/seed`), so the running process sees the change at once; otherwise it writes the data directory directly. |
+| `cognito-emulator export [--out <file>]` | Prints, or writes to `--out`, a seed file that re-creates the current state. Passwords are never exported. With `--out`, `file:` trigger paths are made relative to the output file when they are at most one directory above it. |
+| `cognito-emulator reset [--yes] [--all]` | Deletes `<data>/db` (pools, clients, users). `--all` also deletes `config.json`. Refuses while a server is running on the data directory. Asks for confirmation on a terminal; without a terminal it needs `--yes` and exits 2 otherwise. |
+| `cognito-emulator status` | Reports whether a server is running for the data directory: URL, pid, admin UI, number of user pools. Exit code 3 when it is not running. |
+| `cognito-emulator help`, `--help`, `--version` | Usage and version. |
 
 ## Options
 
@@ -81,15 +81,15 @@ pid and `GET /health`). A stale file left by a killed process is ignored.
 
 ```bash
 # Start on another port with a seed and a throwaway data directory
-cognito-local start --port 9330 --data /tmp/cognito --seed examples/seed.basic.json
+cognito-emulator start --port 9330 --data /tmp/cognito --seed examples/seed.basic.json
 
 # Re-apply after editing the seed; the running server picks it up
-cognito-local seed examples/seed.basic.json --data /tmp/cognito --json
+cognito-emulator seed examples/seed.basic.json --data /tmp/cognito --json
 
 # Snapshot the current state as a seed file
-cognito-local export --data /tmp/cognito --out ./cognito-local.seed.json
+cognito-emulator export --data /tmp/cognito --out ./cognito-emulator.seed.json
 
 # In a script
-cognito-local status --data /tmp/cognito --json || echo "not running"
-cognito-local reset --data /tmp/cognito --yes
+cognito-emulator status --data /tmp/cognito --json || echo "not running"
+cognito-emulator reset --data /tmp/cognito --yes
 ```

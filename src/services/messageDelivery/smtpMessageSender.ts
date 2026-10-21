@@ -39,12 +39,12 @@ export class SmtpMessageSender implements MessageSender {
     ctx.logger.info({ to: destination, subject }, "Sending email via SMTP");
 
     await this.transporter.sendMail({
-      from: "cognito-local <noreply@cognito.local>",
+      from: "cognito-emulator <noreply@cognito.local>",
       to: destination,
       subject,
       text: body,
       html: `<div style="font-family:system-ui;padding:20px;">
-        <h2 style="color:#FF6B35;">Cognito Local</h2>
+        <h2 style="color:#FF6B35;">cognito-emulator</h2>
         <p>${escapeHtml(body)}</p>
         ${message.__code ? `<p style="font-size:24px;font-weight:bold;letter-spacing:4px;margin:20px 0;">${escapeHtml(message.__code)}</p>` : ""}
         <p style="color:#999;font-size:12px;">User: ${escapeHtml(user.Username)}</p>
@@ -65,7 +65,7 @@ export class SmtpMessageSender implements MessageSender {
     ctx.logger.info({ to: destination }, "Routing SMS as email via SMTP");
 
     await this.transporter.sendMail({
-      from: "cognito-local <sms@cognito.local>",
+      from: "cognito-emulator <sms@cognito.local>",
       to: `${destination}@sms.local`,
       subject: `SMS to ${destination}`,
       text: body,

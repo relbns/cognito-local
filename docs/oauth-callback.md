@@ -1,7 +1,7 @@
 # OAuth callback page (dev tool)
 
 `/_admin/callback` is a page of the admin UI that plays the part of your app's redirect URI. It is a
-cognito-local development tool, not something Amazon Cognito has. Use it to try the hosted login
+cognito-emulator development tool, not something Amazon Cognito has. Use it to try the hosted login
 (`/oauth2/authorize`) and federated sign-in without writing a client.
 
 ## Setup

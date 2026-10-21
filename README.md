@@ -63,14 +63,14 @@ it, and the AWS SDK v3 that the emulator runs on requires 22 for releases from J
 > `npx cognito-emulator start` and `npm install -g cognito-emulator` install it from the registry.
 > Until then, install it from GitHub: the GitHub and Docker commands below work today.
 
-The package installs two commands that run the same program, `cognito-emulator` and `cognito-local`.
-This README uses `cognito-local`.
+The package installs the `cognito-emulator` command, and `cognito-local` as an alias that runs the
+same program, so scripts written for upstream keep working. This README uses `cognito-emulator`.
 
 | Way                           | Command                                                                              |
 | ----------------------------- | ------------------------------------------------------------------------------------ |
 | npx, nothing installed        | `npx github:relbns/cognito-local start`                                              |
 | Global command                | see [Global install](#global-install)                                                |
-| Dev dependency of a project   | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-local start` |
+| Dev dependency of a project   | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-emulator start` |
 | Docker                        | `docker run --rm -p 127.0.0.1:9229:9229 ghcr.io/relbns/cognito-local:edge`           |
 | From source                   | `git clone`, `npm install`, `npm start`                                              |
 | npm registry (once published) | `npx cognito-emulator start`, or `npm install -g cognito-emulator`                   |
@@ -98,7 +98,7 @@ step in global mode, the dev dependencies are not installed, and it fails with
 ```bash
 cd "$(mktemp -d)"
 npm install -g "$(npm pack github:relbns/cognito-local | tail -1)"
-cognito-local start
+cognito-emulator start
 ```
 
 Remove it with `npm uninstall -g cognito-emulator`.
@@ -116,7 +116,7 @@ docker run --rm -p 127.0.0.1:9229:9229 \
   ghcr.io/relbns/cognito-local:edge --seed /seed.json
 ```
 
-- The image runs `cognito-local start`, so arguments after the image name are `start` flags
+- The image runs `cognito-emulator start`, so arguments after the image name are `start` flags
   (`--seed`, `--no-admin`). Environment variables work too (`COGNITO_LOCAL_SEED=/seed.json`).
 - It listens on `0.0.0.0:9229` inside the container as the unprivileged `node` user, keeps data and
   `config.json` in the `/app/.cognito` volume, and has a health check on `/health`.
@@ -124,7 +124,7 @@ docker run --rm -p 127.0.0.1:9229:9229 \
   the server listens on `0.0.0.0`, so it prints a warning until `COGNITO_LOCAL_ADMIN_TOKEN` is set.
 - Tokens are issued for `http://localhost:9229`. When clients reach the emulator under another name,
   set `TokenConfig.IssuerDomain` to that URL (see [Docker Compose](#docker-compose)).
-- To apply a seed to a running container, run `cognito-local seed seed.json --url http://localhost:9229`
+- To apply a seed to a running container, run `cognito-emulator seed seed.json --url http://localhost:9229`
   on the host, or `curl -X POST -H 'Content-Type: application/json' --data-binary @seed.json http://localhost:9229/_admin/api/seed`.
 
 ### Docker Compose
@@ -180,11 +180,11 @@ npm start      # runs src/ with tsx; flags go after --, e.g. npm start -- --port
 ```
 
 `node lib/bin/cli.js start` runs the build, `npm run cli -- <command>` the TypeScript source, and
-`node lib/bin/start.js` is the same as `cognito-local start`.
+`node lib/bin/start.js` is the same as `cognito-emulator start`.
 
 ## Quick start
 
-The commands below use npx. With a global install write `cognito-local`; from a clone,
+The commands below use npx. With a global install write `cognito-emulator`; from a clone,
 `node lib/bin/cli.js` and `examples/seed.basic.json`.
 
 ### 1. Start with the example seed
@@ -205,6 +205,11 @@ groups `admins` and `members`, and three users: `admin@example.test` with passwo
 Open <http://localhost:9229/_admin>: pools, clients, users, groups, codes and a token decoder. It is
 open by default; keep it on your machine, or set an [admin token](#admin-token). More pages are under
 [Screenshots](#screenshots).
+
+Every page the emulator serves to a browser (the hosted login and its steps, the mock IdP, the admin
+UI) opens with a dark `cognito-emulator` strip, "Local Amazon Cognito emulator, not AWS", with links to
+the admin UI and its codes page, so a page from the emulator is never mistaken for AWS or for the
+real provider.
 
 ### 3. Point your tools at it
 
@@ -355,9 +360,9 @@ servers, groups and users with AWS API field names. It is validated before anyth
 applied idempotently, and never sends messages or runs triggers.
 
 ```bash
-cognito-local start --seed cognito.seed.json      # at startup (or COGNITO_LOCAL_SEED)
-cognito-local seed cognito.seed.json              # into the running server, or the data directory
-cognito-local export --out cognito.seed.json      # current state as a seed (no passwords)
+cognito-emulator start --seed cognito.seed.json      # at startup (or COGNITO_LOCAL_SEED)
+cognito-emulator seed cognito.seed.json              # into the running server, or the data directory
+cognito-emulator export --out cognito.seed.json      # current state as a seed (no passwords)
 ```
 
 The admin UI has **Export as seed** on the pools page, and `GET /_admin/api/export` returns the same
@@ -369,7 +374,7 @@ file. Format and rules: [docs/seed-files.md](docs/seed-files.md).
   plus `clients.json`), so they survive a restart. `config.json` sits next to `db/`.
 - CUSTOM_AUTH sessions, pending OAuth logins and the codes log are in memory and are lost on restart.
 - `--data <dir>` (or `COGNITO_LOCAL_DATA_DIR`) picks another directory, for example one per test run.
-- `cognito-local reset --yes` deletes `<data>/db`; `--all` also deletes `config.json`. It refuses
+- `cognito-emulator reset --yes` deletes `<data>/db`; `--all` also deletes `config.json`. It refuses
   while a server runs on that directory, so stop the server first. In Docker, remove the volume:
   `docker volume rm cognito-data`.
 - Re-applying a seed does not reset passwords or statuses changed while testing; reset for a clean
@@ -382,10 +387,10 @@ Start in the background, wait until `status` succeeds, seed, run the tests, stop
 ```bash
 npm install --save-dev github:relbns/cognito-local   # once, in your project
 
-npx cognito-local start --data .cognito-ci > cognito-local.log 2>&1 &
-for i in $(seq 1 30); do npx cognito-local status --data .cognito-ci --json > /dev/null && break; sleep 1; done
-npx cognito-local status --data .cognito-ci          # exit 3 fails the job if it never came up
-npx cognito-local seed test/cognito.seed.json --data .cognito-ci
+npx cognito-emulator start --data .cognito-ci > cognito-emulator.log 2>&1 &
+for i in $(seq 1 30); do npx cognito-emulator status --data .cognito-ci --json > /dev/null && break; sleep 1; done
+npx cognito-emulator status --data .cognito-ci          # exit 3 fails the job if it never came up
+npx cognito-emulator seed test/cognito.seed.json --data .cognito-ci
 
 AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER=http://localhost:9229 npm test
 
@@ -405,12 +410,12 @@ kill "$(jq -r .pid .cognito-ci/server.json)"
 ### CLI
 
 ```text
-cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin] [--admin-token <t>]
-cognito-local seed <file> [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
-cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
-cognito-local reset [--yes] [--all] [--data <dir>] [--json]
-cognito-local status [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
-cognito-local help [command] | --help | --version
+cognito-emulator [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin] [--admin-token <t>]
+cognito-emulator seed <file> [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+cognito-emulator export [--out <file>] [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+cognito-emulator reset [--yes] [--all] [--data <dir>] [--json]
+cognito-emulator status [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+cognito-emulator help [command] | --help | --version
 ```
 
 A flag wins over `config.json` (`ServerConfig`, `AdminUIConfig.Enabled`), `config.json` over the
@@ -556,7 +561,7 @@ Pools default to email as the username
 | Symptom                                                                          | Cause and fix                                                                                                                                                                                                                                                                             |
 | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `listen EADDRINUSE: address already in use ::1:9229`                             | Another process holds the port. 9229 is also Node's default `--inspect` port, so a debugger can hold it. Use `--port 9330`, or find it with `lsof -iTCP:9229 -sTCP:LISTEN`.                                                                                                               |
-| `cognito-local is already serving .cognito at ...; stop it first.`               | A server already runs on this data directory. Stop it, or use another `--data`.                                                                                                                                                                                                           |
+| `cognito-emulator is already serving .cognito at ...; stop it first.`               | A server already runs on this data directory. Stop it, or use another `--data`.                                                                                                                                                                                                           |
 | `curl http://127.0.0.1:9229` is refused while `localhost` works                  | The default host `localhost` can bind IPv6 `::1` only. Use `localhost` in URLs, or start with `--host 127.0.0.1`.                                                                                                                                                                         |
 | A container cannot reach an emulator running on the host                         | It listens on `localhost` only. Start it with `--host 0.0.0.0` and set `TokenConfig.IssuerDomain`, or run the Docker image on the same network.                                                                                                                                           |
 | Token verification fails with an issuer or JWKS mismatch                         | `iss` is `TokenConfig.IssuerDomain` + `/<poolId>`, by default the emulator's own host and port. When clients reach it under another name (a Compose service name, a mapped port), set `IssuerDomain` to that URL and fetch the JWKS from `<IssuerDomain>/<poolId>/.well-known/jwks.json`. |

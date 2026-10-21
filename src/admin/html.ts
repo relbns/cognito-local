@@ -1,3 +1,12 @@
+import {
+  ADMIN_UI_PATH,
+  emulatorBanner,
+  emulatorBannerStyle,
+  PRODUCT_NAME,
+} from "../server/emulatorBanner";
+
+export { ADMIN_UI_PATH };
+
 export class SafeHtml {
   public constructor(public readonly value: string) {}
 
@@ -36,8 +45,6 @@ export const html = (
 
 export const raw = (value: string): SafeHtml => new SafeHtml(value);
 
-export const ADMIN_UI_PATH = "/_admin";
-
 export const adminUrl = (...segments: string[]): string =>
   [ADMIN_UI_PATH, ...segments.map(encodeURIComponent)].join("/");
 
@@ -59,7 +66,7 @@ const STYLES = `
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-header{background:var(--panel);border-bottom:1px solid var(--border)}
+.topbar{background:var(--panel);border-bottom:1px solid var(--border)}
 .bar{max-width:1200px;margin:0 auto;padding:10px 16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
 .brand{font-weight:700;color:var(--text)}
 nav{display:flex;gap:4px;flex-wrap:wrap}
@@ -135,16 +142,18 @@ export const layout = (opts: {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>${opts.title} · Cognito Local admin</title>
+<title>${opts.title} · ${PRODUCT_NAME} admin</title>
+${raw(emulatorBannerStyle())}
 <style>${raw(STYLES)}</style>
 </head>
 <body>
-<header><div class="bar">
-  <a class="brand" href="${ADMIN_UI_PATH}">Cognito Local admin</a>
+${raw(emulatorBanner())}
+<div class="topbar"><div class="bar">
+  <a class="brand" href="${ADMIN_UI_PATH}">Admin UI</a>
   ${
     opts.bare
       ? ""
-      : html`<nav>
+      : html`<nav aria-label="Admin UI">
     <a href="${ADMIN_UI_PATH}" class="${opts.active === "pools" ? "active" : ""}">User pools</a>
     <a href="${adminUrl("codes")}" class="${opts.active === "codes" ? "active" : ""}">Codes</a>
     <a href="${adminUrl("tokens")}" class="${opts.active === "tokens" ? "active" : ""}">Tokens</a>
@@ -156,7 +165,7 @@ export const layout = (opts: {
       : html`<span class="notice" title="Protect with AdminUIConfig.Token or COGNITO_LOCAL_ADMIN_TOKEN, disable with AdminUIConfig.Enabled=false">No authentication: local development only</span>`
   }`
   }
-</div></header>
+</div></div>
 <main>
 ${opts.flash?.ok ? html`<div class="flash ok" role="status">${opts.flash.ok}</div>` : ""}
 ${opts.flash?.error ? html`<div class="flash error" role="alert">${opts.flash.error}</div>` : ""}

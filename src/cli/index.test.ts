@@ -54,7 +54,7 @@ const freePort = () =>
     srv.on("error", reject);
   });
 
-describe("cognito-local CLI", () => {
+describe("cognito-emulator CLI", () => {
   let data: string;
 
   beforeEach(() => {
@@ -69,7 +69,8 @@ describe("cognito-local CLI", () => {
     it("prints usage for --help and the version for --version", async () => {
       const help = fakeIO();
       expect(await runCli(["--help"], help.io)).toBe(0);
-      expect(help.stdout()).toContain("cognito-local seed <file>");
+      expect(help.stdout()).toContain("cognito-emulator seed <file>");
+      expect(help.stdout()).toContain("Also installed as cognito-local");
       expect(help.stdout()).toContain("cognito-emulator");
       const version = fakeIO();
       expect(await runCli(["--version"], version.io)).toBe(0);

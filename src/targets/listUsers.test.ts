@@ -17,7 +17,7 @@ describe("ListUsers target", () => {
     });
   });
 
-  it("lists users and removes Cognito Local fields", async () => {
+  it("lists users and removes cognito-emulator fields", async () => {
     const user1 = TDB.user();
     const user2 = TDB.user();
 

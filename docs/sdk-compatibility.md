@@ -1,6 +1,6 @@
 # SDK compatibility
 
-cognito-local speaks the Cognito User Pools wire protocol: AWS JSON 1.1 over `POST /`, with the
+cognito-emulator speaks the Cognito User Pools wire protocol: AWS JSON 1.1 over `POST /`, with the
 operation in `X-Amz-Target: AWSCognitoIdentityProviderService.<Operation>`. Any SDK that can send
 that protocol to a custom endpoint can use the emulator. The emulator does not check SigV4
 signatures, so any non-empty credentials and any region work.

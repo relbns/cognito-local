@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test of cognito-local through the AWS CLI v2. Usage: aws-cli-smoke.sh [endpoint]
+# Smoke test of cognito-emulator through the AWS CLI v2. Usage: aws-cli-smoke.sh [endpoint]
 set -euo pipefail
 
 ENDPOINT="${1:-http://localhost:9229}"

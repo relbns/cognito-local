@@ -1,7 +1,7 @@
 # Seed files
 
-A seed file declares user pools and everything in them. cognito-local applies it at startup
-(`--seed <file>` or `COGNITO_LOCAL_SEED`) or on demand (`cognito-local seed <file>`, or
+A seed file declares user pools and everything in them. cognito-emulator applies it at startup
+(`--seed <file>` or `COGNITO_LOCAL_SEED`) or on demand (`cognito-emulator seed <file>`, or
 `POST /_admin/api/seed`). Field names are the AWS API's, so a pool reads like a `CreateUserPool`
 request and a client like a `CreateUserPoolClient` request.
 
@@ -77,7 +77,7 @@ duplicated, and a second apply reports every entity as `unchanged`.
   `RESET_REQUIRED`, `EXTERNAL_PROVIDER`). A federated user (`Google_123…`, `EXTERNAL_PROVIDER`) is
   written as is.
 - **Passwords and status are applied only when the user is created**, so a password changed while
-  testing survives a restart that re-applies the seed. Use `cognito-local reset` for a clean start.
+  testing survives a restart that re-applies the seed. Use `cognito-emulator reset` for a clean start.
 - A user's `sub` cannot change once created; a seed that pins a different `sub` fails with a
   message that says so.
 - `Groups` on a user is its complete membership: groups not listed are left.
@@ -96,7 +96,7 @@ The whole file is checked before anything is written, and every problem is repor
 and the field path:
 
 ```
-Invalid seed /work/cognito-local.seed.json:
+Invalid seed /work/cognito-emulator.seed.json:
   - UserPools[0].MfaConfiguration: must be one of OFF, ON, OPTIONAL, got "MAYBE"
   - UserPools[0].Clients[1].ClientName: duplicate ClientName "web" (also at UserPools[0].Clients[0])
   - UserPools[0].LambdaConfig.PreSignUp: trigger file /work/triggers/pre-sign-up.js does not exist
@@ -120,7 +120,7 @@ and stored as absolute paths. See [local triggers](local-triggers.md).
 
 - Admin UI: **Export as seed** on the user pools page.
 - HTTP: `GET /_admin/api/export` (`?download=1` adds a `Content-Disposition` header).
-- CLI: `cognito-local export [--out file]`.
+- CLI: `cognito-emulator export [--out file]`.
 
 The export re-creates pools, clients (with their ids and secrets), identity providers, resource
 servers, groups and users (attributes including `sub`, status, enabled flag, groups, passkeys).

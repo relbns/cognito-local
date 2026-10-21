@@ -1,6 +1,6 @@
 # Federated identity providers
 
-cognito-local emulates sign-in through a third-party identity provider (Google, Facebook,
+cognito-emulator emulates sign-in through a third-party identity provider (Google, Facebook,
 LoginWithAmazon, SignInWithApple, OIDC, SAML). By default a built-in mock IdP page stands in for
 the provider, without any network call. In [real mode](#real-providers) the emulator signs in
 through the provider itself (OIDC and the social providers). Either way, everything after the
@@ -21,8 +21,10 @@ provider follows the Cognito contract.
    `/mock-idp/<name>/authorize`, with the parameters Cognito would send to the real IdP.
 2. The mock IdP page asks for the federated identity: the subject (`sub`, `id` for Facebook,
    `user_id` for LoginWithAmazon, `NameID` for SAML) and a table of IdP claims. The claim names
-   are prefilled from the IdP's `AttributeMapping`, so the mapping picks them up. **Simulate IdP
-   error** returns `access_denied` instead.
+   are prefilled from the IdP's `AttributeMapping`, so the mapping picks them up, and the subject
+   is a fixed example, so pressing **Sign in** twice signs in the same user. The page names the app
+   client and the redirect URI it returns to. **Simulate IdP error** returns `access_denied`
+   instead.
 3. The form posts to `/oauth2/idpresponse`, which:
    - applies `AttributeMapping` (`<pool attribute>: <IdP claim>`); unmapped claims are dropped;
    - signs in a native user linked with `AdminLinkProviderForUser`

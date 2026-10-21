@@ -1,6 +1,6 @@
 # Local triggers
 
-A Lambda trigger can be a JavaScript file on your machine instead of a Lambda function. cognito-local
+A Lambda trigger can be a JavaScript file on your machine instead of a Lambda function. cognito-emulator
 loads the module in its own process and calls the handler with the same event it would send to
 Lambda, so a trigger written for AWS runs unchanged.
 
@@ -31,7 +31,7 @@ Or for every pool, in `<data>/config.json`:
 - Precedence: a pool's `file:` entry wins over `TriggerFunctions`. A pool `LambdaConfig` entry that
   is a Lambda ARN is ignored, as before; `TriggerFunctions` entries that are not `file:` keep going
   to the Lambda endpoint configured in `LambdaClient`.
-- Supported triggers: the ones cognito-local invokes (`PreSignUp`, `PostConfirmation`,
+- Supported triggers: the ones cognito-emulator invokes (`PreSignUp`, `PostConfirmation`,
   `PreAuthentication`, `PostAuthentication`, `DefineAuthChallenge`, `CreateAuthChallenge`,
   `VerifyAuthChallengeResponse`, `PreTokenGeneration`, `UserMigration`, `CustomMessage`,
   `CustomEmailSender`, `CustomSMSSender`).
@@ -57,7 +57,7 @@ A pool with only `PreTokenGeneration`, or with no `LambdaVersion`, gets version 
   `context` has `functionName`, `awsRequestId`, `getRemainingTimeInMillis()` and friends.
 - Return the event with its `response` filled in, as Lambda requires. A handler that returns
   nothing fails with `InvalidLambdaResponseException`.
-- The event is a JSON copy, so a handler cannot change cognito-local's state by mutating it.
+- The event is a JSON copy, so a handler cannot change cognito-emulator's state by mutating it.
 - TypeScript is not compiled: point at built JavaScript.
 
 ## Errors and timeouts

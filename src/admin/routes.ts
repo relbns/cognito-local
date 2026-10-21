@@ -659,7 +659,7 @@ export const createAdminRouter = (
   admin.get("/api/export", async (req, res) => {
     const seed = await exportSeed(ctxOf(req, services), services);
     if (str(req.query.download)) {
-      res.attachment("cognito-local.seed.json");
+      res.attachment("cognito-emulator.seed.json");
     }
     res
       .set("Cache-Control", "no-store")

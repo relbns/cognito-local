@@ -42,7 +42,7 @@ export const callbackUrlOf = (req: Request) =>
 
 const base64url = (buffer: Buffer) => buffer.toString("base64url");
 
-const DEV_TOOL_NOTE = html`<p class="sub"><span class="badge warn">dev tool</span> Not part of Amazon Cognito: a cognito-local page that plays the app's redirect URI so you can test the hosted login and federation without writing a client.</p>`;
+const DEV_TOOL_NOTE = html`<p class="sub"><span class="badge warn">dev tool</span> Not part of Amazon Cognito: a cognito-emulator page that plays the app's redirect URI so you can test the hosted login and federation without writing a client.</p>`;
 
 const clientLabel = ({ pool, client }: ClientChoice) =>
   `${pool.Name ?? pool.Id} / ${client.ClientName} (${client.ClientId})`;
