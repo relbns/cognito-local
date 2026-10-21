@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Lambda } from "../../src/services";
 import { withCognitoSdk } from "./setup";
 
 const CALLBACK = "http://localhost:9876/cb";
@@ -180,4 +181,93 @@ describe(
       ).toBe(true);
     });
   }),
+);
+
+const preAuthentications: string[] = [];
+
+const preAuthenticationOnly = (): Lambda => ({
+  enabled: (name) => name === "PreAuthentication",
+  invoke: (async (_ctx: unknown, name: string, event: { username: string }) => {
+    if (name === "PreAuthentication") preAuthentications.push(event.username);
+    return {};
+  }) as unknown as Lambda["invoke"],
+});
+
+describe(
+  "hosted login browser session with PreAuthentication",
+  withCognitoSdk(
+    (Cognito, { serverUrl }) => {
+      it("runs PreAuthentication for the form sign-in only, not when the session is reused", async () => {
+        preAuthentications.length = 0;
+        const client = Cognito();
+        const pool = await client
+          .createUserPool({ PoolName: "session", UsernameAttributes: [] })
+          .promise();
+        const UserPoolId = pool.UserPool!.Id!;
+        const app = await client
+          .createUserPoolClient({
+            UserPoolId,
+            ClientName: "web",
+            AllowedOAuthFlowsUserPoolClient: true,
+            AllowedOAuthFlows: ["code"],
+            AllowedOAuthScopes: ["openid"],
+            CallbackURLs: [CALLBACK],
+            SupportedIdentityProviders: ["COGNITO"],
+          })
+          .promise();
+        const ClientId = app.UserPoolClient!.ClientId!;
+        await client
+          .adminCreateUser({
+            UserPoolId,
+            Username: "jane",
+            MessageAction: "SUPPRESS",
+          })
+          .promise();
+        await client
+          .adminSetUserPassword({
+            UserPoolId,
+            Username: "jane",
+            Password: "Passw0rd!",
+            Permanent: true,
+          })
+          .promise();
+        const params = {
+          client_id: ClientId,
+          redirect_uri: CALLBACK,
+          response_type: "code",
+          scope: "openid",
+          state: "s1",
+        };
+
+        const form = await fetch(`${serverUrl()}/oauth2/authorize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            ...params,
+            username: "jane",
+            password: "Passw0rd!",
+          }).toString(),
+          redirect: "manual",
+        });
+        expect(form.status).toBe(302);
+        const cookie = cookieOf(form) as string;
+        expect(preAuthentications).toEqual(["jane"]);
+
+        for (const prompt of [{}, { prompt: "none" }] as Record<
+          string,
+          string
+        >[]) {
+          const reused = await fetch(
+            `${serverUrl()}/oauth2/authorize?${new URLSearchParams({ ...params, ...prompt })}`,
+            { redirect: "manual", headers: { Cookie: cookie } },
+          );
+          expect(
+            new URL(reused.headers.get("location")!).searchParams.has("code"),
+          ).toBe(true);
+        }
+        expect(preAuthentications).toEqual(["jane"]);
+      });
+    },
+    { lambda: preAuthenticationOnly },
+  ),
 );
