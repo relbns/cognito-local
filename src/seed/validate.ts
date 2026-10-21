@@ -309,6 +309,25 @@ const user = entity(
     ),
     Enabled: bool,
     Groups: strArray,
+    Passkeys: arrayOf(
+      entity(
+        {
+          CredentialId: pattern(/^[A-Za-z0-9_-]+$/, "base64url"),
+          PublicKey: pattern(/^[A-Za-z0-9_-]+$/, "base64url"),
+          Algorithm: num,
+          RelyingPartyId: nonEmptyStr,
+          FriendlyCredentialName: str,
+          AuthenticatorAttachment: oneOf("platform", "cross-platform"),
+          AuthenticatorTransports: strArray,
+          SignCount: num,
+          CreatedDate: pattern(
+            /^\d{4}-\d{2}-\d{2}T[\d:.]+(Z|[+-]\d{2}:\d{2})$/,
+            "an ISO 8601 date-time",
+          ),
+        },
+        ["CredentialId", "PublicKey", "Algorithm", "RelyingPartyId"],
+      ),
+    ),
   },
   ["Username"],
   (v, path, issues) => {
@@ -318,6 +337,11 @@ const user = entity(
         message: "set either Password or TemporaryPassword, not both",
       });
     }
+    unique("CredentialId", "CredentialId")(
+      v.Passkeys,
+      `${path}.Passkeys`,
+      issues,
+    );
   },
 );
 

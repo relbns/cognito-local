@@ -330,6 +330,43 @@ describe("seed files", () => {
       ]);
     });
 
+    it("checks passkeys on a user", () => {
+      let error: SeedValidationError | undefined;
+      try {
+        parseSeed(
+          JSON.stringify({
+            UserPools: [
+              {
+                PoolName: "p",
+                Users: [
+                  {
+                    Username: "u",
+                    Passkeys: [
+                      {
+                        CredentialId: "not base64url!",
+                        PublicKey: "pQECAyYgASFYIA",
+                        Algorithm: -7,
+                        RelyingPartyId: "auth.example.test",
+                      },
+                      { CredentialId: "abc", PublicKey: "def", Algorithm: -7 },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }),
+          "/tmp/seed.json",
+          "/tmp",
+        );
+      } catch (e) {
+        error = e as SeedValidationError;
+      }
+      expect(error?.issues.map((i) => i.path)).toEqual([
+        "UserPools[0].Users[0].Passkeys[0].CredentialId",
+        "UserPools[0].Users[0].Passkeys[1].RelyingPartyId",
+      ]);
+    });
+
     it("reports invalid JSON and a missing file", () => {
       expect(() => parseSeed("{", "/tmp/s.json", "/tmp")).toThrow(
         /Invalid seed \/tmp\/s.json:\n {2}- \(root\): not valid JSON/,
@@ -466,6 +503,86 @@ describe("seed files", () => {
       } finally {
         fs.rmSync(fresh, { recursive: true, force: true });
       }
+    });
+
+    it("exports passkeys and re-creates them from the seed", async () => {
+      const passkey = {
+        CredentialId: "Y3JlZGVudGlhbC0x",
+        PublicKey: "pQECAyYgASFYIA",
+        Algorithm: -7,
+        RelyingPartyId: "auth.example.test",
+        FriendlyCredentialName: "Laptop",
+        AuthenticatorAttachment: "platform",
+        AuthenticatorTransports: ["internal"],
+        SignCount: 4,
+        CreatedDate: "2026-10-01T08:00:00.000Z",
+      };
+      const seed: SeedFile = {
+        UserPools: [
+          {
+            Id: "local_Passkeys1",
+            PoolName: "passkeys",
+            UsernameAttributes: [],
+            Users: [
+              {
+                Username: "pat",
+                Password: "Passw0rd!Aa",
+                Passkeys: [passkey],
+              },
+            ],
+          },
+        ],
+      };
+      await applySeed(TestContext, services, seed);
+      const pool = await services.cognito.getUserPool(
+        TestContext,
+        "local_Passkeys1",
+      );
+      expect(
+        (await pool.getUserByUsername(TestContext, "pat"))?.WebAuthnCredentials,
+      ).toEqual([
+        {
+          ...passkey,
+          CreatedDate: new Date(passkey.CreatedDate),
+        },
+      ]);
+
+      const exported = await exportSeed(TestContext, services);
+      const user = exported.UserPools.find((p) => p.Id === "local_Passkeys1")
+        ?.Users?.[0];
+      expect(user?.Passkeys).toEqual([passkey]);
+
+      const fresh = fs.mkdtempSync(
+        path.join(os.tmpdir(), "cognito-local-seed-"),
+      );
+      try {
+        const freshServices = await servicesFor(fresh);
+        await applySeed(TestContext, freshServices, withoutComment(exported));
+        const again = await exportSeed(TestContext, freshServices);
+        expect(
+          again.UserPools.find((p) => p.Id === "local_Passkeys1")?.Users?.[0]
+            ?.Passkeys,
+        ).toEqual([passkey]);
+      } finally {
+        fs.rmSync(fresh, { recursive: true, force: true });
+      }
+
+      const unchanged = await applySeed(TestContext, services, seed);
+      expect(unchanged.changes.find((c) => c.kind === "User")?.action).toBe(
+        "unchanged",
+      );
+      const removed = await applySeed(TestContext, services, {
+        UserPools: [
+          {
+            ...seed.UserPools[0],
+            Users: [{ Username: "pat", Passkeys: [] }],
+          },
+        ],
+      });
+      expect(removed.changes.find((c) => c.kind === "User")).toMatchObject({
+        action: "updated",
+        fields: [`Passkeys-${passkey.CredentialId}`],
+      });
     });
 
     it("exports a developer-only attribute under its schema name", async () => {

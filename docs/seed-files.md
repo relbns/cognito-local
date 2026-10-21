@@ -64,7 +64,7 @@ duplicated, and a second apply reports every entity as `unchanged`.
 | Resource server | `Identifier` | name, scopes |
 | App client | `ClientId`, else `ClientName` within the pool | every setting present in the seed; `ClientSecret` when pinned |
 | Group | `GroupName` | description, precedence, role |
-| User | `Username` (an email or phone alias works in an alias pool) | attributes listed in the seed, `Enabled`, `Groups` |
+| User | `Username` (an email or phone alias works in an alias pool) | attributes listed in the seed, `Enabled`, `Groups`, `Passkeys` |
 
 - **Pinned ids** keep tokens and app configuration stable across resets: a pinned pool `Id`,
   `ClientId` and `ClientSecret` are used as given. Pinning the `sub` attribute of a user keeps the
@@ -81,6 +81,12 @@ duplicated, and a second apply reports every entity as `unchanged`.
 - A user's `sub` cannot change once created; a seed that pins a different `sub` fails with a
   message that says so.
 - `Groups` on a user is its complete membership: groups not listed are left.
+- `Passkeys` on a user is its complete set of passkeys, each with `CredentialId` and `PublicKey`
+  (base64url, the COSE key), `Algorithm` (COSE, such as `-7`), `RelyingPartyId`, and optionally
+  `FriendlyCredentialName`, `AuthenticatorAttachment` (`platform` or `cross-platform`),
+  `AuthenticatorTransports`, `SignCount` and `CreatedDate` (ISO 8601). A passkey holds only the
+  public key, so the authenticator that registered it can sign in again after a reset. A stored
+  passkey keeps the higher of the two signature counters.
 - Nothing is deleted: removing an entity from the seed leaves it in the data directory.
 - Seeding never sends messages and never invokes triggers.
 
@@ -117,7 +123,8 @@ and stored as absolute paths. See [local triggers](local-triggers.md).
 - CLI: `cognito-local export [--out file]`.
 
 The export re-creates pools, clients (with their ids and secrets), identity providers, resource
-servers, groups and users (attributes including `sub`, status, enabled flag, groups). **Passwords
+servers, groups and users (attributes including `sub`, status, enabled flag, groups, passkeys).
+**Passwords
 are not exported**, the same as Cognito; the file's `$comment` says so. Re-created users have a
 random password until you add `Password` or `TemporaryPassword` to them. Exporting, applying the
 export to an empty data directory and exporting again gives the same file. Links made by

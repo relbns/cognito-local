@@ -5,11 +5,13 @@ import type { Clock } from "../services/clock";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import type { Context } from "../services/context";
 import { attributeValue, type UserPool } from "../services/userPoolService";
+import type { WebAuthnCredential } from "../services/webAuthn";
 import {
   SEED_VERSION,
   type SeedClient,
   type SeedFile,
   type SeedIdentityProvider,
+  type SeedPasskey,
   type SeedResourceServer,
   type SeedUser,
   type SeedUserPool,
@@ -91,6 +93,19 @@ const exportSchema = (
   return out;
 };
 
+const exportPasskey = (credential: WebAuthnCredential): SeedPasskey =>
+  defined({
+    CredentialId: credential.CredentialId,
+    PublicKey: credential.PublicKey,
+    Algorithm: credential.Algorithm,
+    RelyingPartyId: credential.RelyingPartyId,
+    FriendlyCredentialName: credential.FriendlyCredentialName,
+    AuthenticatorAttachment: credential.AuthenticatorAttachment,
+    AuthenticatorTransports: credential.AuthenticatorTransports,
+    SignCount: credential.SignCount,
+    CreatedDate: new Date(credential.CreatedDate).toISOString(),
+  });
+
 const usernameFor = (
   pool: UserPool,
   user: { Username: string; Attributes: { Name: string; Value?: string }[] },
@@ -164,6 +179,9 @@ export const exportUserPool = async (
         UserStatus: user.UserStatus as SeedUser["UserStatus"],
         Enabled: user.Enabled,
         Groups: [...(await service.listUserGroupMembership(ctx, user))],
+        ...(user.WebAuthnCredentials?.length
+          ? { Passkeys: user.WebAuthnCredentials.map(exportPasskey) }
+          : {}),
       }),
     );
   }

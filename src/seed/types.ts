@@ -53,6 +53,24 @@ export interface SeedUser {
   Enabled?: boolean;
   /** The user's full group membership. */
   Groups?: string[];
+  /** The user's full set of passkeys: public keys, so they can be exported and re-created. */
+  Passkeys?: SeedPasskey[];
+}
+
+export interface SeedPasskey {
+  /** base64url credential id. */
+  CredentialId: string;
+  /** COSE_Key of the credential, base64url. */
+  PublicKey: string;
+  /** COSE algorithm, such as -7 (ES256) or -257 (RS256). */
+  Algorithm: number;
+  RelyingPartyId: string;
+  FriendlyCredentialName?: string;
+  AuthenticatorAttachment?: string;
+  AuthenticatorTransports?: string[];
+  SignCount?: number;
+  /** ISO 8601. */
+  CreatedDate?: string;
 }
 
 export type SeedUserPool = CreateUserPoolRequest & {

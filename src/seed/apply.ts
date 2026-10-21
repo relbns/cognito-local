@@ -24,6 +24,7 @@ import {
   type UserPool,
   type UserPoolService,
 } from "../services/userPoolService";
+import type { WebAuthnCredential } from "../services/webAuthn";
 import { AdminCreateUser } from "../targets/adminCreateUser";
 import {
   newUserPoolId,
@@ -37,6 +38,7 @@ import type {
   SeedFile,
   SeedGroup,
   SeedIdentityProvider,
+  SeedPasskey,
   SeedResourceServer,
   SeedResult,
   SeedUser,
@@ -685,6 +687,12 @@ class SeedApplier {
       }
     }
 
+    if (seedUser.Passkeys) {
+      changed.push(
+        ...(await this.applyPasskeys(pool, user, seedUser.Passkeys)),
+      );
+    }
+
     this.record(
       "User",
       seedUser.Username,
@@ -692,6 +700,66 @@ class SeedApplier {
       !existing ? "created" : changed.length ? "updated" : "unchanged",
       existing ? changed : undefined,
     );
+  }
+
+  // The seed lists the user's passkeys; a stored one keeps its higher counter and last use.
+  private async applyPasskeys(
+    pool: UserPoolService,
+    user: User,
+    passkeys: SeedPasskey[],
+  ): Promise<string[]> {
+    const now = this.services.clock.get();
+    const stored =
+      (await pool.getUserByUsername(this.ctx, user.Username)) ?? user;
+    const existing = stored.WebAuthnCredentials ?? [];
+    const wanted: WebAuthnCredential[] = passkeys.map((p) => {
+      const prior = existing.find((c) => c.CredentialId === p.CredentialId);
+      return {
+        CredentialId: p.CredentialId,
+        PublicKey: p.PublicKey,
+        Algorithm: p.Algorithm,
+        RelyingPartyId: p.RelyingPartyId,
+        FriendlyCredentialName:
+          p.FriendlyCredentialName ?? prior?.FriendlyCredentialName ?? "",
+        AuthenticatorAttachment:
+          p.AuthenticatorAttachment ?? prior?.AuthenticatorAttachment,
+        AuthenticatorTransports:
+          p.AuthenticatorTransports ?? prior?.AuthenticatorTransports ?? [],
+        SignCount: Math.max(p.SignCount ?? 0, prior?.SignCount ?? 0),
+        CreatedDate: p.CreatedDate
+          ? new Date(p.CreatedDate)
+          : (prior?.CreatedDate ?? now),
+        ...(prior?.LastAuthenticatedDate
+          ? { LastAuthenticatedDate: prior.LastAuthenticatedDate }
+          : {}),
+      };
+    });
+    const changes = [
+      ...wanted
+        .filter((w) => !existing.some((e) => e.CredentialId === w.CredentialId))
+        .map((w) => `Passkeys+${w.CredentialId}`),
+      ...existing
+        .filter((e) => !wanted.some((w) => w.CredentialId === e.CredentialId))
+        .map((e) => `Passkeys-${e.CredentialId}`),
+      ...wanted
+        .filter((w) =>
+          existing.some(
+            (e) =>
+              e.CredentialId === w.CredentialId &&
+              (e.PublicKey !== w.PublicKey ||
+                e.Algorithm !== w.Algorithm ||
+                e.RelyingPartyId !== w.RelyingPartyId),
+          ),
+        )
+        .map((w) => `Passkeys.${w.CredentialId}`),
+    ];
+    if (changes.length) {
+      await pool.updateUser(this.ctx, stored, (latest) => ({
+        ...latest,
+        WebAuthnCredentials: wanted,
+      }));
+    }
+    return changes;
   }
 }
 
