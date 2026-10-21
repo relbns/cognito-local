@@ -12,8 +12,8 @@ Tested on 2026-10-20.
 | SDK | Version | How it is tested | Result |
 | --- | --- | --- | --- |
 | AWS SDK for JavaScript v2 (`aws-sdk`, dev dependency) | 2.1145.0 | `integration-tests/aws-sdk/`, 47 files, run by `npm test` | pass |
-| AWS SDK for JavaScript v3 (`@aws-sdk/client-cognito-identity-provider`) | 3.1153.0 | `integration-tests/sdk-v3/`, 13 tests, run by `npm test` | pass |
-| amazon-cognito-identity-js (dev dependency) | 6.3.22 | `integration-tests/aws-sdk/srpAuth.test.ts`, `authenticateUser` with `USER_SRP_AUTH` and `CUSTOM_AUTH`, run by `npm test` | pass |
+| AWS SDK for JavaScript v3 (`@aws-sdk/client-cognito-identity-provider`) | 3.1153.0 | `integration-tests/sdk-v3/`, 25 tests, run by `npm test` | pass |
+| amazon-cognito-identity-js (dev dependency) | 6.3.22 | `integration-tests/aws-sdk/srpAuth.test.ts` and `integration-tests/sdk-v3/authFlows.test.ts`: `authenticateUser` with `USER_SRP_AUTH` and `CUSTOM_AUTH`, MFA setup, TOTP and remembered devices, run by `npm test` | pass |
 | boto3 / botocore (Python 3.9) | 1.42.97 | `scripts/sdk-smoke/boto3_smoke.py`, 11 checks against a running emulator | pass |
 | AWS CLI v2 | 2.34.37 | `scripts/sdk-smoke/aws-cli-smoke.sh`, 6 checks against a running emulator | pass |
 
@@ -25,12 +25,20 @@ timestamp parsing, `$metadata.requestId`, and endpoint resolution from
 `AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER`. Errors arrive as the modeled exception classes
 (`UsernameExistsException`, `NotAuthorizedException`, `AliasExistsException`,
 `InvalidPasswordException`, `UserNotFoundException`) with the right `name`, `$fault: "client"` and
-`$metadata.httpStatusCode` 400.
+`$metadata.httpStatusCode` 400. `integration-tests/sdk-v3/authFlows.test.ts` covers `USER_AUTH`
+(`SELECT_CHALLENGE`, `EMAIL_OTP`, `PASSWORD_SRP`, AdminInitiateAuth with `PASSWORD`, a client without
+`ALLOW_USER_AUTH`), `MFA_SETUP` through AssociateSoftwareToken and VerifySoftwareToken with the
+challenge `Session`, and the device operations with `NewDeviceMetadata`, ConfirmDevice and
+`DEVICE_SRP_AUTH`.
 
 The amazon-cognito-identity-js suite signs in through the client's own SRP code: the right password
 signs in (also by email alias), a wrong one fails with `NotAuthorizedException` ("Incorrect username
 or password."), a temporary password leads to `newPasswordRequired`, and `CUSTOM_AUTH` checks the
-password before the custom challenge.
+password before the custom challenge. In a pool that requires MFA and remembers devices, the
+client's `mfaSetup` path (`associateSoftwareToken`, `verifySoftwareToken`) registers TOTP, the next
+sign-in answers `totpRequired` and confirms the device from `NewDeviceMetadata`,
+`setDeviceStatusRemembered` remembers it, and the sign-in after that completes `DEVICE_SRP_AUTH`
+through the client's own device SRP code without a TOTP code.
 
 The boto3 and CLI scripts cover the same core path (sign-up, password sign-in, `GetUser`, groups,
 filtered `ListUsers`, the error codes and the environment endpoint). Run them against any emulator,
@@ -91,12 +99,9 @@ The untested SDKs use the same protocol and are expected to work. Report what br
 
 These apply to every SDK, since they are server behaviour:
 
-- **`USER_AUTH` (choice-based sign-in) is not supported.** `InitiateAuth` with `AuthFlow: USER_AUTH`
-  returns `Unsupported`, and `AllowedFirstAuthFactors` on an app client is not stored.
-- **Device sign-in is not supported.** Sign-in never returns `NewDeviceMetadata`, and the
-  `DEVICE_SRP_AUTH` and `DEVICE_PASSWORD_VERIFIER` challenges return `Unsupported`, so a client that
-  remembers devices signs in with the password every time. `USER_SRP_AUTH` and the SRP step of
-  `CUSTOM_AUTH` check the password as Cognito does.
+- **`USER_AUTH` does not offer `WEB_AUTHN`**, and does not take the `SESSION` parameter that signs a
+  user in after ConfirmSignUp. `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP` and `SMS_OTP` work.
+- **`CUSTOM_AUTH` ignores devices.** It returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - **Request parameters are not validated against the API model.** A missing required parameter
   yields whatever the handler does next (for example `UserNotFoundException` for `AdminGetUser`
   without `Username`) instead of `InvalidParameterException`.

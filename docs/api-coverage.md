@@ -40,21 +40,39 @@ ConfirmForgotPassword, AdminResetUserPassword, GlobalSignOut, AdminUserGlobalSig
 | `USER_SRP_AUTH` | both | Runs Cognito's SRP-6a (3072-bit group, `g` = 2, SHA-256) against a verifier derived from the stored password, so the same client code that signs in to Cognito works. The `PASSWORD_VERIFIER` response is checked against `PASSWORD_CLAIM_SIGNATURE`, and a wrong password returns `NotAuthorizedException` ("Incorrect username or password."). The server state behind `SECRET_BLOCK` is in memory, can be used once, and expires after the client's `AuthSessionValidity`, so a restart invalidates a pending challenge. `Session` is optional on that response. |
 | `REFRESH_TOKEN_AUTH`, `REFRESH_TOKEN` | both | Verifies the refresh token and returns new access and ID tokens. No new refresh token is issued. |
 | `CUSTOM_AUTH` | both | Runs DefineAuthChallenge, CreateAuthChallenge and VerifyAuthChallengeResponse over several rounds, keeps the challenge history, issues a new `Session` after a wrong answer, and accepts `SRP_A` + `PASSWORD_VERIFIER` before the custom challenge, checking the password as `USER_SRP_AUTH` does: a wrong one ends the sign-in with `NotAuthorizedException` before DefineAuthChallenge runs again. Sessions are in memory and expire after the client's `AuthSessionValidity`. |
-| `USER_AUTH` | | Not supported. |
+| `USER_AUTH` | both | Choice-based sign-in. Needs `ALLOW_USER_AUTH` in the client's `ExplicitAuthFlows` (a client without `ExplicitAuthFlows` has Cognito's defaults, which leave it out), otherwise `InvalidParameterException` ("USER_AUTH flow not enabled for this client"). The factors are `PASSWORD` and `PASSWORD_SRP` for a user with a password, plus `EMAIL_OTP` and `SMS_OTP` when the pool's `Policies.SignInPolicy.AllowedFirstAuthFactors` lists them, the user has an `email` or `phone_number`, and the user does not have to pass MFA. An available `PREFERRED_CHALLENGE` starts at once: `PASSWORD` with `PASSWORD`, `PASSWORD_SRP` with `SRP_A` (answered by `PASSWORD_VERIFIER`), or a one-time code sent through message delivery. Otherwise the response is `SELECT_CHALLENGE` with `AvailableChallenges`. `WEB_AUTHN` is never offered. |
 
 Every flow refuses a disabled user with `NotAuthorizedException` ("User is disabled."). The password
 flows check the password first, so a wrong password still returns "Incorrect username or password.".
 A `FORCE_CHANGE_PASSWORD` user gets the `NEW_PASSWORD_REQUIRED` challenge only after the temporary
-password matches.
+password matches, before MFA.
 
-Challenges answered by RespondToAuthChallenge: `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`, `SMS_MFA`,
-`SOFTWARE_TOKEN_MFA`, `SELECT_MFA_TYPE`, `NEW_PASSWORD_REQUIRED` and `MFA_SETUP`.
-AdminRespondToAuthChallenge answers the same set except `SELECT_MFA_TYPE`.
+RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`,
+`SELECT_CHALLENGE`, `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP`, `SMS_MFA`,
+`SOFTWARE_TOKEN_MFA`, `SELECT_MFA_TYPE`, `MFA_SETUP`, `NEW_PASSWORD_REQUIRED`, `DEVICE_SRP_AUTH` and
+`DEVICE_PASSWORD_VERIFIER`.
 
-- `SMS_MFA` checks the code the emulator generated (on the admin UI Codes page, or fixed by `CODE`).
-  `SOFTWARE_TOKEN_MFA` checks a TOTP code against the user's verified secret.
-- The emulator never issues `MFA_SETUP`. A response to it marks TOTP as the user's preferred MFA
-  without checking the code.
+- After the first factor, a user who must pass MFA gets their preferred method, their only method,
+  or `SELECT_MFA_TYPE` (`MFAS_CAN_CHOOSE`) when they have several.
+- A user with no MFA method in a pool whose `MfaConfiguration` is `ON` gets `SMS_MFA` when the pool
+  has an `SmsConfiguration` and the user has a `phone_number`, and `MFA_SETUP` otherwise.
+  `MFAS_CAN_SETUP` lists `SMS_MFA` when the pool has an `SmsConfiguration` and `SOFTWARE_TOKEN_MFA`
+  when TOTP is enabled; a pool that enables neither offers TOTP. The user registers TOTP with
+  AssociateSoftwareToken and VerifySoftwareToken on the challenge `Session`, then answers `MFA_SETUP`
+  with the `Session` from VerifySoftwareToken to get tokens. Answering before a code was verified
+  returns `NotAuthorizedException`.
+- `SMS_MFA`, `EMAIL_OTP` and `SMS_OTP` check the code the emulator sent (on the admin UI Codes page,
+  or fixed by `CODE`). A wrong code returns `CodeMismatchException` and the same `Session` can be
+  answered again. A correct `EMAIL_OTP` or `SMS_OTP` code marks `email_verified` or
+  `phone_number_verified`. `SOFTWARE_TOKEN_MFA` checks a TOTP code against the user's verified
+  secret.
+- Challenge sessions are in memory, single use and expire after the client's `AuthSessionValidity`.
+  The choice-based, MFA setup and device challenges refuse a `Session` that is unknown, expired or
+  belongs to another user with `NotAuthorizedException` ("Invalid session for the user."). `SMS_MFA`,
+  `SOFTWARE_TOKEN_MFA`, `SELECT_MFA_TYPE` and `NEW_PASSWORD_REQUIRED` also accept a `Session` the
+  emulator did not issue.
+- When the pool tracks devices, see [Devices](#devices), sign-in returns `NewDeviceMetadata` unless
+  the request carried a `DEVICE_KEY`, and a remembered device answers `DEVICE_SRP_AUTH`.
 - GetTokensFromRefreshToken returns access and ID tokens only.
 - GlobalSignOut, AdminUserGlobalSignOut and RevokeToken revoke tokens as described in
   [tokens.md](tokens.md#revocation).
@@ -63,8 +81,8 @@ AdminRespondToAuthChallenge answers the same set except `SELECT_MFA_TYPE`.
 
 | Operation | Behaviour |
 | --- | --- |
-| AssociateSoftwareToken | Returns a TOTP secret. Takes an `AccessToken`; the `Session` form (MFA setup during sign-in) returns an error. |
-| VerifySoftwareToken | Checks the TOTP code and marks the secret verified. Takes an `AccessToken` only, like AssociateSoftwareToken. |
+| AssociateSoftwareToken | Returns a TOTP secret. With an `AccessToken` it stores the secret on the user; with the `Session` of an `MFA_SETUP` challenge it keeps the secret on the sign-in and returns a new `Session`. |
+| VerifySoftwareToken | Checks the TOTP code, marks the secret verified and enables TOTP for the user. With a `Session` it also makes TOTP the preferred MFA when none is set and returns the `Session` for the `MFA_SETUP` answer. |
 | SetUserMFAPreference, AdminSetUserMFAPreference | Set the user's enabled and preferred MFA. |
 | SetUserPoolMfaConfig, GetUserPoolMfaConfig | Set and read `MfaConfiguration`, the SMS message and configuration, and whether TOTP is enabled. |
 | GetUserAuthFactors | Returns `PASSWORD`, plus `SMS` and `TOTP` from the user's MFA settings. |
@@ -120,9 +138,25 @@ ListResourceServers.
 ConfirmDevice, GetDevice, AdminGetDevice, ForgetDevice, AdminForgetDevice, UpdateDeviceStatus,
 AdminUpdateDeviceStatus, ListDevices, AdminListDevices.
 
-Devices are stored on the user. Sign-in never returns `NewDeviceMetadata`, and the device challenges
-(`DEVICE_SRP_AUTH`, `DEVICE_PASSWORD_VERIFIER`) are not supported, so a device exists only after an
-explicit ConfirmDevice call with a device key of your choice.
+A pool tracks devices when its `DeviceConfiguration` sets `ChallengeRequiredOnNewDevice` or
+`DeviceOnlyRememberedOnUserPrompt`. Then:
+
+- Every sign-in without a `DEVICE_KEY` (password, SRP, choice-based and MFA flows) returns
+  `NewDeviceMetadata` with a `DeviceKey` of the form `<region>_<uuid>` and the user's
+  `DeviceGroupKey`.
+- ConfirmDevice accepts only a key issued to that user (otherwise `ResourceNotFoundException`, "Device
+  does not exist.") and stores the `DeviceSecretVerifierConfig` the client computed. The device is
+  remembered at once, or with `DeviceOnlyRememberedOnUserPrompt` it is `not_remembered` and the
+  response says `UserConfirmationNecessary: true` until UpdateDeviceStatus remembers it.
+- A sign-in that sends the `DEVICE_KEY` of a remembered device gets `DEVICE_SRP_AUTH` instead of tokens,
+  and instead of MFA when `ChallengeRequiredOnNewDevice` is true. `DEVICE_SRP_AUTH` (with `SRP_A`) is
+  answered with `DEVICE_PASSWORD_VERIFIER`, whose claim is checked with SRP-6a against the stored
+  verifier, identity `DeviceGroupKey` + `DeviceKey`, as amazon-cognito-identity-js computes it.
+  Tokens then come from the `TokenGeneration_AuthenticateDevice` source. A confirmed device that is
+  not remembered signs in with MFA as usual, and a `DEVICE_KEY` the user does not have returns
+  `ResourceNotFoundException`.
+- The device operations return `DeviceAttributes` `device_status`, `device_name` and
+  `dev:device_remembered_status`. List and get show confirmed devices only.
 
 ## Domains and branding
 
@@ -144,7 +178,7 @@ page does not use the branding or the UI customization.
 | CompleteWebAuthnRegistration | Stores a credential without verifying the attestation. |
 | ListWebAuthnCredentials, DeleteWebAuthnCredential | List and delete the stored credentials. |
 
-Passkey sign-in needs the `USER_AUTH` flow, which is not supported.
+`USER_AUTH` does not offer `WEB_AUTHN`, so stored passkeys cannot be used to sign in.
 
 ## User import jobs
 
@@ -203,7 +237,7 @@ The built-in login form checks the password, then follows the user's state:
 | `RESET_REQUIRED` | Shows `Password reset required for the user.` |
 | `UNCONFIRMED` | Shows `Incorrect username or password.` |
 | `FORCE_CHANGE_PASSWORD` | Asks for a new password, checks it against the pool password policy (unless `PasswordPolicyConfig.Enforce` is `false`), stores it and marks the user `CONFIRMED`. |
-| MFA required | Applies the InitiateAuth rule (pool MFA `ON`, or not `OFF` and the user has MFA). An SMS code goes to `phone_number` through message delivery and appears in the admin Codes viewer. A TOTP code is checked against the user's verified authenticator. A user with both methods and no preferred one chooses first. A user with no method set up is refused, since the form does not offer MFA setup. A wrong code shows `Invalid code or auth state for the user.` |
+| MFA required | Applies the InitiateAuth rule (pool MFA `ON`, or not `OFF` and the user has MFA). An SMS code goes to `phone_number` through message delivery and appears in the admin Codes viewer. A TOTP code is checked against the user's verified authenticator. A user with both methods and no preferred one chooses first. A user with no method set up is refused, since the form does not offer MFA setup; `src/services/mfaSetup.ts` has the helpers a setup step needs (`needsMfaSetup`, `mfaSetupOptions`, `newTotpSecret`, `totpUri`, `completeTotpSetup`). A wrong code shows `Invalid code or auth state for the user.` |
 
 A successful sign-in runs PostAuthentication (`PostAuthentication_Authentication`) and issues the code
 or tokens from the user as the trigger left it. The steps after the password are kept on the server
