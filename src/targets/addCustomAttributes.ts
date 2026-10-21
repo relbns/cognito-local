@@ -5,6 +5,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError } from "../errors";
 import type { Services } from "../services";
+import { customAttributeName } from "./createUserPool";
 import type { Target } from "./Target";
 import { assertParameterLength } from "./utils/assertions";
 
@@ -31,10 +32,14 @@ export const AddCustomAttributes =
         ...(userPool.options.SchemaAttributes ?? []),
         ...req.CustomAttributes.map(
           ({ Name, ...attr }): SchemaAttributeType => {
-            const name = `custom:${Name ?? "null"}`;
+            const name = customAttributeName(Name, attr.DeveloperOnlyAttribute);
 
             if (
-              userPool.options.SchemaAttributes?.find((x) => x.Name === name)
+              userPool.options.SchemaAttributes?.find(
+                (x) =>
+                  x.Name === `custom:${Name}` ||
+                  x.Name === `dev:custom:${Name}`,
+              )
             ) {
               throw new InvalidParameterError(
                 `${name}: Existing attribute already has name ${name}.`,

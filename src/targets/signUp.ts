@@ -13,6 +13,7 @@ import type { DeliveryDetails } from "../services/messageDelivery/messageDeliver
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
+  assertNoDeveloperOnlyAttributes,
   attribute,
   attributesAppend,
   attributesInclude,
@@ -137,6 +138,10 @@ export const SignUp =
 
     // Validate custom attributes against pool schema
     const schemaAttributes = userPool.options.SchemaAttributes ?? [];
+    assertNoDeveloperOnlyAttributes(
+      (req.UserAttributes ?? []).map((x) => x.Name),
+      schemaAttributes,
+    );
     if (req.UserAttributes) {
       for (const attr of req.UserAttributes) {
         if (attr.Name.startsWith("custom:")) {

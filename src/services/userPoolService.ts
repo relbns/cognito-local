@@ -4,7 +4,7 @@ import type {
   UserPoolType,
   UserStatusType,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { InvalidParameterError } from "../errors";
+import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { AppClient } from "./appClient";
 import type { Clock } from "./clock";
 import type { Context } from "./context";
@@ -590,6 +590,22 @@ export class UserPoolServiceFactoryImpl implements UserPoolServiceFactory {
   }
 }
 
+export const UNAUTHORIZED_ATTRIBUTE_WRITE =
+  "A client attempted to write unauthorized attribute";
+
+/** Throws when a user-level request names a developer-only attribute, which only admin operations may write. */
+export const assertNoDeveloperOnlyAttributes = (
+  attributeNames: readonly string[],
+  schemaAttributes: SchemaAttributeType[] | undefined,
+): void => {
+  for (const name of attributeNames) {
+    const attrSchema = schemaAttributes?.find((x) => x.Name === name);
+    if (attrSchema?.DeveloperOnlyAttribute || name.startsWith("dev:")) {
+      throw new NotAuthorizedError(UNAUTHORIZED_ATTRIBUTE_WRITE);
+    }
+  }
+};
+
 export const validatePermittedAttributeChanges = (
   requestAttributes: Attribute[],
   schemaAttributes: SchemaAttributeType[],
@@ -601,6 +617,9 @@ export const validatePermittedAttributeChanges = (
       throw new InvalidParameterError(
         `user.${attr.Name}: Attribute does not exist in the schema.`,
       );
+    }
+    if (!admin && attrSchema.DeveloperOnlyAttribute) {
+      throw new NotAuthorizedError(UNAUTHORIZED_ATTRIBUTE_WRITE);
     }
     if (!attrSchema.Mutable) {
       throw new InvalidParameterError(

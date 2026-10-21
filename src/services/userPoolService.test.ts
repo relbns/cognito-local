@@ -6,6 +6,7 @@ import {
 } from "../__tests__/mockDataStore";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
+import { NotAuthorizedError } from "../errors";
 import type { AppClient } from "./appClient";
 import type { DataStore } from "./dataStore/dataStore";
 import type { Attribute } from "./sdkTypes";
@@ -19,6 +20,7 @@ import {
   type UserPoolService,
   UserPoolServiceFactoryImpl,
   UserPoolServiceImpl,
+  validatePermittedAttributeChanges,
 } from "./userPoolService";
 
 describe("UserPoolServiceFactory", () => {
@@ -887,6 +889,40 @@ describe("User Pool Service", () => {
       );
 
       expect(groupMembership).toEqual([group1.GroupName, group2.GroupName]);
+    });
+  });
+
+  describe("validatePermittedAttributeChanges", () => {
+    const schema = [
+      { Name: "dev:custom:tier", DeveloperOnlyAttribute: true, Mutable: true },
+      { Name: "custom:team", Mutable: true },
+    ];
+
+    it("refuses a developer-only attribute in a user-level change", () => {
+      expect(() =>
+        validatePermittedAttributeChanges(
+          [{ Name: "dev:custom:tier", Value: "gold" }],
+          schema,
+        ),
+      ).toThrow(
+        new NotAuthorizedError(
+          "A client attempted to write unauthorized attribute",
+        ),
+      );
+    });
+
+    it("lets an administrator change a developer-only attribute", () => {
+      const changes = [{ Name: "dev:custom:tier", Value: "gold" }];
+      expect(
+        validatePermittedAttributeChanges(changes, schema, { admin: true }),
+      ).toEqual(changes);
+    });
+
+    it("lets a user change an ordinary custom attribute", () => {
+      const changes = [{ Name: "custom:team", Value: "blue" }];
+      expect(validatePermittedAttributeChanges(changes, schema)).toEqual(
+        changes,
+      );
     });
   });
 });

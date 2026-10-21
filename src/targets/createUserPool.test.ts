@@ -337,4 +337,28 @@ describe("CreateUserPool target", () => {
       UserPool: createdUserPool,
     });
   });
+
+  it("names developer-only schema attributes dev:custom:<name>", async () => {
+    mockCognitoService.createUserPool.mockResolvedValue(TDB.userPool());
+
+    await createUserPool(TestContext, {
+      PoolName: "test-pool",
+      Schema: [
+        {
+          Name: "tier",
+          AttributeDataType: "String",
+          DeveloperOnlyAttribute: true,
+        },
+        { Name: "team", AttributeDataType: "String" },
+      ],
+    });
+
+    const names =
+      mockCognitoService.createUserPool.mock.calls[0][1].SchemaAttributes?.map(
+        (x) => x.Name,
+      );
+    expect(names).toContain("dev:custom:tier");
+    expect(names).toContain("custom:team");
+    expect(names).not.toContain("custom:tier");
+  });
 });

@@ -103,6 +103,10 @@ ListUserPoolClientSecrets.
   returns that one secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the
   username by default).
+- A schema attribute with `DeveloperOnlyAttribute: true` (CreateUserPool, AddCustomAttributes) is
+  named `dev:custom:<name>`. Admin operations write it; SignUp, UpdateUserAttributes and
+  DeleteUserAttributes refuse it with `NotAuthorizedException` ("A client attempted to write
+  unauthorized attribute"). GetUser returns it, and it is not added to tokens.
 
 ## Identity providers
 
