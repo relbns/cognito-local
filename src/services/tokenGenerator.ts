@@ -4,10 +4,11 @@ import * as uuid from "uuid";
 import { InvalidParameterError } from "../errors";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import { identitiesClaim } from "../oauth2/federation";
-import type { AppClient } from "./appClient";
+import { type AppClient, readableAttributes } from "./appClient";
 import type { Clock } from "./clock";
 import type { CognitoService } from "./cognitoService";
 import type { Context } from "./context";
+import type { Attribute } from "./sdkTypes";
 import {
   applyGroupClaims,
   applyPreTokenGenerationResponse,
@@ -70,23 +71,18 @@ const STANDARD_ID_TOKEN_CLAIMS = [
   "phone_number",
 ];
 
-function standardClaims(user: User): RawToken {
+function standardClaims(attributes: Attribute[]): RawToken {
   const claims: RawToken = {};
   for (const name of STANDARD_ID_TOKEN_CLAIMS) {
-    const value = attributeValue(name, user.Attributes);
+    const value = attributeValue(name, attributes);
     if (value !== undefined) claims[name] = value;
   }
-  const phoneVerified = attributeValue(
-    "phone_number_verified",
-    user.Attributes,
-  );
+  const phoneVerified = attributeValue("phone_number_verified", attributes);
   if (phoneVerified !== undefined) {
     claims.phone_number_verified = phoneVerified === "true";
   }
-  const address = attributeValue("address", user.Attributes);
+  const address = attributeValue("address", attributes);
   if (address !== undefined) claims.address = { formatted: address };
-  const identities = identitiesClaim(user.Attributes);
-  if (identities) claims.identities = identities;
   return claims;
 }
 
@@ -286,20 +282,28 @@ export class JwtTokenGenerator implements TokenGenerator {
       token_use: "access",
       username: user.Username,
     };
+    const readable = readableAttributes(userPoolClient, user.Attributes);
+    const email = attributeValue("email", readable);
+    const emailVerified = attributeValue("email_verified", readable);
+    const identities = identitiesClaim(user.Attributes);
     const idToken: RawToken = {
-      ...standardClaims(user),
+      ...standardClaims(readable),
+      ...(identities ? { identities } : {}),
       "cognito:username": user.Username,
       auth_time: authTime,
-      email: attributeValue("email", user.Attributes),
-      email_verified:
-        attributeValue("email_verified", user.Attributes) === "true",
+      ...(email !== undefined || !userPoolClient.ReadAttributes?.length
+        ? { email }
+        : {}),
+      ...(emailVerified !== undefined || !userPoolClient.ReadAttributes?.length
+        ? { email_verified: emailVerified === "true" }
+        : {}),
       event_id: eventId,
       iat: authTime,
       jti: uuid.v4(),
       origin_jti: originJti,
       sub,
       token_use: "id",
-      ...attributesToRecord(customAttributes(user.Attributes)),
+      ...attributesToRecord(customAttributes(readable)),
     };
 
     const groupConfiguration = groupConfigurationFor(

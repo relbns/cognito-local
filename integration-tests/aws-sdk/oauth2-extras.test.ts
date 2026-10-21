@@ -123,6 +123,38 @@ describe(
         expect(claims.username).toBe("testuser");
       });
 
+      it("leaves out the attributes the client cannot read", async () => {
+        const { client, clientId, tokens } = await setupAndAuthenticate({
+          ReadAttributes: ["given_name"],
+        });
+
+        const res = await fetch(`${serverUrl()}/oauth2/userInfo`, {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        const claims = await res.json();
+        expect(claims.sub).toBeTruthy();
+        expect(claims).not.toHaveProperty("email");
+
+        const idToken = JSON.parse(
+          Buffer.from(tokens.id_token.split(".")[1], "base64url").toString(),
+        );
+        expect(idToken.sub).toBeTruthy();
+        expect(idToken).not.toHaveProperty("email");
+        expect(idToken).not.toHaveProperty("email_verified");
+
+        const auth = await client
+          .initiateAuth({
+            ClientId: clientId,
+            AuthFlow: "USER_PASSWORD_AUTH",
+            AuthParameters: { USERNAME: "testuser", PASSWORD: "Password1!" },
+          })
+          .promise();
+        const user = await client
+          .getUser({ AccessToken: auth.AuthenticationResult!.AccessToken! })
+          .promise();
+        expect(user.UserAttributes.map((a) => a.Name)).toEqual(["sub"]);
+      });
+
       it("rejects an ID token (token_use must be access)", async () => {
         const { tokens } = await setupAndAuthenticate();
 

@@ -481,10 +481,13 @@ Each row below has a switch that restores upstream's lenient behaviour:
 | Pool `PasswordPolicy` enforced                                                   | `PasswordPolicyConfig.Enforce: false`          |
 | Admin UI on, codes recorded                                                      | `AdminUIConfig.Enabled: false` or `--no-admin` |
 
-### A default that differs from Cognito
+### Defaults that differ from Cognito
 
 Pools default to email as the username
 (`UserPoolDefaults.UsernameAttributes: ["email"]`), where Cognito defaults to free-form usernames.
+
+An app client without `ReadAttributes` reads every attribute, `custom:` ones included, in ID tokens,
+`GetUser` and `/oauth2/userInfo`; Cognito then exposes the standard attributes only.
 
 ## Troubleshooting
 

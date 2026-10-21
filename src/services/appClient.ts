@@ -100,6 +100,19 @@ export interface AppClient {
   RefreshTokenRotation?: RefreshTokenRotationType;
 }
 
+/** The attributes a client can read: every one when ReadAttributes is unset, else those listed and sub. */
+export const readableAttributes = <T extends { Name?: string }>(
+  client: Pick<AppClient, "ReadAttributes"> | null | undefined,
+  attributes: readonly T[],
+): T[] => {
+  const allowed = client?.ReadAttributes;
+  if (!allowed?.length) return [...attributes];
+  return attributes.filter(
+    (a) =>
+      a.Name === "sub" || (a.Name !== undefined && allowed.includes(a.Name)),
+  );
+};
+
 export const AUTH_SESSION_VALIDITY_MIN = 3;
 export const AUTH_SESSION_VALIDITY_MAX = 15;
 

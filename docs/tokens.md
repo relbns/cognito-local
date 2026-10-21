@@ -81,6 +81,14 @@ The sessions are stored on the user record in the pool's data file, so revocatio
 restart. Tokens issued before this version have no `origin_jti`: their access tokens are refused as
 revoked, and their refresh tokens still work and start a tracked session.
 
+## ReadAttributes
+
+When an app client sets `ReadAttributes`, the attributes it does not list are left out of the ID
+tokens issued to it (standard claims, `email_verified`, `phone_number_verified`, `address` and
+`custom:` attributes), of `GetUser` with its access tokens, and of `/oauth2/userInfo`. `sub`,
+`cognito:username` and `identities` always stay. A client without `ReadAttributes` reads every
+attribute. The pre token generation trigger still receives all of the user's attributes.
+
 ## Client credentials
 
 `POST /oauth2/token` with `grant_type=client_credentials` issues an access token to an app client

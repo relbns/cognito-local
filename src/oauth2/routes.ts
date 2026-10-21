@@ -1,7 +1,7 @@
 import type { Application, Request, Response } from "express";
 import { CognitoError, TokenErrorMessages, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
-import type { AppClient } from "../services/appClient";
+import { type AppClient, readableAttributes } from "../services/appClient";
 import { type Context, requestContext } from "../services/context";
 import { refreshTokens } from "../services/refreshTokens";
 import { withRefreshTokenRevoked } from "../services/tokenRevocation";
@@ -524,28 +524,27 @@ export function attachOAuth2Routes(
       throw e;
     }
     const { user, claims: decoded } = verified;
+    const client = await findAppClient(services, ctx, decoded.client_id);
+    const attributes = readableAttributes(client, user.Attributes);
 
     const claims: Record<string, string | boolean> = {
-      sub: attributeValue("sub", user.Attributes) ?? user.Username,
+      sub: attributeValue("sub", attributes) ?? user.Username,
     };
 
     const scope = decoded.scope ?? "";
     const scopes = typeof scope === "string" ? scope.split(" ") : [];
 
     if (scopes.includes("email") || scopes.includes("openid")) {
-      const email = attributeValue("email", user.Attributes);
+      const email = attributeValue("email", attributes);
       if (email) claims.email = email;
-      const emailVerified = attributeValue("email_verified", user.Attributes);
+      const emailVerified = attributeValue("email_verified", attributes);
       if (emailVerified) claims.email_verified = emailVerified === "true";
     }
 
     if (scopes.includes("phone") || scopes.includes("openid")) {
-      const phone = attributeValue("phone_number", user.Attributes);
+      const phone = attributeValue("phone_number", attributes);
       if (phone) claims.phone_number = phone;
-      const phoneVerified = attributeValue(
-        "phone_number_verified",
-        user.Attributes,
-      );
+      const phoneVerified = attributeValue("phone_number_verified", attributes);
       if (phoneVerified) {
         claims.phone_number_verified = phoneVerified === "true";
       }
@@ -568,12 +567,12 @@ export function attachOAuth2Routes(
         "locale",
         "updated_at",
       ]) {
-        const val = attributeValue(attr, user.Attributes);
+        const val = attributeValue(attr, attributes);
         if (val) claims[attr] = val;
       }
     }
 
-    for (const attr of user.Attributes) {
+    for (const attr of attributes) {
       if (attr.Name.startsWith("custom:") && attr.Value !== undefined) {
         claims[attr.Name] = attr.Value;
       }

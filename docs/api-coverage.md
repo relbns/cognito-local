@@ -82,6 +82,8 @@ DeleteUserAttributes, GetUserAttributeVerificationCode, VerifyUserAttribute, Set
 - SetUserSettings and AdminSetUserSettings store `MFAOptions` and enable SMS MFA when an option uses
   SMS.
 - AdminDisableUser revokes the user's tokens.
+- GetUser returns only the attributes in the token's app client `ReadAttributes`, plus `sub`, when the
+  client sets them (see [tokens.md](tokens.md#readattributes)).
 
 ## Groups
 
@@ -191,7 +193,7 @@ ListUserPoolClientSecrets return everything in one response.
 | --- | --- | --- |
 | `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. |
 | `/oauth2/token` | POST | `authorization_code`, `refresh_token` and `client_credentials` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` issues an M2M access token for custom scopes (see [tokens.md](tokens.md#client-credentials)). |
-| `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token. |
+| `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token, limited to the app client's `ReadAttributes` when it sets them. |
 | `/oauth2/revoke` | POST | Revokes a refresh token and the access tokens issued from it. |
 | `/logout` | GET | Takes `client_id` and `logout_uri` and redirects to `logout_uri` when it is one of the client's `LogoutURLs`. The `redirect_uri` + `response_type` form is not supported. |
 | `/{poolId}/.well-known/jwks.json` | GET | JSON Web Key Set. Every pool uses the same signing key. |

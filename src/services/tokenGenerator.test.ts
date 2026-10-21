@@ -335,6 +335,61 @@ describe("JwtTokenGenerator", () => {
     });
   });
 
+  describe("ReadAttributes", () => {
+    const reader = TDB.user({
+      Attributes: [
+        { Name: "sub", Value: "user-sub" },
+        { Name: "email", Value: "jane@example.test" },
+        { Name: "email_verified", Value: "true" },
+        { Name: "phone_number", Value: "+15555550100" },
+        { Name: "given_name", Value: "Jane" },
+        { Name: "custom:tier", Value: "gold" },
+        { Name: "custom:secret", Value: "s" },
+      ],
+    });
+    const idClaims = async (ReadAttributes?: string[]) => {
+      mockTriggers.enabled.mockReturnValue(false);
+      const tokens = await tokenGenerator.generate(
+        TestContext,
+        reader,
+        [],
+        TDB.appClient({ ReadAttributes }),
+        undefined,
+        "Authentication",
+      );
+      return jwt.decode(tokens.IdToken) as Record<string, unknown>;
+    };
+
+    it("puts every attribute in the ID token when ReadAttributes is unset", async () => {
+      expect(await idClaims()).toMatchObject({
+        email: "jane@example.test",
+        email_verified: true,
+        phone_number: "+15555550100",
+        given_name: "Jane",
+        "custom:tier": "gold",
+        "custom:secret": "s",
+      });
+    });
+
+    it("keeps only the attributes the client can read", async () => {
+      const claims = await idClaims(["email", "given_name", "custom:tier"]);
+
+      expect(claims).toMatchObject({
+        sub: "user-sub",
+        email: "jane@example.test",
+        given_name: "Jane",
+        "custom:tier": "gold",
+      });
+      for (const hidden of [
+        "email_verified",
+        "phone_number",
+        "custom:secret",
+      ]) {
+        expect(claims).not.toHaveProperty(hidden);
+      }
+    });
+  });
+
   describe("generateClientCredentials", () => {
     const client = TDB.appClient({
       ClientId: "m2m-client",
