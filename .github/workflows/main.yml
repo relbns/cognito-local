@@ -33,7 +33,7 @@ jobs:
           node-version: 22.13.1
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm run test:coverage
 
   smoke_test:
     runs-on: ubuntu-latest
