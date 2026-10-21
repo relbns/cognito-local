@@ -1,13 +1,10 @@
-import * as crypto from "node:crypto";
+import type {
+  StartWebAuthnRegistrationRequest,
+  StartWebAuthnRegistrationResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
+import { startPasskeyRegistration } from "../services/passkeys";
 import type { Target } from "./Target";
-
-interface StartWebAuthnRegistrationRequest {
-  AccessToken: string;
-}
-interface StartWebAuthnRegistrationResponse {
-  CredentialCreationOptions?: any;
-}
 
 export type StartWebAuthnRegistrationTarget = Target<
   StartWebAuthnRegistrationRequest,
@@ -16,26 +13,24 @@ export type StartWebAuthnRegistrationTarget = Target<
 
 export const StartWebAuthnRegistration =
   ({
+    clock,
     tokenVerifier,
-  }: Pick<Services, "tokenVerifier">): StartWebAuthnRegistrationTarget =>
+  }: Pick<
+    Services,
+    "clock" | "tokenVerifier"
+  >): StartWebAuthnRegistrationTarget =>
   async (ctx, req) => {
-    const { user } = await tokenVerifier.verifyAccessToken(
+    const { claims, user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
       req.AccessToken,
     );
 
     return {
-      CredentialCreationOptions: {
-        publicKey: {
-          rp: { id: "localhost", name: "cognito-local" },
-          user: {
-            id: user.Username,
-            name: user.Username,
-            displayName: user.Username,
-          },
-          challenge: crypto.randomBytes(32).toString("base64url"),
-          pubKeyCredParams: [{ alg: -7, type: "public-key" }],
-        },
-      },
+      CredentialCreationOptions: await startPasskeyRegistration(ctx, {
+        userPool,
+        user,
+        clientId: claims.client_id,
+        clock,
+      }),
     };
   };

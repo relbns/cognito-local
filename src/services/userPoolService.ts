@@ -3,6 +3,7 @@ import type {
   SchemaAttributeType,
   UserPoolType,
   UserStatusType,
+  WebAuthnConfigurationType,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { AppClient } from "./appClient";
@@ -13,6 +14,10 @@ import type { DataStoreFactory } from "./dataStore/factory";
 import { FilterConfig } from "./filter";
 import type { Attribute } from "./sdkTypes";
 import { withRefreshToken } from "./tokenRevocation";
+import type {
+  WebAuthnCredential,
+  WebAuthnRegistrationChallenge,
+} from "./webAuthn";
 
 export interface MFAOption {
   DeliveryMedium: "SMS";
@@ -145,6 +150,11 @@ export interface User {
 
   // Federated identities linked by AdminLinkProviderForUser. Internal only.
   ProviderLinks?: ProviderLink[];
+
+  // Registered passkeys, the pending registration challenge and passkey MFA. Internal only.
+  WebAuthnCredentials?: WebAuthnCredential[];
+  WebAuthnRegistration?: WebAuthnRegistrationChallenge;
+  WebAuthnMfaEnabled?: boolean;
 }
 
 export interface RefreshTokenGracePeriod {
@@ -203,6 +213,7 @@ export type UserPool = UserPoolType & {
   SoftwareTokenMfaConfiguration?: {
     Enabled: boolean;
   };
+  WebAuthnConfiguration?: WebAuthnConfigurationType;
 };
 
 export interface UserPoolService {

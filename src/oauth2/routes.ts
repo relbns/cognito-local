@@ -24,6 +24,7 @@ import {
   type HostedLoginContext,
   type HostedLoginForm,
   type HostedLoginOutcome,
+  signInWithPasskey,
   signInWithPassword,
 } from "./hostedLogin";
 import {
@@ -52,6 +53,7 @@ import {
   parseScopes,
   type ResourceServerScopes,
 } from "./oauthRequest";
+import { attachPasskeyRoutes, passkeyLoginAllowed } from "./passkeyRoutes";
 import { verifyS256 } from "./pkce";
 import { RealIdp } from "./realIdp";
 
@@ -131,12 +133,15 @@ export function attachOAuth2Routes(
   const findClient = (ctx: Context, clientId: string | undefined) =>
     findAppClient(services, ctx, clientId);
 
-  const poolAllowsSignUp = async (ctx: Context, userPoolId: string) => {
+  const loginPageOptions = async (ctx: Context, userPoolId: string) => {
     try {
       const userPool = await services.cognito.getUserPool(ctx, userPoolId);
-      return signUpAllowed(userPool.options);
+      return {
+        signUpAllowed: signUpAllowed(userPool.options),
+        passkeyAllowed: passkeyLoginAllowed(userPool.options),
+      };
     } catch {
-      return true;
+      return { signUpAllowed: true, passkeyAllowed: false };
     }
   };
 
@@ -156,6 +161,7 @@ export function attachOAuth2Routes(
           loginForm({
             ...oauthParamsOf(login),
             signUpAllowed: signUpAllowed(login.userPool.options),
+            passkeyAllowed: passkeyLoginAllowed(login.userPool.options),
             ...(outcome.kind === "loginError"
               ? { error: outcome.error }
               : { notice: outcome.notice }),
@@ -194,6 +200,7 @@ export function attachOAuth2Routes(
       confirm_password: field("confirm_password"),
       mfa_method: field("mfa_method"),
       code: field("code"),
+      credential: field("credential"),
     };
   };
 
@@ -209,7 +216,7 @@ export function attachOAuth2Routes(
       { store: hostedLoginStore, findAppClient: findClient },
       ctx,
       sessionId,
-      ["newPassword", "selectMfa", "smsMfa", "totpMfa", "mfaSetup"],
+      ["newPassword", "selectMfa", "smsMfa", "totpMfa", "mfaSetup", "passkey"],
     );
     if (!restored) {
       return sendHtml(
@@ -341,7 +348,7 @@ export function attachOAuth2Routes(
         codeChallengeMethod: decision.codeChallengeMethod,
         scope: params.scope ?? "",
         state: params.state ?? "",
-        signUpAllowed: await poolAllowsSignUp(ctx, appClient.UserPoolId),
+        ...(await loginPageOptions(ctx, appClient.UserPoolId)),
       }),
     );
   };
@@ -351,6 +358,10 @@ export function attachOAuth2Routes(
     findAppClient: findClient,
     renderOutcome,
   });
+  attachPasskeyRoutes(app, services, {
+    findAppClient: findClient,
+    sessionUser,
+  });
 
   app.get("/oauth2/authorize", authorize);
   app.get("/login", authorize);
@@ -359,6 +370,7 @@ export function attachOAuth2Routes(
     const body = req.body as AuthorizeParams & {
       username?: string;
       password?: string;
+      passkey?: string;
       login_session?: unknown;
     };
     const ctx = requestContext(req, services.config?.TokenConfig);
@@ -388,7 +400,8 @@ export function attachOAuth2Routes(
     if (decision.kind !== "login" || !appClient || !client_id) {
       return badRequest(res, "Invalid request");
     }
-    if (!username || !password) {
+    const withPasskey = body.passkey === "true";
+    if (!withPasskey && (!username || !password)) {
       return badRequest(res, "Missing required fields");
     }
 
@@ -410,14 +423,22 @@ export function attachOAuth2Routes(
       scope: scope ?? "",
       flow,
     };
-    const outcome = await signInWithPassword(
-      ctx,
-      services,
-      hostedLoginStore,
-      login,
-      username,
-      password,
-    );
+    const outcome = withPasskey
+      ? await signInWithPasskey(
+          ctx,
+          services,
+          hostedLoginStore,
+          login,
+          username ?? "",
+        )
+      : await signInWithPassword(
+          ctx,
+          services,
+          hostedLoginStore,
+          login,
+          username as string,
+          password as string,
+        );
     return renderOutcome(ctx, req, res, login, outcome);
   });
 

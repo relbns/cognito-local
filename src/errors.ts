@@ -149,3 +149,69 @@ export const TokenErrorMessages = {
   userDisabled: "User is disabled.",
   userDoesNotExist: "User does not exist.",
 } as const;
+
+export class LimitExceededError extends CognitoError {
+  public constructor(message: string) {
+    super("LimitExceededException", message);
+  }
+}
+
+export class WebAuthnNotEnabledError extends CognitoError {
+  public constructor() {
+    super(
+      "WebAuthnNotEnabledException",
+      "Passkey authentication is not enabled for this user pool.",
+    );
+  }
+}
+
+export class WebAuthnConfigurationMissingError extends CognitoError {
+  public constructor() {
+    super(
+      "WebAuthnConfigurationMissingException",
+      "The user pool has no relying party ID and no domain.",
+    );
+  }
+}
+
+export class WebAuthnChallengeNotFoundError extends CognitoError {
+  public constructor() {
+    super(
+      "WebAuthnChallengeNotFoundException",
+      "The passkey registration challenge was not found or has expired.",
+    );
+  }
+}
+
+export class WebAuthnClientMismatchError extends CognitoError {
+  public constructor() {
+    super(
+      "WebAuthnClientMismatchException",
+      "The access token is for a different client than the one that started the registration.",
+    );
+  }
+}
+
+export class WebAuthnCredentialNotSupportedError extends CognitoError {
+  public constructor(message: string) {
+    super("WebAuthnCredentialNotSupportedException", message);
+  }
+}
+
+export class WebAuthnOriginNotAllowedError extends CognitoError {
+  public constructor(origin: string) {
+    super(
+      "WebAuthnOriginNotAllowedException",
+      `The origin ${origin} does not match the relying party ID.`,
+    );
+  }
+}
+
+export class WebAuthnRelyingPartyMismatchError extends CognitoError {
+  public constructor() {
+    super(
+      "WebAuthnRelyingPartyMismatchException",
+      "The passkey credential is for a different relying party ID.",
+    );
+  }
+}

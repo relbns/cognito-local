@@ -1,0 +1,39 @@
+{
+  "$comment": "Passkey sign-in: a pool that allows WEB_AUTHN with the relying party localhost, so the hosted pages on http://localhost can register and use passkeys, and a client with ALLOW_USER_AUTH. Sign in with the password once, then register a passkey (StartWebAuthnRegistration or /passkeys/add).",
+  "Version": 1,
+  "UserPools": [
+    {
+      "Id": "local_PasskeyExample",
+      "PoolName": "passkey-example",
+      "Policies": {
+        "SignInPolicy": { "AllowedFirstAuthFactors": ["PASSWORD", "WEB_AUTHN"] }
+      },
+      "WebAuthnConfiguration": {
+        "RelyingPartyId": "localhost",
+        "UserVerification": "preferred"
+      },
+      "Clients": [
+        {
+          "ClientId": "passkeyexampleclient000001",
+          "ClientName": "passkey-web",
+          "ExplicitAuthFlows": ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
+          "AllowedOAuthFlowsUserPoolClient": true,
+          "AllowedOAuthFlows": ["code"],
+          "AllowedOAuthScopes": ["openid", "email", "profile"],
+          "SupportedIdentityProviders": ["COGNITO"],
+          "CallbackURLs": ["http://localhost:3000/callback"]
+        }
+      ],
+      "Users": [
+        {
+          "Username": "passkey-user",
+          "UserAttributes": [
+            { "Name": "email", "Value": "passkey-user@example.test" },
+            { "Name": "email_verified", "Value": "true" }
+          ],
+          "Password": "Example-Passw0rd!"
+        }
+      ]
+    }
+  ]
+}

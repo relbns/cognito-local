@@ -1,12 +1,10 @@
+import type {
+  DeleteWebAuthnCredentialRequest,
+  DeleteWebAuthnCredentialResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { Target } from "./Target";
-
-interface DeleteWebAuthnCredentialRequest {
-  AccessToken: string;
-  CredentialId: string;
-}
-type DeleteWebAuthnCredentialResponse = {};
 
 export type DeleteWebAuthnCredentialTarget = Target<
   DeleteWebAuthnCredentialRequest,
@@ -27,21 +25,21 @@ export const DeleteWebAuthnCredential =
       req.AccessToken,
     );
 
-    const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
-    const idx = credentials.findIndex(
-      (c: any) => c.CredentialId === req.CredentialId,
-    );
-    if (idx < 0) {
+    if (
+      !(user.WebAuthnCredentials ?? []).some(
+        (c) => c.CredentialId === req.CredentialId,
+      )
+    ) {
       throw new ResourceNotFoundError("Credential not found");
     }
 
-    credentials.splice(idx, 1);
-
-    await userPool.saveUser(ctx, {
-      ...user,
-      _webauthnCredentials: credentials,
+    await userPool.updateUser(ctx, user, (latest) => ({
+      ...latest,
+      WebAuthnCredentials: (latest.WebAuthnCredentials ?? []).filter(
+        (c) => c.CredentialId !== req.CredentialId,
+      ),
       UserLastModifiedDate: clock.get(),
-    } as any);
+    }));
 
     return {};
   };

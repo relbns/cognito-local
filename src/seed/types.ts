@@ -2,6 +2,7 @@ import type {
   CreateUserPoolClientRequest,
   CreateUserPoolRequest,
   ResourceServerScopeType,
+  WebAuthnConfigurationType,
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { Attribute } from "../services/sdkTypes";
 
@@ -57,6 +58,8 @@ export interface SeedUser {
 export type SeedUserPool = CreateUserPoolRequest & {
   /** Pin the pool id, e.g. "local_Example1". */
   Id?: string;
+  /** Passkey settings, as SetUserPoolMfaConfig sets them. */
+  WebAuthnConfiguration?: WebAuthnConfigurationType;
   Clients?: SeedClient[];
   IdentityProviders?: SeedIdentityProvider[];
   ResourceServers?: SeedResourceServer[];

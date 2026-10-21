@@ -51,7 +51,7 @@ ConfirmForgotPassword, AdminResetUserPassword, GlobalSignOut, AdminUserGlobalSig
 | `USER_SRP_AUTH` | both | Runs Cognito's SRP-6a (3072-bit group, `g` = 2, SHA-256) against a verifier derived from the stored password, so the same client code that signs in to Cognito works. The `PASSWORD_VERIFIER` response is checked against `PASSWORD_CLAIM_SIGNATURE`, and a wrong password returns `NotAuthorizedException` ("Incorrect username or password."). The server state behind `SECRET_BLOCK` is in memory, can be used once, and expires after the client's `AuthSessionValidity`, so a restart invalidates a pending challenge. `Session` is optional on that response. |
 | `REFRESH_TOKEN_AUTH`, `REFRESH_TOKEN` | both | Verifies the refresh token and returns new access and ID tokens. No new refresh token is issued. A client with refresh token rotation refuses the flow with `InvalidParameterException`. |
 | `CUSTOM_AUTH` | both | Runs DefineAuthChallenge, CreateAuthChallenge and VerifyAuthChallengeResponse over several rounds, keeps the challenge history, issues a new `Session` after a wrong answer, and accepts `SRP_A` + `PASSWORD_VERIFIER` before the custom challenge, checking the password as `USER_SRP_AUTH` does: a wrong one ends the sign-in with `NotAuthorizedException` before DefineAuthChallenge runs again. Sessions are in memory and expire after the client's `AuthSessionValidity`. |
-| `USER_AUTH` | both | Choice-based sign-in. Needs `ALLOW_USER_AUTH` in the client's `ExplicitAuthFlows` (a client without `ExplicitAuthFlows` has Cognito's defaults, which leave it out), otherwise `InvalidParameterException` ("USER_AUTH flow not enabled for this client"). The factors are `PASSWORD` and `PASSWORD_SRP` for a user with a password, plus `EMAIL_OTP` and `SMS_OTP` when the pool's `Policies.SignInPolicy.AllowedFirstAuthFactors` lists them, the user has an `email` or `phone_number`, and the user does not have to pass MFA. An available `PREFERRED_CHALLENGE` starts at once: `PASSWORD` with `PASSWORD`, `PASSWORD_SRP` with `SRP_A` (answered by `PASSWORD_VERIFIER`), or a one-time code sent through message delivery. Otherwise the response is `SELECT_CHALLENGE` with `AvailableChallenges`. `WEB_AUTHN` is never offered. |
+| `USER_AUTH` | both | Choice-based sign-in. Needs `ALLOW_USER_AUTH` in the client's `ExplicitAuthFlows` (a client without `ExplicitAuthFlows` has Cognito's defaults, which leave it out), otherwise `InvalidParameterException` ("USER_AUTH flow not enabled for this client"). The factors are `PASSWORD` and `PASSWORD_SRP` for a user with a password, plus `EMAIL_OTP` and `SMS_OTP` when the pool's `Policies.SignInPolicy.AllowedFirstAuthFactors` lists them, the user has an `email` or `phone_number`, and the user does not have to pass MFA, plus `WEB_AUTHN` under the conditions in [WebAuthn](#webauthn). An available `PREFERRED_CHALLENGE` starts at once: `PASSWORD` with `PASSWORD`, `PASSWORD_SRP` with `SRP_A` (answered by `PASSWORD_VERIFIER`), a one-time code sent through message delivery, or the `WEB_AUTHN` challenge. Otherwise the response is `SELECT_CHALLENGE` with `AvailableChallenges`, where `ANSWER` `WEB_AUTHN` returns the `WEB_AUTHN` challenge. |
 
 Every flow refuses a disabled user with `NotAuthorizedException` ("User is disabled."). The password
 flows check the password first, so a wrong password still returns "Incorrect username or password.".
@@ -60,7 +60,7 @@ password matches, before MFA. In the password, SRP and `USER_AUTH` flows a `RESE
 (migrated or imported) gets `PasswordResetRequiredException` before any password is checked.
 
 RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`,
-`SELECT_CHALLENGE`, `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP`, `SMS_MFA`,
+`SELECT_CHALLENGE`, `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP`, `WEB_AUTHN`, `SMS_MFA`,
 `SOFTWARE_TOKEN_MFA`, `SELECT_MFA_TYPE`, `MFA_SETUP`, `NEW_PASSWORD_REQUIRED`, `DEVICE_SRP_AUTH` and
 `DEVICE_PASSWORD_VERIFIER`.
 
@@ -102,9 +102,9 @@ RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`
 | --- | --- |
 | AssociateSoftwareToken | Returns a TOTP secret. With an `AccessToken` it stores the secret on the user; with the `Session` of an `MFA_SETUP` challenge it keeps the secret on the sign-in and returns a new `Session`. |
 | VerifySoftwareToken | Checks the TOTP code, marks the secret verified and enables TOTP for the user. With a `Session` it also makes TOTP the preferred MFA when none is set and returns the `Session` for the `MFA_SETUP` answer. |
-| SetUserMFAPreference, AdminSetUserMFAPreference | Set the user's enabled and preferred MFA. |
-| SetUserPoolMfaConfig, GetUserPoolMfaConfig | Set and read `MfaConfiguration`, the SMS message and configuration, and whether TOTP is enabled. |
-| GetUserAuthFactors | Returns `PASSWORD`, plus `SMS` and `TOTP` from the user's MFA settings. |
+| SetUserMFAPreference, AdminSetUserMFAPreference | Set the user's enabled and preferred MFA, and passkey MFA (`WebAuthnMfaSettings`, see [WebAuthn](#webauthn)). |
+| SetUserPoolMfaConfig, GetUserPoolMfaConfig | Set and read `MfaConfiguration`, the SMS message and configuration, whether TOTP is enabled, and `WebAuthnConfiguration` (`RelyingPartyId`, `UserVerification`, `FactorConfiguration`; read back with the defaults `preferred` and `SINGLE_FACTOR` once set). |
+| GetUserAuthFactors | Returns `PASSWORD`, plus `SMS` and `TOTP` from the user's MFA settings, and `WEB_AUTHN` when the user has a passkey. |
 
 ## Users
 
@@ -211,13 +211,57 @@ page does not use the branding or the UI customization.
 
 ## WebAuthn
 
+Passkeys work as in Cognito: registered with an access token, used as a `USER_AUTH` first factor.
+Passkeys are on when the pool's `Policies.SignInPolicy.AllowedFirstAuthFactors` lists `WEB_AUTHN`.
+The relying party ID is `WebAuthnConfiguration.RelyingPartyId`, else the pool's custom domain,
+else its prefix domain (`<prefix>.auth.<region>.amazoncognito.com`). For passkeys in a browser
+against the emulator, set `RelyingPartyId` to the host that serves the pages, usually `localhost`.
+
 | Operation | Behaviour |
 | --- | --- |
-| StartWebAuthnRegistration | Returns credential creation options for the relying party `localhost`, with a random challenge. |
-| CompleteWebAuthnRegistration | Stores a credential without verifying the attestation. |
-| ListWebAuthnCredentials, DeleteWebAuthnCredential | List and delete the stored credentials. |
+| StartWebAuthnRegistration | Returns `CredentialCreationOptions` (`rp`, `user` with the base64url `sub` as `id`, `challenge`, ES256 and RS256 in `pubKeyCredParams`, `timeout` 60000, the user's passkeys in `excludeCredentials`, and `authenticatorSelection` with `residentKey` `required` and the pool's `UserVerification`). The challenge is kept on the user with the client of the access token and expires after 5 minutes; a new call replaces it. `WebAuthnNotEnabledException` when passkeys are off, `WebAuthnConfigurationMissingException` when there is no relying party ID, `LimitExceededException` at 20 passkeys. |
+| CompleteWebAuthnRegistration | Verifies the `RegistrationResponseJSON` in `Credential`: `clientDataJSON` type `webauthn.create`, the challenge, an origin on the relying party ID or a subdomain (`https`, or `http` on `localhost`), `rpIdHash`, the user-present flag, and the user-verified flag when `UserVerification` is `required`. Checks the `none` and `packed` attestation statements (self attestation, or the signature of the first `x5c` certificate without a chain check) and accepts other formats without checking them, since Cognito does not enforce attestation. Stores the credential ID, COSE public key, signature counter, transports, authenticator attachment and creation date. |
+| ListWebAuthnCredentials | Returns `CredentialId`, `FriendlyCredentialName` (from the authenticator attachment), `RelyingPartyId`, `AuthenticatorAttachment`, `AuthenticatorTransports` and `CreatedAt`, with `MaxResults` and `NextToken`. |
+| DeleteWebAuthnCredential | Deletes the passkey, or returns `ResourceNotFoundException`. |
 
-`USER_AUTH` does not offer `WEB_AUTHN`, so stored passkeys cannot be used to sign in.
+CompleteWebAuthnRegistration errors: `WebAuthnChallengeNotFoundException` (no challenge, an expired
+one, or a credential for another challenge), `WebAuthnClientMismatchException` (an access token of
+another client than StartWebAuthnRegistration), `WebAuthnOriginNotAllowedException`,
+`WebAuthnRelyingPartyMismatchException` (another `rpIdHash`, or a relying party ID changed since
+the start), `WebAuthnCredentialNotSupportedException` (an algorithm other than ES256 and RS256, or
+no user verification when it is required), and `InvalidParameterException` for a malformed
+credential, a bad attestation signature or a passkey already registered.
+
+**Sign-in.** `USER_AUTH` offers `WEB_AUTHN` when passkeys are on and the user has a passkey for the
+current relying party ID, and either the user does not have to pass MFA or passkey MFA applies.
+The `WEB_AUTHN` challenge carries `CREDENTIAL_REQUEST_OPTIONS`, a JSON string with `challenge`,
+`rpId`, `allowCredentials` (the user's passkeys), `userVerification` and `timeout` 180000; the
+challenge lives in the sign-in session. The answer is `USERNAME` and `CREDENTIAL`, an
+`AuthenticationResponseJSON` string. The emulator checks the credential belongs to the user,
+`clientDataJSON` type `webauthn.get`, the challenge, the origin, `rpIdHash`, the user-present flag,
+the user-verified flag when required, a `userHandle` that matches the user, the signature over
+`authenticatorData` and the hash of `clientDataJSON`, and a signature counter that grows (a counter
+that stays 0 is accepted, for authenticators that keep none). A failed check returns
+`NotAuthorizedException` and the session stays open for another try. Success continues as the other
+first factors do: device authentication, PostAuthentication, PreTokenGeneration and a new device.
+
+**Passkey MFA.** With `FactorConfiguration` `MULTI_FACTOR_WITH_USER_VERIFICATION`, a user who turned
+on `WebAuthnMfaSettings` (SetUserMFAPreference or AdminSetUserMFAPreference, which need that pool
+setting and another MFA method enabled for the user, else `InvalidParameterException`) gets
+`WEB_AUTHN` even when MFA applies. The challenge then requires user verification and a verified
+passkey signs in without an MFA challenge. Passkeys are not offered as a second factor after a
+password.
+
+**Usernameless sign-in** is not supported, as in Cognito: `USERNAME` is required to start
+`USER_AUTH`, and `allowCredentials` lists that user's passkeys.
+
+**Hosted pages.** The login page shows "Sign in with passkey" when passkeys are on and the pool has
+a relying party ID. It takes the username, then a page calls `navigator.credentials.get` and posts
+the result; a verified passkey signs in like a password, with the same MFA rules. `/passkeys/add`
+(`client_id` and a registered `redirect_uri`) registers a passkey for the user signed in to this
+browser with `navigator.credentials.create`, then redirects to `redirect_uri`. Without a browser
+session it asks the user to sign in first. The managed login prompt to add a passkey right after
+sign-up is not shown.
 
 ## User import jobs
 

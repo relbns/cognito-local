@@ -1,12 +1,10 @@
-import * as uuid from "uuid";
+import type {
+  CompleteWebAuthnRegistrationRequest,
+  CompleteWebAuthnRegistrationResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
+import { completePasskeyRegistration } from "../services/passkeys";
 import type { Target } from "./Target";
-
-interface CompleteWebAuthnRegistrationRequest {
-  AccessToken: string;
-  Credential?: any;
-}
-type CompleteWebAuthnRegistrationResponse = {};
 
 export type CompleteWebAuthnRegistrationTarget = Target<
   CompleteWebAuthnRegistrationRequest,
@@ -22,26 +20,18 @@ export const CompleteWebAuthnRegistration =
     "clock" | "tokenVerifier"
   >): CompleteWebAuthnRegistrationTarget =>
   async (ctx, req) => {
-    const { user, userPool } = await tokenVerifier.verifyAccessToken(
+    const { claims, user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
       req.AccessToken,
     );
 
-    const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
-    credentials.push({
-      CredentialId: uuid.v4(),
-      FriendlyCredentialName: req.Credential?.friendlyName,
-      RelyingPartyId: "localhost",
-      AuthenticatorAttachment: "platform",
-      AuthenticatorTransports: ["internal"],
-      CreatedAt: clock.get(),
+    await completePasskeyRegistration(ctx, {
+      userPool,
+      user,
+      clientId: claims.client_id,
+      credential: req.Credential,
+      clock,
     });
-
-    await userPool.saveUser(ctx, {
-      ...user,
-      _webauthnCredentials: credentials,
-      UserLastModifiedDate: clock.get(),
-    } as any);
 
     return {};
   };

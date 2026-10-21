@@ -34,6 +34,9 @@ export const GetUserAuthFactors =
         if (mfa === "SOFTWARE_TOKEN_MFA") factors.push("TOTP");
       }
     }
+    if ((user.WebAuthnCredentials ?? []).length > 0) {
+      factors.push("WEB_AUTHN");
+    }
 
     return {
       Username: user.Username,

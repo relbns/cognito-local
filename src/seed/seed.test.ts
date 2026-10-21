@@ -266,6 +266,7 @@ describe("seed files", () => {
                 Id: "bad id",
                 PoolName: "p",
                 MfaConfiguration: "MAYBE",
+                WebAuthnConfiguration: { UserVerification: "always" },
                 Clientz: [],
                 Clients: [
                   { ClientName: "a" },
@@ -287,14 +288,15 @@ describe("seed files", () => {
       expect(error?.issues.map((i) => i.path)).toEqual([
         "UserPools[0].Id",
         "UserPools[0].MfaConfiguration",
+        "UserPools[0].WebAuthnConfiguration.UserVerification",
         "UserPools[0].Clientz",
         "UserPools[0].Clients[1].GenerateSecret",
         "UserPools[0].Users[0].TemporaryPassword",
         "UserPools[0].LambdaConfig.PreSignup",
         "UserPools[0].Clients[1].ClientName",
       ]);
-      expect(error?.issues[2].message).toMatch(/^unknown field/);
-      expect(error?.issues[6].message).toBe(
+      expect(error?.issues[3].message).toMatch(/^unknown field/);
+      expect(error?.issues[7].message).toBe(
         'duplicate ClientName "a" (also at UserPools[0].Clients[0])',
       );
     });
@@ -397,6 +399,19 @@ describe("seed files", () => {
         services,
         loadSeedFile(path.join(EXAMPLES, "seed.custom-auth-otp.json")),
       );
+      await applySeed(
+        TestContext,
+        services,
+        loadSeedFile(path.join(EXAMPLES, "seed.passkeys.json")),
+      );
+      const passkeyPool = await services.cognito.getUserPool(
+        TestContext,
+        "local_PasskeyExample",
+      );
+      expect(passkeyPool.options.WebAuthnConfiguration).toEqual({
+        RelyingPartyId: "localhost",
+        UserVerification: "preferred",
+      });
       await applySeed(TestContext, services, {
         UserPools: [
           {

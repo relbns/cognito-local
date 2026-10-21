@@ -348,6 +348,14 @@ const userPool = entity(
     UserPoolAddOns: obj,
     UsernameConfiguration: obj,
     AccountRecoverySetting: obj,
+    WebAuthnConfiguration: entity({
+      RelyingPartyId: nonEmptyStr,
+      UserVerification: oneOf("required", "preferred"),
+      FactorConfiguration: oneOf(
+        "SINGLE_FACTOR",
+        "MULTI_FACTOR_WITH_USER_VERIFICATION",
+      ),
+    }),
     Clients: arrayOf(client),
     IdentityProviders: arrayOf(identityProvider),
     ResourceServers: arrayOf(resourceServer),

@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { passkeyMfaPreference } from "../services/passkeys";
 import type { Target } from "./Target";
 
 export type AdminSetUserMFAPreferenceTarget = Target<
@@ -42,10 +43,18 @@ export const AdminSetUserMFAPreference =
       }
     }
 
+    const webAuthnMfa = passkeyMfaPreference(
+      userPool.options,
+      req.WebAuthnMfaSettings,
+      user.WebAuthnMfaEnabled,
+      mfaSettingList,
+    );
+
     await userPool.saveUser(ctx, {
       ...user,
       UserMFASettingList: mfaSettingList,
       PreferredMfaSetting: preferredMfaSetting,
+      WebAuthnMfaEnabled: webAuthnMfa,
       UserLastModifiedDate: clock.get(),
     });
 

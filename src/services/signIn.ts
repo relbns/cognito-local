@@ -28,6 +28,11 @@ import {
   smsMfaDelivery,
 } from "./mfa";
 import { nextMfaStep } from "./mfaSetup";
+import {
+  newPasskeyChallenge,
+  passkeySignInAvailable,
+  verifyPasskeySignIn,
+} from "./passkeys";
 import { assertPasswordConformsToPolicy } from "./passwordPolicy";
 import {
   startDeviceVerifier,
@@ -80,13 +85,19 @@ export interface SignInRound {
   tokenSource?: TokenSource;
 }
 
-export type FirstFactor = "PASSWORD" | "PASSWORD_SRP" | "EMAIL_OTP" | "SMS_OTP";
+export type FirstFactor =
+  | "PASSWORD"
+  | "PASSWORD_SRP"
+  | "EMAIL_OTP"
+  | "SMS_OTP"
+  | "WEB_AUTHN";
 
 const FIRST_FACTORS: readonly string[] = [
   "PASSWORD",
   "PASSWORD_SRP",
   "EMAIL_OTP",
   "SMS_OTP",
+  "WEB_AUTHN",
 ];
 
 // CreateUserPoolClient: a client without ExplicitAuthFlows supports these.
@@ -115,6 +126,9 @@ export const availableFirstFactors = (
   // One-time passwords are not offered to users who must pass MFA.
   const passwordless = !isMfaRequired(userPool.options, user);
   const factors: FirstFactor[] = [];
+  if (passkeySignInAvailable(userPool.options, user)) {
+    factors.push("WEB_AUTHN");
+  }
   if (
     passwordless &&
     allowed.includes("EMAIL_OTP") &&
@@ -311,6 +325,7 @@ export const afterFirstFactor = async (
   ctx: Context,
   services: SignInServices,
   round: SignInRound,
+  mfaSatisfied = false,
 ): Promise<SignInResponse> => {
   const { userPool, user } = round;
   const tracking = deviceTrackingEnabled(userPool.options);
@@ -318,7 +333,9 @@ export const afterFirstFactor = async (
     tracking && round.deviceKey
       ? requireConfirmedDevice(user, round.deviceKey)
       : undefined;
-  const step = nextMfaStep(userPool.options, user);
+  const step = mfaSatisfied
+    ? ({ kind: "none" } as const)
+    : nextMfaStep(userPool.options, user);
 
   const deviceCanAuthenticate =
     device && isRemembered(device) && device.DeviceSecretVerifierConfig;
@@ -414,6 +431,19 @@ const startFirstFactor = async (
     }
     return passwordVerifierChallenge(services, round, parameters.SRP_A);
   }
+  if (factor === "WEB_AUTHN") {
+    const passkey = newPasskeyChallenge(round.userPool.options, round.user);
+    return {
+      ChallengeName: "WEB_AUTHN",
+      ChallengeParameters: {
+        CREDENTIAL_REQUEST_OPTIONS: JSON.stringify(passkey.options),
+      },
+      Session: createSession(services, round, "WEB_AUTHN", {
+        webAuthnChallenge: passkey.challenge,
+        webAuthnRequireUserVerification: passkey.requireUserVerification,
+      }),
+    };
+  }
 
   const delivery = otpDelivery(factor, round.user);
   if (!delivery) {
@@ -472,6 +502,7 @@ const SESSION_CHALLENGES = new Set([
   "PASSWORD_SRP",
   "EMAIL_OTP",
   "SMS_OTP",
+  "WEB_AUTHN",
   "MFA_SETUP",
   "DEVICE_SRP_AUTH",
   "DEVICE_PASSWORD_VERIFIER",
@@ -595,6 +626,20 @@ export const respondToSignInChallenge = async (
         answer.challengeName === "EMAIL_OTP" ? "email" : "phone_number",
       );
       return afterFirstFactor(ctx, services, round);
+    }
+
+    case "WEB_AUTHN": {
+      const passkey = await verifyPasskeySignIn(ctx, {
+        userPool,
+        user,
+        credential: responses.CREDENTIAL,
+        challenge: state.webAuthnChallenge,
+        requireUserVerification: !!state.webAuthnRequireUserVerification,
+        clock: services.clock,
+      });
+      consume();
+      round.user = passkey.user;
+      return afterFirstFactor(ctx, services, round, passkey.satisfiesMfa);
     }
 
     case "PASSWORD_VERIFIER": {
