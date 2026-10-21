@@ -76,6 +76,30 @@ describe("AdminListGroupsForUser target", () => {
     ]);
   });
 
+  it("matches membership by the stored username when the request uses an alias", async () => {
+    const existingUser = TDB.user({
+      Username: "0a1b2c3d-sub",
+      Attributes: [{ Name: "email", Value: "jane@example.test" }],
+    });
+    const existingGroup = TDB.group({ members: [existingUser.Username] });
+
+    mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
+    mockUserPoolService.listGroups.mockResolvedValue([existingGroup]);
+
+    const result = await adminListGroupsForUser(TestContext, {
+      Username: "jane@example.test",
+      UserPoolId: "test",
+    });
+
+    expect(mockUserPoolService.getUserByUsername).toHaveBeenCalledWith(
+      TestContext,
+      "jane@example.test",
+    );
+    expect(result.Groups?.map((g) => g.GroupName)).toEqual([
+      existingGroup.GroupName,
+    ]);
+  });
+
   it("throws if the user doesn't exist", async () => {
     mockUserPoolService.getUserByUsername.mockResolvedValue(null);
 

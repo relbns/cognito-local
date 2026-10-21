@@ -86,7 +86,9 @@ DeleteUserAttributes, GetUserAttributeVerificationCode, VerifyUserAttribute, Set
 CreateGroup, GetGroup, UpdateGroup, DeleteGroup, ListGroups, AdminAddUserToGroup,
 AdminRemoveUserFromGroup, AdminListGroupsForUser, ListUsersInGroup.
 
-Group membership appears in the `cognito:groups` claim of access and ID tokens.
+Group membership appears in the `cognito:groups` claim of access and ID tokens. The group operations
+that take a `Username` accept any name the user signs in with (the username, `sub`, or an email or
+phone number alias) and resolve it to the same user.
 
 ## User pools and clients
 
