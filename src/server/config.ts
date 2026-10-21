@@ -7,6 +7,7 @@ import type { KMSConfig } from "../services/crypto";
 import type { DataStoreFactory } from "../services/dataStore/factory";
 import { DEFAULT_FILE_TRIGGER_TIMEOUT_MS } from "../services/fileTrigger";
 import type { FunctionConfig } from "../services/lambda";
+import { DEFAULT_PASSWORD_RESET_ATTEMPTS_PER_HOUR } from "../services/signInLockout";
 import type { TokenConfig } from "../services/tokenGenerator";
 import type { UserPool } from "../services/userPoolService";
 import type { ServerOptions } from "./server";
@@ -29,6 +30,13 @@ export interface AdminUIConfig {
 
 export interface PasswordPolicyConfig {
   Enforce: boolean;
+}
+
+export interface LockoutConfig {
+  /** Lock a user out after five failed passwords, and limit password reset attempts. */
+  Enabled: boolean;
+  /** ForgotPassword requests and ConfirmForgotPassword attempts per user per hour; 0 for no limit. */
+  PasswordResetAttemptsPerHour: number;
 }
 
 export interface ValidationConfig {
@@ -73,6 +81,7 @@ export interface Config {
   AuthSessionConfig: AuthSessionConfig;
   AdminUIConfig: AdminUIConfig;
   PasswordPolicyConfig: PasswordPolicyConfig;
+  LockoutConfig: LockoutConfig;
   ValidationConfig: ValidationConfig;
   FileTriggerConfig: FileTriggerConfig;
   FederationConfig: FederationConfig;
@@ -113,6 +122,10 @@ export const DefaultConfig: Config = {
   },
   PasswordPolicyConfig: {
     Enforce: true,
+  },
+  LockoutConfig: {
+    Enabled: true,
+    PasswordResetAttemptsPerHour: DEFAULT_PASSWORD_RESET_ATTEMPTS_PER_HOUR,
   },
   ValidationConfig: {
     Enabled: !isOff(process.env.COGNITO_LOCAL_VALIDATION),

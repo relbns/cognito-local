@@ -8,6 +8,7 @@ import type { AppClient } from "./appClient";
 import type { AuthSessions, ChallengeResult } from "./authSessions";
 import type { Context } from "./context";
 import type { Services } from "./index";
+import { withPasswordLockout } from "./signInLockout";
 import {
   startPasswordVerifier,
   startPhantomPasswordVerifier,
@@ -22,8 +23,9 @@ import type { User, UserPoolService } from "./userPoolService";
 
 export type CustomAuthServices = Pick<
   Services,
-  "authSessions" | "srpSessions" | "tokenGenerator" | "triggers"
->;
+  "authSessions" | "clock" | "srpSessions" | "tokenGenerator" | "triggers"
+> &
+  Partial<Pick<Services, "config">>;
 
 export type CustomAuthResponse = Pick<
   InitiateAuthResponse,
@@ -275,12 +277,22 @@ export const respondToCustomAuthChallenge = async (
     if (userNotFound) {
       throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
     }
-    verifyPasswordClaim(services.srpSessions, {
-      userPoolId: userPool.options.Id,
-      clientId: client.ClientId,
-      user,
-      challengeResponses,
-    });
+    round.user = (
+      await withPasswordLockout(
+        ctx,
+        services.config,
+        userPool,
+        user,
+        services.clock.get(),
+        () =>
+          verifyPasswordClaim(services.srpSessions, {
+            userPoolId: userPool.options.Id,
+            clientId: client.ClientId,
+            user,
+            challengeResponses,
+          }),
+      )
+    ).user;
     round.history.push({ challengeName, challengeResult: true });
     return runCustomAuthRound(ctx, services, round);
   }

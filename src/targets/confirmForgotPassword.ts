@@ -11,6 +11,7 @@ import {
 } from "../errors";
 import type { Services } from "../services";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import { countPasswordResetAttempt } from "../services/signInLockout";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
   preventsUserExistenceErrors,
@@ -58,6 +59,13 @@ export const ConfirmForgotPassword =
         : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
+    const counted = await countPasswordResetAttempt(
+      ctx,
+      config,
+      userPool,
+      user,
+      clock.get(),
+    );
     if (!user.ConfirmationCode) {
       throw new ExpiredCodeError();
     }
@@ -68,7 +76,7 @@ export const ConfirmForgotPassword =
     assertPasswordConformsToPolicy(config, userPool.options, req.Password);
 
     const updatedUser: User = {
-      ...user,
+      ...counted,
       UserLastModifiedDate: clock.get(),
       UserStatus: "CONFIRMED",
       ConfirmationCode: undefined,

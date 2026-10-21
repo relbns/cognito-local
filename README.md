@@ -445,6 +445,8 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `TokenConfig.Verify`                         | `true`                 | Verify access and refresh tokens as Cognito does; `false` decodes access tokens unchecked: see [docs/tokens.md](docs/tokens.md)                                                              |
 | `TokenConfig.CheckSecretHash`                | `true`                 | Require `SECRET_HASH` / `SecretHash` / `ClientSecret` from clients with a secret                                                                                                             |
 | `PasswordPolicyConfig.Enforce`               | `true`                 | Enforce each pool's `PasswordPolicy` (the AWS default when unset)                                                                                                                            |
+| `LockoutConfig.Enabled`                      | `true`                 | Lock a user out after five wrong passwords and limit password reset attempts, as Cognito does: see [Attempt limits](docs/api-coverage.md#attempt-limits)                                     |
+| `LockoutConfig.PasswordResetAttemptsPerHour` | `20`                   | ForgotPassword requests and ConfirmForgotPassword attempts per user per hour (Cognito allows 5 to 20); `0` for no limit                                                                      |
 | `ValidationConfig.Enabled`                   | `true`                 | Check every request against the operation's input model (required members, types, length, pattern, enum, range) before it runs, as Cognito does                                              |
 | `AuthSessionConfig.AuthSessionValidity`      | `3`                    | Minutes a CUSTOM_AUTH `Session` stays valid when the client sets no `AuthSessionValidity`                                                                                                    |
 | `AdminUIConfig.Enabled`                      | `true`                 | Serve the admin UI at `/_admin` and record codes                                                                                                                                             |
@@ -534,6 +536,7 @@ Each row below has a switch that restores upstream's lenient behaviour:
 | Access and refresh tokens verified (signature, issuer, expiry, user, revocation) | `TokenConfig.Verify: false`                    |
 | `SECRET_HASH` required from clients with a secret                                | `TokenConfig.CheckSecretHash: false`           |
 | Pool `PasswordPolicy` enforced                                                   | `PasswordPolicyConfig.Enforce: false`          |
+| Sign-in lockout and password reset attempt limit                                 | `LockoutConfig.Enabled: false`                 |
 | Requests checked against the API model (`InvalidParameterException`)             | `ValidationConfig.Enabled: false`              |
 | Admin UI on, codes recorded                                                      | `AdminUIConfig.Enabled: false` or `--no-admin` |
 

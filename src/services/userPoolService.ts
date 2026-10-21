@@ -13,6 +13,7 @@ import type { DataStore } from "./dataStore/dataStore";
 import type { DataStoreFactory } from "./dataStore/factory";
 import { FilterConfig } from "./filter";
 import type { Attribute } from "./sdkTypes";
+import type { SignInLockoutState } from "./signInLockout";
 import { withRefreshToken } from "./tokenRevocation";
 import type {
   WebAuthnCredential,
@@ -155,6 +156,10 @@ export interface User {
   WebAuthnCredentials?: WebAuthnCredential[];
   WebAuthnRegistration?: WebAuthnRegistrationChallenge;
   WebAuthnMfaEnabled?: boolean;
+
+  // Failed password sign-ins and recent password reset attempts, for the attempt limits. Internal only.
+  SignInLockout?: SignInLockoutState;
+  PasswordResetAttempts?: number[];
 }
 
 export interface RefreshTokenGracePeriod {

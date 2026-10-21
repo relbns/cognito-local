@@ -35,6 +35,7 @@ import {
   verifyPasskeySignIn,
 } from "./passkeys";
 import { assertPasswordConformsToPolicy } from "./passwordPolicy";
+import { checkPassword, withPasswordLockout } from "./signInLockout";
 import {
   startDeviceVerifier,
   startPasswordVerifier,
@@ -428,9 +429,14 @@ const startFirstFactor = async (
     if (!parameters.PASSWORD) {
       throw new InvalidParameterError("Missing required parameter PASSWORD");
     }
-    if (parameters.PASSWORD !== round.user.Password) {
-      throw new NotAuthorizedError("Incorrect username or password.");
-    }
+    round.user = await checkPassword(
+      ctx,
+      services.config,
+      round.userPool,
+      round.user,
+      parameters.PASSWORD,
+      services.clock.get(),
+    );
     return afterPassword(ctx, services, round);
   }
   if (factor === "PASSWORD_SRP") {
@@ -813,12 +819,21 @@ export const respondToSignInChallenge = async (
     }
 
     case "PASSWORD_VERIFIER": {
-      const verified = verifyPasswordClaim(services.srpSessions, {
-        userPoolId: userPool.options.Id,
-        clientId: answer.client.ClientId,
+      const { value: verified, user: checked } = await withPasswordLockout(
+        ctx,
+        services.config,
+        userPool,
         user,
-        challengeResponses: responses,
-      });
+        services.clock.get(),
+        () =>
+          verifyPasswordClaim(services.srpSessions, {
+            userPoolId: userPool.options.Id,
+            clientId: answer.client.ClientId,
+            user,
+            challengeResponses: responses,
+          }),
+      );
+      round.user = checked;
       consume();
       round.deviceKey = round.deviceKey || verified.deviceKey;
       return afterPassword(ctx, services, round);

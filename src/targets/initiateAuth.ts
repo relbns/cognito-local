@@ -28,6 +28,7 @@ import {
   startPhantomUserAuth,
   startUserAuth,
 } from "../services/signIn";
+import { checkPassword } from "../services/signInLockout";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import {
@@ -55,7 +56,8 @@ type InitiateAuthServices = Pick<
   | "tokenGenerator"
   | "tokenVerifier"
   | "triggers"
->;
+> &
+  Partial<Pick<Services, "config">>;
 
 // With PreventUserExistenceErrors ENABLED an imported user gets the generic failure (import tool docs).
 const resetRequiredError = (client: AppClient): Error =>
@@ -130,9 +132,14 @@ const userPasswordAuthFlow = async (
   if (user.UserStatus === "RESET_REQUIRED") {
     throw resetRequiredError(userPoolClient);
   }
-  if (user.Password !== req.AuthParameters.PASSWORD) {
-    throw new NotAuthorizedError("Incorrect username or password.");
-  }
+  user = await checkPassword(
+    ctx,
+    services.config,
+    userPool,
+    user,
+    req.AuthParameters.PASSWORD,
+    services.clock.get(),
+  );
   if (!user.Enabled) {
     throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }

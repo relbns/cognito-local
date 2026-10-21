@@ -85,6 +85,27 @@ A simulated destination is the username itself when it is an email address or a 
 otherwise a masked placeholder (`u***@e***`, or `+*******0000` when the pool verifies phone numbers
 first). PreAuthentication runs for an unknown user only under `ENABLED`, with `userNotFound: true`.
 
+### Attempt limits
+
+- **Password lockout.** After five wrong passwords Cognito locks the user out for one second, and the
+  lockout doubles with each further wrong password: 2^(n-5) seconds for n failed attempts, at most
+  15 minutes
+  ([lockout behavior](https://docs.aws.amazon.com/cognito/latest/developerguide/authentication-flow-things-to-know.html#authentication-flow-lockout-behavior)).
+  Any sign-in during a lockout, with the right password or not, returns `NotAuthorizedException`
+  ("Password attempts exceeded") and does not count. A correct password after the lockout, or 15
+  minutes without a sign-in attempt after a lockout, resets the count. It covers
+  `USER_PASSWORD_AUTH`, `ADMIN_USER_PASSWORD_AUTH`, the `USER_AUTH` `PASSWORD` factor, the
+  `PASSWORD_VERIFIER` answer of SRP and of `CUSTOM_AUTH`, and the built-in login form; custom
+  challenges and one-time codes do not count.
+- **Password reset codes.** Cognito allows "between 5 and 20" ForgotPassword requests and
+  ConfirmForgotPassword attempts per user in an hour, depending on risk
+  ([forgot password behavior](https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html#forgot-password)).
+  The emulator allows `LockoutConfig.PasswordResetAttemptsPerHour` (20 by default) and then returns
+  `LimitExceededException` ("Attempt limit exceeded, please try after some time.") until the oldest
+  attempt is an hour old.
+- `LockoutConfig.Enabled: false` turns both off. Wrong MFA and one-time codes have no limit, since
+  Cognito documents none.
+
 ### Error messages
 
 Errors carry the messages Cognito returns:

@@ -119,13 +119,17 @@ describe("ConfirmForgotPassword target", () => {
         Password: "newPassword-Aa1",
       });
 
-      expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
-        ...user,
-        ConfirmationCode: undefined,
-        Password: "newPassword-Aa1",
-        UserLastModifiedDate: newNow,
-        UserStatus: "CONFIRMED",
-      });
+      expect(mockUserPoolService.saveUser).toHaveBeenLastCalledWith(
+        TestContext,
+        {
+          ...user,
+          ConfirmationCode: undefined,
+          Password: "newPassword-Aa1",
+          PasswordResetAttempts: [newNow.getTime()],
+          UserLastModifiedDate: newNow,
+          UserStatus: "CONFIRMED",
+        },
+      );
     });
 
     describe("when PostConfirmation trigger configured", () => {
@@ -208,6 +212,9 @@ describe("ConfirmForgotPassword target", () => {
         "Password does not conform to policy: Password must have lowercase characters",
       ),
     );
-    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalledWith(
+      TestContext,
+      expect.objectContaining({ Password: "PASSWORD-1" }),
+    );
   });
 });

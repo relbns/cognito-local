@@ -21,6 +21,7 @@ import {
   verifyPasskeySignIn,
 } from "../services/passkeys";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import { checkPassword } from "../services/signInLockout";
 import { verify as verifyTotp } from "../services/totp";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import { preventsUserExistenceErrors } from "../services/userExistence";
@@ -267,17 +268,28 @@ export async function signInWithPassword(
         : HOSTED_LOGIN_MESSAGES.passwordResetRequired,
     );
   }
-  if (user.Password !== password) {
+  let checked: User;
+  try {
+    checked = await checkPassword(
+      ctx,
+      services.config,
+      login.userPool,
+      user,
+      password,
+      services.clock.get(),
+    );
+  } catch (e) {
+    if (e instanceof NotAuthorizedError) return loginError(e.message);
+    throw e;
+  }
+  if (!checked.Enabled) return loginError(HOSTED_LOGIN_MESSAGES.userDisabled);
+  if (checked.UserStatus === "UNCONFIRMED") {
     return loginError(HOSTED_LOGIN_MESSAGES.incorrectCredentials);
   }
-  if (!user.Enabled) return loginError(HOSTED_LOGIN_MESSAGES.userDisabled);
-  if (user.UserStatus === "UNCONFIRMED") {
-    return loginError(HOSTED_LOGIN_MESSAGES.incorrectCredentials);
+  if (checked.UserStatus === "FORCE_CHANGE_PASSWORD") {
+    return toStep(store, login, checked, { kind: "newPassword" });
   }
-  if (user.UserStatus === "FORCE_CHANGE_PASSWORD") {
-    return toStep(store, login, user, { kind: "newPassword" });
-  }
-  return afterPassword(ctx, services, store, login, user);
+  return afterPassword(ctx, services, store, login, checked);
 }
 
 /** Starts passkey sign-in for a username, as the managed login page does before it prompts for the passkey. */

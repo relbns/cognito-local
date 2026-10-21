@@ -11,6 +11,7 @@ import {
 import type { Services, UserPoolService } from "../services";
 import type { Context } from "../services/context";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import { countPasswordResetAttempt } from "../services/signInLockout";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
   preventsUserExistenceErrors,
@@ -28,7 +29,8 @@ export type ForgotPasswordTarget = Target<
 type ForgotPasswordServices = Pick<
   Services,
   "clock" | "cognito" | "messages" | "otp" | "tokenVerifier" | "triggers"
->;
+> &
+  Partial<Pick<Services, "config">>;
 
 // An unknown user is looked up through UserMigration (UserMigration_ForgotPassword) when the pool has it.
 const findOrMigrateUser = async (
@@ -69,6 +71,7 @@ export const ForgotPassword =
     otp,
     tokenVerifier,
     triggers,
+    config,
   }: ForgotPasswordServices): ForgotPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
@@ -97,7 +100,15 @@ export const ForgotPassword =
       );
     }
 
-    const userEmail = attributeValue("email", user.Attributes);
+    const counted = await countPasswordResetAttempt(
+      ctx,
+      config,
+      userPool,
+      user,
+      clock.get(),
+    );
+
+    const userEmail = attributeValue("email", counted.Attributes);
     if (!userEmail) {
       throw new UnsupportedError("ForgotPassword without email on user");
     }
