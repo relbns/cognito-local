@@ -404,10 +404,11 @@ The built-in login form checks the password, then follows the user's state:
 
 | User | What the form does |
 | --- | --- |
-| Unknown | Runs UserMigration when the pool has it, and signs in the user it returns. Otherwise shows `Incorrect username or password.` |
+| Unknown | Runs UserMigration when the pool has it, and signs in the user it returns. Otherwise shows `User does not exist.`, or `Incorrect username or password.` when the client prevents user existence errors. |
 | Disabled | Shows `User is disabled.` and issues nothing. A wrong password shows `Incorrect username or password.` first. |
-| `RESET_REQUIRED` | Shows `Password reset required for the user.` |
-| `UNCONFIRMED` | Shows `Incorrect username or password.` |
+| Locked out | Shows `Password attempts exceeded`, as described in [Attempt limits](#attempt-limits). |
+| `RESET_REQUIRED` | Shows `Password reset required for the user.`, or `Incorrect username or password.` when the client prevents user existence errors. |
+| `UNCONFIRMED` | With the right password, sends a new confirmation code (the `ResendCode` message, to the address `AutoVerifiedAttributes` picks) and shows the confirm page; the code confirms the account and finishes the sign-in. Shows `User is not confirmed.` when the pool verifies no attribute the user has. A wrong password shows `Incorrect username or password.` |
 | `FORCE_CHANGE_PASSWORD` | Asks for a new password, checks it against the pool password policy (unless `PasswordPolicyConfig.Enforce` is `false`), stores it and marks the user `CONFIRMED`. |
 | MFA required | Applies the InitiateAuth rule (pool MFA `ON`, or not `OFF` and the user has MFA). An SMS code goes to `phone_number` through message delivery and appears in the admin Codes viewer. A TOTP code is checked against the user's verified authenticator. A user with both methods and no preferred one chooses first. A wrong code shows `Invalid code or auth state for the user.` |
 | MFA `ON`, no method | Follows the `MFA_SETUP` rule of the API: when the pool has an `SmsConfiguration` and the user a `phone_number`, it sends an SMS code. Otherwise, when the pool offers TOTP, it shows an authenticator setup page with the secret key and its `otpauth://` link (no QR code). A correct code registers the authenticator as the user's enabled, preferred MFA and finishes the sign-in. When only SMS can be set up and the user has no phone number, the form shows `SMS MFA is enabled but the user has no phone number to send the code to.` |

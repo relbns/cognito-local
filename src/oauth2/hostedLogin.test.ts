@@ -388,10 +388,43 @@ describe("hosted login form", () => {
     expect(res.header.location).toBeUndefined();
   });
 
-  it("keeps refusing an unconfirmed user as incorrect credentials", async () => {
-    setUser({ UserStatus: "UNCONFIRMED" });
-    const res = await login();
-    expect(res.text).toContain("Incorrect username or password.");
+  describe("UNCONFIRMED", () => {
+    it("refuses a wrong password", async () => {
+      setUser({ UserStatus: "UNCONFIRMED" });
+      const res = await login({ password: "wrong" });
+      expect(res.text).toContain("Incorrect username or password.");
+      expect(messages.deliver).not.toHaveBeenCalled();
+    });
+
+    it("sends a confirmation code and shows the confirm page for the right password", async () => {
+      setUser({ UserStatus: "UNCONFIRMED" });
+      userPool.options.AutoVerifiedAttributes = ["email"];
+      const res = await login();
+      expect(messages.deliver).toHaveBeenCalledWith(
+        expect.anything(),
+        "ResendCode",
+        "client-1",
+        "local_Pool1",
+        expect.objectContaining({ Username: "user@example.test" }),
+        "246810",
+        undefined,
+        {
+          AttributeName: "email",
+          DeliveryMedium: "EMAIL",
+          Destination: "user@example.test",
+        },
+      );
+      expect(stored.ConfirmationCode).toBe("246810");
+      expect(res.text).toContain("Confirm account");
+      expect(res.text).toContain("login_session");
+      expect(tokenGenerator.generate).not.toHaveBeenCalled();
+    });
+
+    it("says the user is not confirmed when no code can be sent", async () => {
+      setUser({ UserStatus: "UNCONFIRMED" });
+      const res = await login();
+      expect(res.text).toContain("User is not confirmed.");
+    });
   });
 
   describe("FORCE_CHANGE_PASSWORD", () => {

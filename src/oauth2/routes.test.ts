@@ -264,7 +264,7 @@ describe("OAuth2 routes", () => {
         .type("form")
         .send(validFormData);
       expect(res.status).toBe(200);
-      expect(res.text).toContain("Incorrect username or password");
+      expect(res.text).toContain("User is not confirmed.");
     });
 
     it("returns 400 if redirect_uri not registered", async () => {

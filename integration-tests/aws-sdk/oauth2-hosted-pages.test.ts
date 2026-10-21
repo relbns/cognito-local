@@ -245,6 +245,52 @@ describe(
       });
     });
 
+    describe("sign-in of an unconfirmed user", () => {
+      it("sends a code, shows the confirm page and signs in after the code", async () => {
+        const client = Cognito();
+        const { clientId } = await setupPool(client, { required: [] });
+        await client
+          .signUp({
+            ClientId: clientId,
+            Username: "late@example.test",
+            Password: PASSWORD,
+          })
+          .promise();
+        const wrong = await post("/oauth2/authorize", {
+          client_id: clientId,
+          ...OAUTH,
+          username: "late@example.test",
+          password: "Wrong-Passw0rd",
+        });
+        expect(await wrong.text()).toContain("Incorrect username or password.");
+
+        const confirmPage = await (
+          await post("/oauth2/authorize", {
+            client_id: clientId,
+            ...OAUTH,
+            username: "late@example.test",
+            password: PASSWORD,
+          })
+        ).text();
+        expect(confirmPage).toContain(
+          "We have sent a code by email to l***@e***",
+        );
+        const code = lastCode("SIGN_UP");
+        expect(code).toMatch(/^\d{6}$/);
+        expect(
+          codeLog()
+            .list()
+            .filter((e) => e.type === "SIGN_UP"),
+        ).toHaveLength(2);
+
+        const confirmed = await post("/confirm", {
+          login_session: sessionOf(confirmPage),
+          code,
+        });
+        await exchange(confirmed, clientId);
+      });
+    });
+
     describe("sign-up", () => {
       it("signs up, confirms with the delivered code and lands on the redirect with a code", async () => {
         const client = Cognito();

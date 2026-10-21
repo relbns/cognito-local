@@ -8,6 +8,7 @@ import {
 import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
+import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
 import { type MfaMethod, smsMfaDelivery } from "../services/mfa";
 import {
   completeTotpSetup,
@@ -26,16 +27,18 @@ import { verify as verifyTotp } from "../services/totp";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import { preventsUserExistenceErrors } from "../services/userExistence";
 import type { User } from "../services/userPoolService";
-import type {
-  HostedLoginStep,
-  HostedLoginStore,
-  PendingHostedLogin,
+import {
+  CODE_PAGE_VALIDITY_MS,
+  type HostedLoginStep,
+  type HostedLoginStore,
+  type PendingHostedLogin,
 } from "./hostedLoginStore";
 import type { AuthorizeFlow } from "./oauthRequest";
 
 export const HOSTED_LOGIN_MESSAGES = {
   incorrectCredentials: "Incorrect username or password.",
   userDoesNotExist: "User does not exist.",
+  userNotConfirmed: "User is not confirmed.",
   userDisabled: "User is disabled.",
   passwordResetRequired: "Password reset required for the user.",
   newPasswordRequired: "Enter a new password.",
@@ -89,6 +92,7 @@ const toStep = (
   login: HostedLoginContext,
   user: User,
   step: HostedLoginStep,
+  validityMs?: number,
 ): HostedLoginOutcome => {
   const pending: PendingHostedLogin = {
     userPoolId: login.userPool.options.Id,
@@ -100,7 +104,7 @@ const toStep = (
     flow: login.flow,
     step,
   };
-  return { kind: "step", sessionId: store.create(pending), step };
+  return { kind: "step", sessionId: store.create(pending, validityMs), step };
 };
 
 async function completeSignIn(
@@ -226,6 +230,44 @@ async function findOrMigrateUser(
   }
 }
 
+// An unconfirmed user who knows the password gets a new code and the confirm page, then signs in.
+async function startSignUpConfirmation(
+  ctx: Context,
+  services: HostedLoginServices,
+  store: HostedLoginStore,
+  login: HostedLoginContext,
+  user: User,
+): Promise<HostedLoginOutcome> {
+  const delivery = selectAppropriateDeliveryMethod(
+    login.userPool.options.AutoVerifiedAttributes ?? [],
+    user,
+  );
+  if (!delivery) return loginError(HOSTED_LOGIN_MESSAGES.userNotConfirmed);
+  const code = services.otp();
+  await services.messages.deliver(
+    ctx,
+    "ResendCode",
+    login.appClient.ClientId,
+    login.userPool.options.Id,
+    user,
+    code,
+    undefined,
+    delivery,
+  );
+  await login.userPool.updateUser(ctx, user, (latest) => ({
+    ...latest,
+    ConfirmationCode: code,
+    UserLastModifiedDate: services.clock.get(),
+  }));
+  return toStep(
+    store,
+    login,
+    user,
+    { kind: "confirmSignUp", delivery, signInAfter: true },
+    CODE_PAGE_VALIDITY_MS,
+  );
+}
+
 export async function signInWithPassword(
   ctx: Context,
   services: HostedLoginServices,
@@ -284,7 +326,7 @@ export async function signInWithPassword(
   }
   if (!checked.Enabled) return loginError(HOSTED_LOGIN_MESSAGES.userDisabled);
   if (checked.UserStatus === "UNCONFIRMED") {
-    return loginError(HOSTED_LOGIN_MESSAGES.incorrectCredentials);
+    return startSignUpConfirmation(ctx, services, store, login, checked);
   }
   if (checked.UserStatus === "FORCE_CHANGE_PASSWORD") {
     return toStep(store, login, checked, { kind: "newPassword" });
