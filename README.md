@@ -1,33 +1,75 @@
-# cognito-local (relbns fork)
+<div align="center">
 
-A local emulator of the Amazon Cognito User Pools API. Point an AWS SDK, the AWS CLI or a browser at
-`http://localhost:9229` and sign-up, sign-in, groups, admin operations and the OAuth2 endpoints work
-without an AWS account. This fork of [jagregory/cognito-local](https://github.com/jagregory/cognito-local)
-adds stateful CUSTOM_AUTH (passwordless) challenges, Cognito-compatible hosted login, a mock
-federated identity provider, token checks as Cognito makes them, an admin UI with a codes viewer,
-seed files, local trigger files, a CLI and a Docker image. It is not AWS: it mimics the observable
-behaviour closely enough for development and tests, and [the differences](#compatibility-and-differences-from-aws)
-are listed below.
+# cognito-emulator
 
-**Contents:** [Install](#install) | [Quick start](#quick-start) | [Recipes](#recipes) |
-[Configuration](#configuration-reference) | [Compatibility](#compatibility-and-differences-from-aws) |
-[Troubleshooting](#troubleshooting)
+**A local emulator of the Amazon Cognito User Pools API, for development and tests.**
+
+[![CI](https://img.shields.io/github/actions/workflow/status/relbns/cognito-local/main.yml?branch=main&label=CI)](https://github.com/relbns/cognito-local/actions/workflows/main.yml)
+[![Docker image](https://img.shields.io/github/actions/workflow/status/relbns/cognito-local/docker.yml?branch=main&label=docker%20image)](https://github.com/relbns/cognito-local/actions/workflows/docker.yml)
+[![GHCR](https://img.shields.io/badge/image-ghcr.io%2Frelbns%2Fcognito--local-blue?logo=docker&logoColor=white)](https://github.com/relbns/cognito-local/pkgs/container/cognito-local)
+[![Tested with](https://img.shields.io/badge/tested%20with-AWS%20SDK%20v3%20%7C%20boto3%20%7C%20AWS%20CLI%20v2-informational)](docs/sdk-compatibility.md)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](#install)
+[![License](https://img.shields.io/github/license/relbns/cognito-local)](LICENSE)
+<!-- Add once the package is on the npm registry:
+[![npm](https://img.shields.io/npm/v/cognito-emulator)](https://www.npmjs.com/package/cognito-emulator)
+-->
+
+[Install](#install) · [Quick start](#quick-start) · [Recipes](#recipes) · [Configuration](#configuration-reference) · [Compatibility](#compatibility-and-differences-from-aws) · [Troubleshooting](#troubleshooting)
+
+</div>
+
+Point an AWS SDK, the AWS CLI or a browser at `http://localhost:9229` and sign-up, sign-in, groups,
+admin operations and the OAuth2 endpoints work without an AWS account. It is a fork of
+[jagregory/cognito-local](https://github.com/jagregory/cognito-local) that adds stateful CUSTOM_AUTH
+(passwordless) challenges, Cognito-compatible hosted login, a mock federated identity provider, token
+checks as Cognito makes them, an admin UI with a codes viewer, seed files, local trigger files, a CLI
+and a Docker image. It is not AWS: it mimics the observable behaviour closely enough for development
+and tests, and [the differences](#compatibility-and-differences-from-aws) are listed below.
+
+## Features
+
+- **Your AWS clients, unchanged.** The AWS SDK for JavaScript, boto3 and the AWS CLI v2 read the
+  endpoint from `AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER`. The emulator answers 122 API operations.
+- **Passwordless CUSTOM_AUTH.** Define, Create and Verify challenge triggers run from local JavaScript
+  files with the event Lambda would get, and the session keeps its state between challenges.
+- **Hosted login and OAuth2.** `/oauth2/authorize`, `/oauth2/token`, `/oauth2/userInfo`,
+  `/oauth2/revoke`, `/logout` and OIDC discovery, with PKCE and a callback page to try them.
+- **Federated sign-in without a provider.** A mock IdP page stands in for social, OIDC and SAML
+  providers, with attribute mapping and linked users.
+- **Tokens checked as Cognito checks them.** Signature, issuer, expiry, user and revocation of access
+  and refresh tokens, and `SECRET_HASH`. A `config.json` switch restores the lenient behaviour.
+- **Admin UI with a codes viewer.** Pools, clients, users, groups, a token decoder, and the recent
+  sign-up, forgot-password, MFA, temporary-password and CUSTOM_AUTH codes, so no real inbox is needed.
+- **Seed files and export.** Pools, clients, groups and users in a JSON file with AWS API field names,
+  applied idempotently at startup or into a running server.
+- **Built for CI.** `status`, `seed`, `export` and `reset` commands with JSON output and fixed exit
+  codes, and a multi-arch Docker image with a health check.
+
+<p align="center">
+  <img src="docs/images/admin-users.png" alt="Users" width="800">
+</p>
 
 ## Install
 
 Requires **Node.js 20 or later** (`engines: >=20`). Node.js 22 is recommended: the Docker image uses
 it, and the AWS SDK v3 that the emulator runs on requires 22 for releases from January 2027.
 
-The package is not on the npm registry yet. Its name, `@relbns/cognito-local`, is reserved in
-`package.json`; until it is published, install it from GitHub.
+> [!NOTE]
+> The npm package is `cognito-emulator`. Its npm release is coming: once it is published,
+> `npx cognito-emulator start` and `npm install -g cognito-emulator` install it from the registry.
+> Until then, install it from GitHub: the GitHub and Docker commands below work today.
 
-| Way | Command |
-| --- | --- |
-| npx, nothing installed | `npx github:relbns/cognito-local start` |
-| Global command | see [Global install](#global-install) |
-| Dev dependency of a project | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-local start` |
-| Docker | `docker run --rm -p 127.0.0.1:9229:9229 ghcr.io/relbns/cognito-local:edge` |
-| From source | `git clone`, `npm install`, `npm start` |
+The package installs two commands that run the same program, `cognito-emulator` and `cognito-local`.
+This README uses `cognito-local`.
+
+| Way                           | Command                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| npx, nothing installed        | `npx github:relbns/cognito-local start`                                              |
+| Global command                | see [Global install](#global-install)                                                |
+| Dev dependency of a project   | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-local start` |
+| Docker                        | `docker run --rm -p 127.0.0.1:9229:9229 ghcr.io/relbns/cognito-local:edge`           |
+| From source                   | `git clone`, `npm install`, `npm start`                                              |
+| npm registry (once published) | `npx cognito-emulator start`, or `npm install -g cognito-emulator`                   |
 
 Every way starts the server on `http://localhost:9229` with the admin UI at `/_admin` and its data in
 `./.cognito` (`/app/.cognito` in the image).
@@ -55,7 +97,7 @@ npm install -g "$(npm pack github:relbns/cognito-local | tail -1)"
 cognito-local start
 ```
 
-Remove it with `npm uninstall -g @relbns/cognito-local`.
+Remove it with `npm uninstall -g cognito-emulator`.
 
 ### Docker
 
@@ -133,14 +175,14 @@ npm start      # runs src/ with tsx; flags go after --, e.g. npm start -- --port
 ```
 
 `node lib/bin/cli.js start` runs the build, `npm run cli -- <command>` the TypeScript source, and
-`node lib/bin/start.js` (the old entry point) is the same as `cognito-local start`.
+`node lib/bin/start.js` is the same as `cognito-local start`.
 
 ## Quick start
 
 The commands below use npx. With a global install write `cognito-local`; from a clone,
 `node lib/bin/cli.js` and `examples/seed.basic.json`.
 
-**1. Start with the example seed.**
+### 1. Start with the example seed
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/relbns/cognito-local/main/examples/seed.basic.json
@@ -153,12 +195,14 @@ sign-in and hosted login), a confidential client `examplebackendclient000001` (w
 groups `admins` and `members`, and three users: `admin@example.test` with password `Passw0rdAdmin`,
 `jane@example.test` with a temporary password, and the unconfirmed `pending@example.test`.
 
-**2. Open the admin UI** at <http://localhost:9229/_admin>: pools, clients, users, groups, codes and a
-token decoder. It has no authentication; keep it on your machine.
+### 2. Open the admin UI
 
-![Users](docs/images/admin-users.png)
+Open <http://localhost:9229/_admin>: pools, clients, users, groups, codes and a token decoder. It has
+no authentication; keep it on your machine. More pages are under [Screenshots](#screenshots).
 
-**3. Point your tools at it.** In another terminal:
+### 3. Point your tools at it
+
+In another terminal:
 
 ```bash
 export AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER=http://localhost:9229
@@ -170,7 +214,9 @@ The AWS SDK for JavaScript v3, boto3 and the AWS CLI v2 read the endpoint from
 `AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER`, so application code needs no change. Credentials and
 region must be set but are not checked. boto3 reads `AWS_DEFAULT_REGION`, not `AWS_REGION`.
 
-**4. Sign up, confirm with the code, sign in** (AWS CLI and `jq`):
+### 4. Sign up, confirm with the code, sign in
+
+With the AWS CLI and `jq`:
 
 ```bash
 aws cognito-idp sign-up --client-id examplewebclient0000000001 \
@@ -190,9 +236,13 @@ aws cognito-idp initiate-auth --client-id examplewebclient0000000001 \
   --auth-parameters USERNAME=new@example.test,PASSWORD='Passw0rdNew'
 ```
 
-![Codes](docs/images/admin-codes.png)
+<p align="center">
+  <img src="docs/images/admin-codes.png" alt="Codes" width="800">
+</p>
 
-**5. The same from code.** JavaScript (AWS SDK v3, `npm install @aws-sdk/client-cognito-identity-provider`):
+### 5. The same from code
+
+JavaScript (AWS SDK v3, `npm install @aws-sdk/client-cognito-identity-provider`):
 
 ```js
 import {
@@ -267,7 +317,9 @@ the authorize URL, sign in as `admin@example.test`, and exchange the code. The p
 response and the decoded tokens checked against the pool's JWKS. See
 [docs/oauth-callback.md](docs/oauth-callback.md).
 
-![Hosted login](docs/images/hosted-login.png)
+<p align="center">
+  <img src="docs/images/hosted-login.png" alt="Hosted login" width="520">
+</p>
 
 ### Federated sign-in with the mock IdP
 
@@ -334,7 +386,7 @@ kill "$(jq -r .pid .cognito-ci/server.json)"
 
 ### CLI
 
-```
+```text
 cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin]
 cognito-local seed <file> [--data <dir>] [--url <url>] [--json]
 cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--json]
@@ -348,53 +400,53 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 
 ### Environment variables
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PORT` | `9229` | Listen port (`--port`) |
-| `HOST` | `localhost` | Listen host (`--host`); `0.0.0.0` in the image |
-| `COGNITO_LOCAL_DATA_DIR` | `.cognito` | Data directory (`--data`) |
-| `COGNITO_LOCAL_SEED` | none | Seed file applied at startup (`--seed`) |
-| `COGNITO_LOCAL_ADMIN_UI` | on | `false`, `0` or `off` disables the admin UI and its API (`--no-admin`) |
-| `CODE` | random | Fixed code for confirmation, forgot-password, MFA and temporary passwords |
-| `SMTP_HOST`, `SMTP_PORT` | unset, `1025` | Send emails to an SMTP server (for example a local mail catcher) instead of logging them |
-| `DEBUG` | unset | Verbose logging |
-| `COGNITO_LOCAL_DEVMODE` | unset (`1` in `npm start`) | Log the request body of unsupported operations |
-| `NODE_TLS_REJECT_UNAUTHORIZED=0` | | Accept self-signed certificates from a Lambda endpoint |
+| Variable                         | Default                    | Meaning                                                                                  |
+| -------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| `PORT`                           | `9229`                     | Listen port (`--port`)                                                                   |
+| `HOST`                           | `localhost`                | Listen host (`--host`); `0.0.0.0` in the image                                           |
+| `COGNITO_LOCAL_DATA_DIR`         | `.cognito`                 | Data directory (`--data`)                                                                |
+| `COGNITO_LOCAL_SEED`             | none                       | Seed file applied at startup (`--seed`)                                                  |
+| `COGNITO_LOCAL_ADMIN_UI`         | on                         | `false`, `0` or `off` disables the admin UI and its API (`--no-admin`)                   |
+| `CODE`                           | random                     | Fixed code for confirmation, forgot-password, MFA and temporary passwords                |
+| `SMTP_HOST`, `SMTP_PORT`         | unset, `1025`              | Send emails to an SMTP server (for example a local mail catcher) instead of logging them |
+| `DEBUG`                          | unset                      | Verbose logging                                                                          |
+| `COGNITO_LOCAL_DEVMODE`          | unset (`1` in `npm start`) | Log the request body of unsupported operations                                           |
+| `NODE_TLS_REJECT_UNAUTHORIZED=0` |                            | Accept self-signed certificates from a Lambda endpoint                                   |
 
 ### `config.json`
 
 `<data>/config.json` is optional, and so is every key in it:
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `ServerConfig.port`, `ServerConfig.hostname` | `9229`, `localhost` | Listen port and host, below `--port` / `--host` and above `PORT` / `HOST` |
-| `ServerConfig.https`, `.cert`, `.key`, `.ca` | `false` | Serve HTTPS with these PEM file paths |
-| `TokenConfig.IssuerDomain` | `http://<host>:<port>` | Base of the `iss` claim and of the OIDC discovery URLs. A wildcard host gives `localhost`, and `ServerConfig.https` gives `https`. Set it when clients reach the emulator under another name |
-| `TokenConfig.Verify` | `true` | Verify access and refresh tokens as Cognito does; `false` decodes access tokens unchecked: see [docs/tokens.md](docs/tokens.md) |
-| `TokenConfig.CheckSecretHash` | `true` | Require `SECRET_HASH` / `SecretHash` / `ClientSecret` from clients with a secret |
-| `PasswordPolicyConfig.Enforce` | `true` | Enforce each pool's `PasswordPolicy` (the AWS default when unset) |
-| `AuthSessionConfig.AuthSessionValidity` | `3` | Minutes a CUSTOM_AUTH `Session` stays valid when the client sets no `AuthSessionValidity` |
-| `AdminUIConfig.Enabled` | `true` | Serve the admin UI at `/_admin` and record codes |
-| `AdminUIConfig.CodeLogSize` | `100` | How many recent codes the admin UI keeps |
-| `FileTriggerConfig.TimeoutMs` | `5000` | How long a `file:` trigger may run |
-| `FileTriggerConfig.HotReload` | `true` | Reload a `file:` trigger when the file changes |
-| `TriggerFunctions` | `{}` | Triggers for every pool: Lambda names, or `file:` paths resolved against the data directory |
-| `UserPoolDefaults.UsernameAttributes` | `["email"]` | Pools created without `UsernameAttributes` use email as the username; `[]` gives free-form usernames as in Cognito |
-| `LambdaClient`, `KMSConfig` | local credentials | AWS SDK v3 client options; v2 names are translated with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md) |
+| Key                                          | Default                | Meaning                                                                                                                                                                                      |
+| -------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ServerConfig.port`, `ServerConfig.hostname` | `9229`, `localhost`    | Listen port and host, below `--port` / `--host` and above `PORT` / `HOST`                                                                                                                    |
+| `ServerConfig.https`, `.cert`, `.key`, `.ca` | `false`                | Serve HTTPS with these PEM file paths                                                                                                                                                        |
+| `TokenConfig.IssuerDomain`                   | `http://<host>:<port>` | Base of the `iss` claim and of the OIDC discovery URLs. A wildcard host gives `localhost`, and `ServerConfig.https` gives `https`. Set it when clients reach the emulator under another name |
+| `TokenConfig.Verify`                         | `true`                 | Verify access and refresh tokens as Cognito does; `false` decodes access tokens unchecked: see [docs/tokens.md](docs/tokens.md)                                                              |
+| `TokenConfig.CheckSecretHash`                | `true`                 | Require `SECRET_HASH` / `SecretHash` / `ClientSecret` from clients with a secret                                                                                                             |
+| `PasswordPolicyConfig.Enforce`               | `true`                 | Enforce each pool's `PasswordPolicy` (the AWS default when unset)                                                                                                                            |
+| `AuthSessionConfig.AuthSessionValidity`      | `3`                    | Minutes a CUSTOM_AUTH `Session` stays valid when the client sets no `AuthSessionValidity`                                                                                                    |
+| `AdminUIConfig.Enabled`                      | `true`                 | Serve the admin UI at `/_admin` and record codes                                                                                                                                             |
+| `AdminUIConfig.CodeLogSize`                  | `100`                  | How many recent codes the admin UI keeps                                                                                                                                                     |
+| `FileTriggerConfig.TimeoutMs`                | `5000`                 | How long a `file:` trigger may run                                                                                                                                                           |
+| `FileTriggerConfig.HotReload`                | `true`                 | Reload a `file:` trigger when the file changes                                                                                                                                               |
+| `TriggerFunctions`                           | `{}`                   | Triggers for every pool: Lambda names, or `file:` paths resolved against the data directory                                                                                                  |
+| `UserPoolDefaults.UsernameAttributes`        | `["email"]`            | Pools created without `UsernameAttributes` use email as the username; `[]` gives free-form usernames as in Cognito                                                                           |
+| `LambdaClient`, `KMSConfig`                  | local credentials      | AWS SDK v3 client options; v2 names are translated with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md)                                                                |
 
 ### Detailed docs
 
-| Topic | Doc |
-| --- | --- |
-| Commands, flags, data directory, exit codes | [docs/cli.md](docs/cli.md) |
-| Seed file format, apply rules, export | [docs/seed-files.md](docs/seed-files.md) |
-| `file:` triggers | [docs/local-triggers.md](docs/local-triggers.md) |
-| OAuth callback page | [docs/oauth-callback.md](docs/oauth-callback.md) |
-| Mock federated IdP | [docs/federation.md](docs/federation.md) |
-| Operations, OAuth2 endpoints and triggers, with their simplifications | [docs/api-coverage.md](docs/api-coverage.md) |
-| Token checks, revocation, validity, `SECRET_HASH` | [docs/tokens.md](docs/tokens.md) |
-| Tested SDKs and known gaps | [docs/sdk-compatibility.md](docs/sdk-compatibility.md) |
-| Lambda and KMS client options | [docs/aws-client-config.md](docs/aws-client-config.md) |
+| Topic                                                                 | Doc                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------ |
+| Commands, flags, data directory, exit codes                           | [docs/cli.md](docs/cli.md)                             |
+| Seed file format, apply rules, export                                 | [docs/seed-files.md](docs/seed-files.md)               |
+| `file:` triggers                                                      | [docs/local-triggers.md](docs/local-triggers.md)       |
+| OAuth callback page                                                   | [docs/oauth-callback.md](docs/oauth-callback.md)       |
+| Mock federated IdP                                                    | [docs/federation.md](docs/federation.md)               |
+| Operations, OAuth2 endpoints and triggers, with their simplifications | [docs/api-coverage.md](docs/api-coverage.md)           |
+| Token checks, revocation, validity, `SECRET_HASH`                     | [docs/tokens.md](docs/tokens.md)                       |
+| Tested SDKs and known gaps                                            | [docs/sdk-compatibility.md](docs/sdk-compatibility.md) |
+| Lambda and KMS client options                                         | [docs/aws-client-config.md](docs/aws-client-config.md) |
 
 ## Compatibility and differences from AWS
 
@@ -403,7 +455,7 @@ Tested with the AWS SDK for JavaScript v2 and v3, boto3 and the AWS CLI v2; see
 signatures are not checked, so any credentials and region work. The emulator answers 122 API
 operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what each one does.
 
-Not supported yet:
+### Not supported yet
 
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
 - The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
@@ -419,34 +471,38 @@ Not supported yet:
   forgot-password or MFA setup pages.
 - The admin UI has no authentication.
 
-Stricter than upstream cognito-local, and the switch that restores the lenient behaviour:
+### Stricter than upstream cognito-local
 
-| Behaviour | Switch in `config.json` |
-| --- | --- |
-| Access and refresh tokens verified (signature, issuer, expiry, user, revocation) | `TokenConfig.Verify: false` |
-| `SECRET_HASH` required from clients with a secret | `TokenConfig.CheckSecretHash: false` |
-| Pool `PasswordPolicy` enforced | `PasswordPolicyConfig.Enforce: false` |
-| Admin UI on, codes recorded | `AdminUIConfig.Enabled: false` or `--no-admin` |
+Each row below has a switch that restores upstream's lenient behaviour:
 
-One difference goes the other way: pools default to email as the username
+| Behaviour                                                                        | Switch in `config.json`                        |
+| -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Access and refresh tokens verified (signature, issuer, expiry, user, revocation) | `TokenConfig.Verify: false`                    |
+| `SECRET_HASH` required from clients with a secret                                | `TokenConfig.CheckSecretHash: false`           |
+| Pool `PasswordPolicy` enforced                                                   | `PasswordPolicyConfig.Enforce: false`          |
+| Admin UI on, codes recorded                                                      | `AdminUIConfig.Enabled: false` or `--no-admin` |
+
+### A default that differs from Cognito
+
+Pools default to email as the username
 (`UserPoolDefaults.UsernameAttributes: ["email"]`), where Cognito defaults to free-form usernames.
 
 ## Troubleshooting
 
-| Symptom | Cause and fix |
-| --- | --- |
-| `listen EADDRINUSE: address already in use ::1:9229` | Another process holds the port. 9229 is also Node's default `--inspect` port, so a debugger can hold it. Use `--port 9330`, or find it with `lsof -iTCP:9229 -sTCP:LISTEN`. |
-| `cognito-local is already serving .cognito at ...; stop it first.` | A server already runs on this data directory. Stop it, or use another `--data`. |
-| `curl http://127.0.0.1:9229` is refused while `localhost` works | The default host `localhost` can bind IPv6 `::1` only. Use `localhost` in URLs, or start with `--host 127.0.0.1`. |
-| A container cannot reach an emulator running on the host | It listens on `localhost` only. Start it with `--host 0.0.0.0` and set `TokenConfig.IssuerDomain`, or run the Docker image on the same network. |
-| Token verification fails with an issuer or JWKS mismatch | `iss` is `TokenConfig.IssuerDomain` + `/<poolId>`, by default the emulator's own host and port. When clients reach it under another name (a Compose service name, a mapped port), set `IssuerDomain` to that URL and fetch the JWKS from `<IssuerDomain>/<poolId>/.well-known/jwks.json`. |
-| boto3: `NoRegionError: You must specify a region` | boto3 ignores `AWS_REGION`. Set `AWS_DEFAULT_REGION` or pass `region_name`. |
-| AWS SDK v2: `LambdaConfig` value rejected as too short | SDK v2 checks a 20-character minimum on `LambdaConfig` values. Use an absolute path: `file:/abs/path/triggers/define.js`. |
-| `NodeVersionSupportWarning: ... will require node >=22` | Printed by the AWS SDK on Node 20. Harmless; Node 22 removes it. Node below 20 is not supported. |
-| `npm install -g github:relbns/cognito-local` fails with `tsc: command not found` | npm builds git dependencies in global mode without dev dependencies. Use the [tarball install](#global-install). |
-| `EROFS: read-only file system, open '.cognito/config.json'` | `config.json` is mounted read-only; the emulator rewrites it at startup. Mount it read-write. |
-| `InvalidParameterException: Username should be an email.` | Pools default to email as the username. Set `UsernameAttributes: []` on the pool or in `UserPoolDefaults`. |
-| The admin UI is reachable from other machines | It has no authentication and shows codes and client secrets. Bind to `localhost` (the CLI default), publish Docker ports as `127.0.0.1:9229:9229`, or turn it off with `--no-admin`. |
+| Symptom                                                                          | Cause and fix                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listen EADDRINUSE: address already in use ::1:9229`                             | Another process holds the port. 9229 is also Node's default `--inspect` port, so a debugger can hold it. Use `--port 9330`, or find it with `lsof -iTCP:9229 -sTCP:LISTEN`.                                                                                                               |
+| `cognito-local is already serving .cognito at ...; stop it first.`               | A server already runs on this data directory. Stop it, or use another `--data`.                                                                                                                                                                                                           |
+| `curl http://127.0.0.1:9229` is refused while `localhost` works                  | The default host `localhost` can bind IPv6 `::1` only. Use `localhost` in URLs, or start with `--host 127.0.0.1`.                                                                                                                                                                         |
+| A container cannot reach an emulator running on the host                         | It listens on `localhost` only. Start it with `--host 0.0.0.0` and set `TokenConfig.IssuerDomain`, or run the Docker image on the same network.                                                                                                                                           |
+| Token verification fails with an issuer or JWKS mismatch                         | `iss` is `TokenConfig.IssuerDomain` + `/<poolId>`, by default the emulator's own host and port. When clients reach it under another name (a Compose service name, a mapped port), set `IssuerDomain` to that URL and fetch the JWKS from `<IssuerDomain>/<poolId>/.well-known/jwks.json`. |
+| boto3: `NoRegionError: You must specify a region`                                | boto3 ignores `AWS_REGION`. Set `AWS_DEFAULT_REGION` or pass `region_name`.                                                                                                                                                                                                               |
+| AWS SDK v2: `LambdaConfig` value rejected as too short                           | SDK v2 checks a 20-character minimum on `LambdaConfig` values. Use an absolute path: `file:/abs/path/triggers/define.js`.                                                                                                                                                                 |
+| `NodeVersionSupportWarning: ... will require node >=22`                          | Printed by the AWS SDK on Node 20. Harmless; Node 22 removes it. Node below 20 is not supported.                                                                                                                                                                                          |
+| `npm install -g github:relbns/cognito-local` fails with `tsc: command not found` | npm builds git dependencies in global mode without dev dependencies. Use the [tarball install](#global-install).                                                                                                                                                                          |
+| `EROFS: read-only file system, open '.cognito/config.json'`                      | `config.json` is mounted read-only; the emulator rewrites it at startup. Mount it read-write.                                                                                                                                                                                             |
+| `InvalidParameterException: Username should be an email.`                        | Pools default to email as the username. Set `UsernameAttributes: []` on the pool or in `UserPoolDefaults`.                                                                                                                                                                                |
+| The admin UI is reachable from other machines                                    | It has no authentication and shows codes and client secrets. Bind to `localhost` (the CLI default), publish Docker ports as `127.0.0.1:9229:9229`, or turn it off with `--no-admin`.                                                                                                      |
 
 ## Screenshots
 
@@ -455,16 +511,16 @@ One difference goes the other way: pools default to email as the username
 
 User pools, and a pool with its settings and app clients:
 
-![User pools](docs/images/admin-pools.png)
-![Pool detail](docs/images/admin-pool-detail.png)
+<img src="docs/images/admin-pools.png" alt="User pools" width="800">
+<img src="docs/images/admin-pool-detail.png" alt="Pool detail" width="800">
 
 One user with attributes, groups and actions:
 
-![User detail](docs/images/admin-user-detail.png)
+<img src="docs/images/admin-user-detail.png" alt="User detail" width="800">
 
 Tokens: a decoded ID token, verified against the pool JWKS:
 
-![Tokens](docs/images/admin-tokens.png)
+<img src="docs/images/admin-tokens.png" alt="Tokens" width="800">
 
 </details>
 
