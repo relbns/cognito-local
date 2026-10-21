@@ -70,8 +70,9 @@ const adminUserPasswordAuthFlow = async (
     // sign-in with a password, or in the forgot-password flow. After the Lambda function returns successfully, Amazon
     // Cognito creates the user in the user pool.
     user = await services.triggers.userMigration(ctx, {
-      clientMetadata: {},
-      validationData: {},
+      // AdminInitiateAuth passes its ClientMetadata as validationData (migrate user trigger docs).
+      clientMetadata: undefined,
+      validationData: req.ClientMetadata,
       userPoolId: userPool.options.Id,
       clientId: req.ClientId,
       username: req.AuthParameters.USERNAME,
@@ -82,6 +83,9 @@ const adminUserPasswordAuthFlow = async (
 
   if (!user || !userPoolClient) {
     throw new NotAuthorizedError();
+  }
+  if (user.UserStatus === "RESET_REQUIRED") {
+    throw new PasswordResetRequiredError();
   }
 
   if (user.Password !== req.AuthParameters.PASSWORD) {

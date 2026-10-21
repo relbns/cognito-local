@@ -166,7 +166,7 @@ export type VerifyAuthChallengeResponseTriggerResponse =
 export type CustomMessageTriggerResponse =
   CustomMessageTriggerEvent["response"];
 export type UserMigrationTriggerResponse =
-  UserMigrationTriggerEvent["response"];
+  UserMigrationTriggerEvent["response"] & { enableSMSMFA?: boolean };
 export type PreSignUpTriggerResponse = PreSignUpTriggerEvent["response"];
 export type PreTokenGenerationTriggerResponse =
   PreTokenGenerationTriggerEvent["response"];

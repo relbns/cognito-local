@@ -101,6 +101,106 @@ describe(
           });
         });
       });
+
+      describe("UserMigration", () => {
+        it("creates the user under the sign-in username with a sub", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client);
+          handlers.UserMigration = (event) => {
+            event.response.userAttributes = {
+              email: "jane@example.test",
+              email_verified: "true",
+            };
+            event.response.finalUserStatus = "CONFIRMED";
+            event.response.messageAction = "SUPPRESS";
+          };
+
+          const auth = await client
+            .initiateAuth({
+              AuthFlow: "USER_PASSWORD_AUTH",
+              ClientId: clientId,
+              AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+              ClientMetadata: { source: "web" },
+            })
+            .promise();
+          expect(auth.AuthenticationResult?.AccessToken).toBeDefined();
+
+          const [event] = eventsFor("UserMigration");
+          expect(event.userName).toEqual("jane");
+          expect(event.request.validationData).toEqual({ source: "web" });
+
+          const user = await client
+            .adminGetUser({ UserPoolId: userPoolId, Username: "jane" })
+            .promise();
+          expect(user.Username).toEqual("jane");
+          expect(user.UserStatus).toEqual("CONFIRMED");
+          expect(
+            user.UserAttributes?.find((a) => a.Name === "sub")?.Value,
+          ).toMatch(/^[0-9a-f-]{36}$/);
+        });
+
+        it("leaves the user RESET_REQUIRED when finalUserStatus is not returned", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client);
+          handlers.UserMigration = (event) => {
+            event.response.userAttributes = { email: "jane@example.test" };
+          };
+
+          await expect(
+            client
+              .adminInitiateAuth({
+                AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+                ClientId: clientId,
+                UserPoolId: userPoolId,
+                AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+                ClientMetadata: { source: "admin" },
+              })
+              .promise(),
+          ).rejects.toMatchObject({ code: "PasswordResetRequiredException" });
+
+          expect(eventsFor("UserMigration")[0].request.validationData).toEqual({
+            source: "admin",
+          });
+          const user = await client
+            .adminGetUser({ UserPoolId: userPoolId, Username: "jane" })
+            .promise();
+          expect(user.UserStatus).toEqual("RESET_REQUIRED");
+        });
+
+        it("identifies the user by sub in a pool that signs in with email", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client, {
+            UsernameAttributes: ["email"],
+          });
+          handlers.UserMigration = (event) => {
+            event.response.userAttributes = { email_verified: "true" };
+            event.response.finalUserStatus = "CONFIRMED";
+          };
+
+          await client
+            .initiateAuth({
+              AuthFlow: "USER_PASSWORD_AUTH",
+              ClientId: clientId,
+              AuthParameters: {
+                USERNAME: "jane@example.test",
+                PASSWORD: PASSWORD,
+              },
+            })
+            .promise();
+
+          const user = await client
+            .adminGetUser({
+              UserPoolId: userPoolId,
+              Username: "jane@example.test",
+            })
+            .promise();
+          const sub = user.UserAttributes?.find((a) => a.Name === "sub")?.Value;
+          expect(user.Username).toEqual(sub);
+          expect(
+            user.UserAttributes?.find((a) => a.Name === "email")?.Value,
+          ).toEqual("jane@example.test");
+        });
+      });
     },
     { lambda },
   ),

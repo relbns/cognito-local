@@ -230,7 +230,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
 | PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
-| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`) |
+| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. The forgot-password flow does not run it. |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA |
 | CustomEmailSender | Replaces message delivery for the same events except SMS MFA. The code is encrypted with the configured KMS key. |
