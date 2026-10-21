@@ -297,6 +297,35 @@ describe("seed files", () => {
       );
     });
 
+    it("checks RefreshTokenRotation on a client", () => {
+      const parse = (RefreshTokenRotation: unknown) =>
+        parseSeed(
+          JSON.stringify({
+            UserPools: [
+              {
+                PoolName: "p",
+                Clients: [{ ClientName: "a", RefreshTokenRotation }],
+              },
+            ],
+          }),
+          "/tmp/seed.json",
+          "/tmp",
+        );
+
+      expect(() =>
+        parse({ Feature: "ENABLED", RetryGracePeriodSeconds: 10 }),
+      ).not.toThrow();
+      let error: SeedValidationError | undefined;
+      try {
+        parse({ Feature: "ON" });
+      } catch (e) {
+        error = e as SeedValidationError;
+      }
+      expect(error?.issues.map((i) => i.path)).toEqual([
+        "UserPools[0].Clients[0].RefreshTokenRotation.Feature",
+      ]);
+    });
+
     it("reports invalid JSON and a missing file", () => {
       expect(() => parseSeed("{", "/tmp/s.json", "/tmp")).toThrow(
         /Invalid seed \/tmp\/s.json:\n {2}- \(root\): not valid JSON/,

@@ -6,6 +6,7 @@ import type { Services } from "../services";
 import {
   type AppClient,
   assertAuthSessionValidity,
+  assertRefreshTokenRotation,
   newId,
 } from "../services/appClient";
 import { assertTokenValidity } from "../services/tokenGenerator";
@@ -26,6 +27,7 @@ export const CreateUserPoolClient =
   }: CreateUserPoolClientServices): CreateUserPoolClientTarget =>
   async (ctx, req) => {
     assertAuthSessionValidity(req.AuthSessionValidity);
+    assertRefreshTokenRotation(req.RefreshTokenRotation);
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
 
     const appClient: AppClient = {
@@ -48,6 +50,7 @@ export const CreateUserPoolClient =
       LogoutURLs: req.LogoutURLs,
       PreventUserExistenceErrors: req.PreventUserExistenceErrors,
       ReadAttributes: req.ReadAttributes,
+      RefreshTokenRotation: req.RefreshTokenRotation,
       RefreshTokenValidity: req.RefreshTokenValidity,
       SupportedIdentityProviders: req.SupportedIdentityProviders,
       TokenValidityUnits: {

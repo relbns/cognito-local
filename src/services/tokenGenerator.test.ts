@@ -297,6 +297,44 @@ describe("JwtTokenGenerator", () => {
     });
   });
 
+  it("keeps the expiry of a rotated refresh token and makes it unique", async () => {
+    mockTriggers.enabled.mockReturnValue(false);
+    const client = TDB.appClient();
+    const original = await tokenGenerator.generate(
+      TestContext,
+      user,
+      [],
+      client,
+      undefined,
+      "Authentication",
+    );
+    const originalClaims = jwt.decode(original.RefreshToken) as {
+      jti: string;
+      exp: number;
+    };
+
+    const rotated = await tokenGenerator.generate(
+      TestContext,
+      user,
+      [],
+      client,
+      undefined,
+      "RefreshTokens",
+      [],
+      {
+        originJti: originalClaims.jti,
+        refreshTokenExpiresAt: originalClaims.exp,
+      },
+    );
+
+    expect(rotated.RefreshToken).not.toEqual(original.RefreshToken);
+    expect(jwt.decode(rotated.RefreshToken)).toMatchObject({
+      jti: originalClaims.jti,
+      exp: originalClaims.exp,
+      event_id: expect.stringMatching(UUID),
+    });
+  });
+
   describe("generateClientCredentials", () => {
     const client = TDB.appClient({
       ClientId: "m2m-client",

@@ -107,6 +107,8 @@ export interface User {
   ConfirmationCode?: string;
   MFACode?: string;
   RefreshTokens: string[];
+  /** Rotated-out refresh tokens that stay valid until ExpiresAt (epoch seconds), the client's retry grace period. */
+  RefreshTokenGracePeriods?: RefreshTokenGracePeriod[];
   /** Refresh-token sessions whose access tokens are still honoured; emptied by a global sign-out. */
   TokenOrigins?: TokenOrigin[];
   Devices?: any[];
@@ -130,6 +132,11 @@ export interface User {
 
   // Federated identities linked by AdminLinkProviderForUser. Internal only.
   ProviderLinks?: ProviderLink[];
+}
+
+export interface RefreshTokenGracePeriod {
+  Token: string;
+  ExpiresAt: number;
 }
 
 export interface TokenOrigin {

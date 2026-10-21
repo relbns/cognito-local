@@ -12,6 +12,7 @@ import {
   UserNotConfirmedException,
 } from "../errors";
 import type { Services } from "../services";
+import { refreshTokenRotationEnabled } from "../services/appClient";
 import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
 import { refreshTokens } from "../services/refreshTokens";
@@ -175,6 +176,11 @@ const refreshTokenAuthFlow = async (
   const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
   if (!userPoolClient) {
     throw new NotAuthorizedError();
+  }
+  if (refreshTokenRotationEnabled(userPoolClient)) {
+    throw new InvalidParameterError(
+      "REFRESH_TOKEN_AUTH flow not enabled for this client",
+    );
   }
   const verified = await services.tokenVerifier.verifyRefreshToken(
     ctx,

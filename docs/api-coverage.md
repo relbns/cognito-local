@@ -38,7 +38,7 @@ ConfirmForgotPassword, AdminResetUserPassword, GlobalSignOut, AdminUserGlobalSig
 | `USER_PASSWORD_AUTH` | InitiateAuth | Checks the password. Runs UserMigration for an unknown user. |
 | `ADMIN_USER_PASSWORD_AUTH`, `ADMIN_NO_SRP_AUTH` | AdminInitiateAuth | Checks the password. Runs UserMigration for an unknown user. |
 | `USER_SRP_AUTH` | both | Runs Cognito's SRP-6a (3072-bit group, `g` = 2, SHA-256) against a verifier derived from the stored password, so the same client code that signs in to Cognito works. The `PASSWORD_VERIFIER` response is checked against `PASSWORD_CLAIM_SIGNATURE`, and a wrong password returns `NotAuthorizedException` ("Incorrect username or password."). The server state behind `SECRET_BLOCK` is in memory, can be used once, and expires after the client's `AuthSessionValidity`, so a restart invalidates a pending challenge. `Session` is optional on that response. |
-| `REFRESH_TOKEN_AUTH`, `REFRESH_TOKEN` | both | Verifies the refresh token and returns new access and ID tokens. No new refresh token is issued. |
+| `REFRESH_TOKEN_AUTH`, `REFRESH_TOKEN` | both | Verifies the refresh token and returns new access and ID tokens. No new refresh token is issued. A client with refresh token rotation refuses the flow with `InvalidParameterException`. |
 | `CUSTOM_AUTH` | both | Runs DefineAuthChallenge, CreateAuthChallenge and VerifyAuthChallengeResponse over several rounds, keeps the challenge history, issues a new `Session` after a wrong answer, and accepts `SRP_A` + `PASSWORD_VERIFIER` before the custom challenge, checking the password as `USER_SRP_AUTH` does: a wrong one ends the sign-in with `NotAuthorizedException` before DefineAuthChallenge runs again. Sessions are in memory and expire after the client's `AuthSessionValidity`. |
 | `USER_AUTH` | | Not supported. |
 
@@ -55,7 +55,9 @@ AdminRespondToAuthChallenge answers the same set except `SELECT_MFA_TYPE`.
   `SOFTWARE_TOKEN_MFA` checks a TOTP code against the user's verified secret.
 - The emulator never issues `MFA_SETUP`. A response to it marks TOTP as the user's preferred MFA
   without checking the code.
-- GetTokensFromRefreshToken returns access and ID tokens only.
+- GetTokensFromRefreshToken returns access and ID tokens, and a new refresh token when the client
+  has `RefreshTokenRotation` enabled (see [tokens.md](tokens.md#refresh-token-rotation)). Its
+  `ClientMetadata` reaches the pre token generation trigger.
 - GlobalSignOut, AdminUserGlobalSignOut and RevokeToken revoke tokens as described in
   [tokens.md](tokens.md#revocation).
 
@@ -95,6 +97,8 @@ CreateUserPoolClient, DescribeUserPoolClient, UpdateUserPoolClient, DeleteUserPo
 ListUserPoolClients, AddCustomAttributes, AddUserPoolClientSecret, DeleteUserPoolClientSecret,
 ListUserPoolClientSecrets.
 
+- Clients store `RefreshTokenRotation`; `RetryGracePeriodSeconds` above 60, below 0 or a `Feature`
+  other than `ENABLED` or `DISABLED` returns `InvalidParameterException`.
 - A client has at most one secret. AddUserPoolClientSecret replaces it, and ListUserPoolClientSecrets
   returns that one secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the

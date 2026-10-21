@@ -44,7 +44,12 @@ const buildApp = (
         ? await userPool.getUserByRefreshToken(ctx, token)
         : null;
       if (!user) throw new NotAuthorizedError("Invalid Refresh Token");
-      return { claims: { "cognito:username": user.Username }, user, userPool };
+      return {
+        token: token as string,
+        claims: { "cognito:username": user.Username },
+        user,
+        userPool,
+      };
     },
   );
   const triggers = newMockTriggers();

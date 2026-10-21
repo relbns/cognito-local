@@ -304,6 +304,28 @@ describe("JwtTokenVerifier", () => {
       );
     });
 
+    it("rejects a rotated-out refresh token once its grace period ends", async () => {
+      user = {
+        ...user,
+        RefreshTokenGracePeriods: [
+          {
+            Token: tokens.RefreshToken,
+            ExpiresAt: Math.floor(clock.get().getTime() / 1000) + 10,
+          },
+        ],
+      };
+      await expect(
+        verifier.verifyRefreshToken(TestContext, tokens.RefreshToken, "client"),
+      ).resolves.toMatchObject({ token: tokens.RefreshToken });
+
+      clock.advanceBy(10_000);
+      await expect(
+        verifier.verifyRefreshToken(TestContext, tokens.RefreshToken, "client"),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Refresh Token has been revoked"),
+      );
+    });
+
     it("rejects the refresh token of a disabled or deleted user", async () => {
       user = { ...user, Enabled: false };
       await expect(

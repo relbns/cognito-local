@@ -33,12 +33,19 @@ export const GetTokensFromRefreshToken =
       req.RefreshToken,
       req.ClientId,
     );
-    const { tokens } = await refreshTokens(ctx, services, client, verified);
+    const { tokens, refreshToken } = await refreshTokens(
+      ctx,
+      services,
+      client,
+      verified,
+      req.ClientMetadata,
+    );
 
     return {
       AuthenticationResult: {
         AccessToken: tokens.AccessToken,
         IdToken: tokens.IdToken,
+        ...(refreshToken ? { RefreshToken: refreshToken } : {}),
         ExpiresIn: tokens.ExpiresIn,
         TokenType: tokens.TokenType,
       },

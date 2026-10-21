@@ -12,7 +12,11 @@ import type { Clock } from "./clock";
 import type { CognitoService } from "./cognitoService";
 import type { Context } from "./context";
 import type { TokenConfig } from "./tokenGenerator";
-import { epochSeconds, isTokenOriginActive } from "./tokenRevocation";
+import {
+  epochSeconds,
+  isRefreshTokenRetired,
+  isTokenOriginActive,
+} from "./tokenRevocation";
 import {
   attributeValue,
   type User,
@@ -43,6 +47,8 @@ export interface VerifiedAccessToken {
 }
 
 export interface VerifiedRefreshToken {
+  /** The refresh token as sent, which rotation retires. */
+  token: string;
   claims: RefreshTokenClaims;
   user: User;
   userPool: UserPoolService;
@@ -270,9 +276,10 @@ export class JwtTokenVerifier implements TokenVerifier {
       const user = token
         ? await userPool.getUserByRefreshToken(ctx, token)
         : null;
-      if (!user) throw new NotAuthorizedError();
+      if (!user || !token) throw new NotAuthorizedError();
       return {
-        claims: (decodeObject(token ?? "") ?? {}) as RefreshTokenClaims,
+        token,
+        claims: (decodeObject(token) ?? {}) as RefreshTokenClaims,
         user,
         userPool,
       };
@@ -308,11 +315,14 @@ export class JwtTokenVerifier implements TokenVerifier {
     if (!user.Enabled) {
       throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
     }
-    if (!(user.RefreshTokens ?? []).includes(token)) {
+    if (
+      !(user.RefreshTokens ?? []).includes(token) ||
+      isRefreshTokenRetired(user, token, this.clock.get())
+    ) {
       throw new NotAuthorizedError(TokenErrorMessages.revokedRefreshToken);
     }
 
-    return { claims: claims as RefreshTokenClaims, user, userPool };
+    return { token, claims: claims as RefreshTokenClaims, user, userPool };
   }
 
   public verifySecretHash(

@@ -32,6 +32,21 @@ signature, another client or pool), `Refresh Token has expired`, `Refresh Token 
 `User is disabled.` and `User does not exist.`. The token endpoint returns them as
 `{"error":"invalid_grant","error_description":...}`.
 
+### Refresh token rotation
+
+With `RefreshTokenRotation: { "Feature": "ENABLED", "RetryGracePeriodSeconds": n }` on the app client
+(`CreateUserPoolClient`, `UpdateUserPoolClient` or a seed file), `GetTokensFromRefreshToken` and the
+`refresh_token` grant of `/oauth2/token` also return a new refresh token. The new token belongs to the
+same session (`jti`, and `origin_jti` of the access and ID tokens) and keeps the expiry of the first
+refresh token of the session, so rotation never extends a session.
+
+The refresh token that was sent keeps working for `RetryGracePeriodSeconds` (0 to 60, default 0)
+after its first rotation, and a retry within that time returns another new refresh token. After the
+grace period it fails with `Refresh Token has been revoked` (`invalid_grant` on the token endpoint).
+`REFRESH_TOKEN_AUTH` in `InitiateAuth` and `AdminInitiateAuth` is refused for such a client with
+`InvalidParameterException`: `REFRESH_TOKEN_AUTH flow not enabled for this client`. Without rotation,
+refreshes return access and ID tokens only and the refresh token stays valid.
+
 ## Revocation
 
 Each sign-in starts a session. Its id is the `origin_jti` claim of the access and ID tokens and the
@@ -161,6 +176,7 @@ Confirmed in AWS documentation or widely reported SDK errors: `Invalid Access To
 `Refresh Token has been revoked`, `Invalid Refresh Token`, and both `SECRET_HASH` messages.
 
 Chosen without a reference: `Access Token does not have required scopes` (reported, not
-documented), `NotAuthorizedException` `User does not exist.` for a deleted user's refresh token, the
+documented), the `REFRESH_TOKEN_AUTH flow not enabled for this client` refusal under rotation and
+`Refresh Token has been revoked` for a rotated-out token after its grace period, `NotAuthorizedException` `User does not exist.` for a deleted user's refresh token, the
 `RevokeToken` messages and the `ClientSecret` errors (which reuse the `SECRET_HASH` messages), the
 `userInfo` `error_description` texts, and `Invalid range for token validity.`.

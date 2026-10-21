@@ -480,11 +480,12 @@ export function attachOAuth2Routes(
       }
       throw e;
     }
-    const { tokens, scopes } = refreshed;
+    const { tokens, scopes, refreshToken } = refreshed;
 
     return res.status(200).json({
       access_token: tokens.AccessToken,
       ...(includesIdToken(scopes) ? { id_token: tokens.IdToken } : {}),
+      ...(refreshToken ? { refresh_token: refreshToken } : {}),
       token_type: "Bearer",
       expires_in: tokens.ExpiresIn,
     });

@@ -9,6 +9,7 @@ import { enforceAliasUniqueness } from "../services/aliases";
 import {
   type AppClient,
   assertAuthSessionValidity,
+  assertRefreshTokenRotation,
   newId,
 } from "../services/appClient";
 import type { Context } from "../services/context";
@@ -384,6 +385,7 @@ class SeedApplier {
     const poolId = pool.options.Id;
     const { ClientId, ClientSecret, GenerateSecret, ...fields } = seedClient;
     assertAuthSessionValidity(fields.AuthSessionValidity);
+    assertRefreshTokenRotation(fields.RefreshTokenRotation);
 
     const knownProviders = [
       COGNITO_PROVIDER,

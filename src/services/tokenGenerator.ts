@@ -106,6 +106,8 @@ export interface ClientCredentialsToken {
 export interface GenerateOptions {
   /** Reuse the session of an existing refresh token instead of starting a new one. */
   originJti?: string;
+  /** A rotated refresh token keeps the expiry (epoch seconds) of the one it replaces. */
+  refreshTokenExpiresAt?: number;
 }
 
 export interface TokenGenerator {
@@ -362,12 +364,19 @@ export class JwtTokenGenerator implements TokenGenerator {
           iat: authTime,
           jti: originJti,
           ...(scopes?.length ? { scope: scopes.join(" ") } : {}),
+          ...(options.refreshTokenExpiresAt === undefined
+            ? {}
+            : { event_id: eventId, exp: options.refreshTokenExpiresAt }),
         },
         PrivateKey.pem,
         {
           algorithm: "RS256",
           issuer,
-          expiresIn: tokenValiditySeconds(userPoolClient, "RefreshToken"),
+          ...(options.refreshTokenExpiresAt === undefined
+            ? {
+                expiresIn: tokenValiditySeconds(userPoolClient, "RefreshToken"),
+              }
+            : {}),
           keyid: "CognitoLocal",
         } satisfies SignOptions,
       ),

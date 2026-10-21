@@ -460,7 +460,7 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
 - The `USER_AUTH` (choice-based) flow, and with it passkey sign-in.
 - Device tracking (`NewDeviceMetadata`, device challenges) and the `MFA_SETUP` challenge.
-- Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
+- The PreAuthentication and CustomSMSSender triggers.
 - Some operations only store their input: user import jobs import nothing, and risk, log delivery,
   branding and terms settings have no effect.
 - Request parameters are not validated against the API model, so a missing parameter may give a

@@ -13,7 +13,10 @@ import {
   UserNotConfirmedException,
 } from "../errors";
 import type { Services, UserPoolService } from "../services";
-import type { AppClient } from "../services/appClient";
+import {
+  type AppClient,
+  refreshTokenRotationEnabled,
+} from "../services/appClient";
 import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
 import { enabledMfaMethods, isMfaRequired } from "../services/mfa";
@@ -288,6 +291,12 @@ const refreshTokenAuthFlow = async (
 
   if (!req.AuthParameters.REFRESH_TOKEN) {
     throw new InvalidParameterError("AuthParameters REFRESH_TOKEN is required");
+  }
+
+  if (refreshTokenRotationEnabled(userPoolClient)) {
+    throw new InvalidParameterError(
+      "REFRESH_TOKEN_AUTH flow not enabled for this client",
+    );
   }
 
   const verified = await services.tokenVerifier.verifyRefreshToken(

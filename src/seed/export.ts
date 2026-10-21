@@ -60,6 +60,7 @@ const CLIENT_FIELDS = [
   "PreventUserExistenceErrors",
   "EnableTokenRevocation",
   "AuthSessionValidity",
+  "RefreshTokenRotation",
 ] as const;
 
 const defined = <T extends object>(value: T): T =>

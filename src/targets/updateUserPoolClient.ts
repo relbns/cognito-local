@@ -7,6 +7,7 @@ import type { Services } from "../services";
 import {
   type AppClient,
   assertAuthSessionValidity,
+  assertRefreshTokenRotation,
 } from "../services/appClient";
 import { assertTokenValidity } from "../services/tokenGenerator";
 import { appClientToResponseObject } from "./responses";
@@ -26,6 +27,7 @@ export const UpdateUserPoolClient =
   }: UpdateUserPoolClientServices): UpdateUserPoolClientTarget =>
   async (ctx, req) => {
     assertAuthSessionValidity(req.AuthSessionValidity);
+    assertRefreshTokenRotation(req.RefreshTokenRotation);
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const appClient = await cognito.getAppClient(ctx, req.ClientId);
     if (!appClient || appClient.UserPoolId !== req.UserPoolId) {
@@ -59,6 +61,8 @@ export const UpdateUserPoolClient =
       PreventUserExistenceErrors:
         req.PreventUserExistenceErrors ?? appClient.PreventUserExistenceErrors,
       ReadAttributes: req.ReadAttributes ?? appClient.ReadAttributes,
+      RefreshTokenRotation:
+        req.RefreshTokenRotation ?? appClient.RefreshTokenRotation,
       RefreshTokenValidity:
         req.RefreshTokenValidity ?? appClient.RefreshTokenValidity,
       SupportedIdentityProviders:

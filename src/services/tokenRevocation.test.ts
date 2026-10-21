@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import * as TDB from "../__tests__/testDataBuilder";
 import PrivateKey from "../keys/cognitoLocal.private.json";
 import {
+  isRefreshTokenRetired,
   isTokenOriginActive,
   withAllTokensRevoked,
   withRefreshToken,
   withRefreshTokenRevoked,
+  withRefreshTokenRotated,
   withTokenOrigin,
 } from "./tokenRevocation";
 
@@ -86,5 +88,90 @@ describe("token revocation", () => {
       RefreshTokens: [],
       TokenOrigins: [],
     });
+  });
+});
+
+describe("refresh token rotation", () => {
+  const first = refreshToken("session", nowSeconds + DAY);
+  const second = jwt.sign(
+    {
+      "cognito:username": "u",
+      client_id: "c",
+      jti: "session",
+      exp: nowSeconds + DAY,
+      event_id: "e2",
+    },
+    PrivateKey.pem,
+    { algorithm: "RS256" },
+  );
+  const signedIn = () => withRefreshToken(TDB.user(), first, now);
+
+  it("retires the previous token at once without a grace period", () => {
+    const user = withRefreshTokenRotated(signedIn(), first, second, now, 0);
+
+    expect(user.RefreshTokens).toEqual([second]);
+    expect(user.RefreshTokenGracePeriods).toEqual([]);
+    expect(isTokenOriginActive(user, "session", now)).toBe(true);
+  });
+
+  it("keeps the previous token for the grace period", () => {
+    const user = withRefreshTokenRotated(signedIn(), first, second, now, 10);
+
+    expect(user.RefreshTokens).toEqual([first, second]);
+    expect(user.RefreshTokenGracePeriods).toEqual([
+      { Token: first, ExpiresAt: nowSeconds + 10 },
+    ]);
+    expect(isRefreshTokenRetired(user, first, now)).toBe(false);
+    expect(
+      isRefreshTokenRetired(user, first, new Date(now.getTime() + 10_000)),
+    ).toBe(true);
+    expect(
+      isRefreshTokenRetired(user, second, new Date(now.getTime() + 10_000)),
+    ).toBe(false);
+  });
+
+  it("does not extend the grace period when the previous token is used again", () => {
+    const later = new Date(now.getTime() + 5_000);
+    const third = refreshToken("session", nowSeconds + DAY - 1);
+    const user = withRefreshTokenRotated(
+      withRefreshTokenRotated(signedIn(), first, second, now, 10),
+      first,
+      third,
+      later,
+      10,
+    );
+
+    expect(user.RefreshTokenGracePeriods).toEqual([
+      { Token: first, ExpiresAt: nowSeconds + 10 },
+    ]);
+    expect(user.RefreshTokens).toEqual([first, second, third]);
+  });
+
+  it("drops tokens whose grace period ended on the next rotation", () => {
+    const later = new Date(now.getTime() + 20_000);
+    const third = refreshToken("session", nowSeconds + DAY - 1);
+    const user = withRefreshTokenRotated(
+      withRefreshTokenRotated(signedIn(), first, second, now, 10),
+      second,
+      third,
+      later,
+      10,
+    );
+
+    expect(user.RefreshTokens).toEqual([second, third]);
+    expect(user.RefreshTokenGracePeriods).toEqual([
+      { Token: second, ExpiresAt: nowSeconds + 30 },
+    ]);
+  });
+
+  it("forgets grace periods when tokens are revoked", () => {
+    const rotated = withRefreshTokenRotated(signedIn(), first, second, now, 10);
+
+    expect(
+      withAllTokensRevoked(rotated).RefreshTokenGracePeriods,
+    ).toBeUndefined();
+    expect(
+      withRefreshTokenRevoked(rotated, first).RefreshTokenGracePeriods,
+    ).toEqual([]);
   });
 });
