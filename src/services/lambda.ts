@@ -131,8 +131,10 @@ interface CustomMessageEvent extends Omit<EventCommonParameters, "clientId"> {
 
 interface UserMigrationEvent extends EventCommonParameters {
   clientMetadata: Record<string, string> | undefined;
-  password: string;
-  triggerSource: "UserMigration_Authentication";
+  password: string | undefined;
+  triggerSource:
+    | "UserMigration_Authentication"
+    | "UserMigration_ForgotPassword";
   validationData: Record<string, string> | undefined;
 }
 
@@ -643,6 +645,28 @@ export class LambdaService implements Lambda {
         };
       }
 
+      case "UserMigration_ForgotPassword": {
+        // The forgot-password flow sends no password and no validation data.
+        return {
+          version,
+          callerContext,
+          region,
+          userPoolId: event.userPoolId,
+          triggerSource: event.triggerSource,
+          userName: event.username,
+          request: {
+            clientMetadata: event.clientMetadata,
+          } as UserMigrationTriggerEvent["request"],
+          response: {
+            desiredDeliveryMediums: [],
+            finalUserStatus: undefined,
+            forceAliasCreation: undefined,
+            messageAction: undefined,
+            userAttributes: {},
+          },
+        };
+      }
+
       case "UserMigration_Authentication": {
         return {
           version,
@@ -653,7 +677,7 @@ export class LambdaService implements Lambda {
           userName: event.username,
           request: {
             clientMetadata: event.clientMetadata,
-            password: event.password,
+            password: event.password ?? "",
             validationData: event.validationData,
           },
           response: {

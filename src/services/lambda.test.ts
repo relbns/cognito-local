@@ -338,6 +338,41 @@ describe("Lambda function invoker", () => {
       });
     });
 
+    describe("UserMigration_ForgotPassword", () => {
+      it("invokes the lambda without a password or validation data", async () => {
+        mockLambdaClient.invoke.mockReturnValue(
+          Promise.resolve({
+            StatusCode: 200,
+            Payload: encode('{ "some": "json" }'),
+          }) as any,
+        );
+        const lambda = new LambdaService(
+          { UserMigration: "MyLambdaName" },
+          mockLambdaClient,
+        );
+
+        await lambda.invoke(TestContext, "UserMigration", {
+          clientId: "clientId",
+          clientMetadata: { client: "metadata" },
+          password: undefined,
+          triggerSource: "UserMigration_ForgotPassword",
+          username: "username",
+          userPoolId: "userPoolId",
+          userAttributes: {},
+          validationData: undefined,
+        });
+
+        expect(invokedWith(mockLambdaClient).Payload).toMatchObject({
+          triggerSource: "UserMigration_ForgotPassword",
+          userName: "username",
+          request: { clientMetadata: { client: "metadata" } },
+        });
+        expect(invokedWith(mockLambdaClient).Payload.request).toEqual({
+          clientMetadata: { client: "metadata" },
+        });
+      });
+    });
+
     describe.each`
       trigger                 | source
       ${"PostAuthentication"} | ${"PostAuthentication_Authentication"}

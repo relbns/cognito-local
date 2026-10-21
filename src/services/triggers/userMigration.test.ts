@@ -184,6 +184,48 @@ describe("UserMigration trigger", () => {
       expect(user.UserStatus).toEqual("RESET_REQUIRED");
     });
 
+    describe("from the forgot-password flow", () => {
+      const migrateForReset = () =>
+        userMigration(TestContext, {
+          clientMetadata: { client: "metadata" },
+          userPoolId: "userPoolId",
+          clientId: "clientId",
+          username: "jane",
+          password: undefined,
+          source: "UserMigration_ForgotPassword",
+          userAttributes: [],
+          validationData: undefined,
+        });
+
+      it("invokes the lambda with the forgot-password source and no password", async () => {
+        mockLambda.invoke.mockResolvedValue({ userAttributes: {} });
+
+        await migrateForReset();
+
+        expect(mockLambda.invoke).toHaveBeenCalledWith(
+          TestContext,
+          "UserMigration",
+          expect.objectContaining({
+            password: undefined,
+            triggerSource: "UserMigration_ForgotPassword",
+            validationData: undefined,
+          }),
+        );
+      });
+
+      it("leaves the user RESET_REQUIRED whatever finalUserStatus says", async () => {
+        mockLambda.invoke.mockResolvedValue({
+          userAttributes: { email: "jane@example.test" },
+          finalUserStatus: "CONFIRMED",
+        });
+
+        const user = await migrateForReset();
+
+        expect(user.UserStatus).toEqual("RESET_REQUIRED");
+        expect(user.Password).toEqual("");
+      });
+    });
+
     it("enables SMS MFA when enableSMSMFA is set", async () => {
       mockLambda.invoke.mockResolvedValue({
         userAttributes: { phone_number: "+15555550100" },

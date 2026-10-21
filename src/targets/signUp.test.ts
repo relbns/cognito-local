@@ -88,6 +88,23 @@ describe("SignUp target", () => {
     );
   });
 
+  it("refuses sign-up when only administrators can create users", async () => {
+    mockUserPoolService.options.AdminCreateUserConfig = {
+      AllowAdminCreateUserOnly: true,
+    };
+
+    await expect(
+      signUp(TestContext, {
+        ClientId: "clientId",
+        Password: "pwd-Aa1!",
+        Username: "new-user",
+      }),
+    ).rejects.toEqual(
+      new NotAuthorizedError("SignUp is not permitted for this user pool"),
+    );
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+  });
+
   it("throws if user already exists", async () => {
     const user = TDB.user();
 
