@@ -132,6 +132,8 @@ ListUserPoolClientSecrets.
   returns that one secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the
   username by default).
+- In a pool with `AliasAttributes`, sign-in and every operation that takes a `Username` also find the
+  user by `preferred_username`, or by an `email` or `phone_number` once it is verified.
 - `UsernameConfiguration.CaseSensitive: false` makes every username lookup case-insensitive (sign-in,
   admin and group operations, sign-up and AdminCreateUser uniqueness), together with email as a
   username, the `email` and `preferred_username` alias uniqueness checks and the ListUsers

@@ -1,3 +1,10 @@
+import {
+  CognitoIdentityProviderClient,
+  CreateUserPoolClientCommand,
+  CreateUserPoolCommand,
+  InitiateAuthCommand,
+  RespondToAuthChallengeCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { CognitoIdentityServiceProvider } from "aws-sdk";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
@@ -79,7 +86,7 @@ const createPool = async (
 describe(
   "Trigger events",
   withCognitoSdk(
-    (Cognito, { codeLog, messageDelivery }) => {
+    (Cognito, { codeLog, messageDelivery, serverUrl }) => {
       beforeEach(() => {
         handlers = {};
         invocations = [];
@@ -393,6 +400,176 @@ describe(
 
           expect(auth.ChallengeName).toEqual("SMS_MFA");
           expectSentBySmsSender("CustomSMSSender_Authentication");
+        });
+
+        it.each(["initiateAuth", "adminInitiateAuth"] as const)(
+          "%s sends the MFA code of a user whose SMS MFA is set by AdminSetUserMFAPreference",
+          async (operation) => {
+            const client = Cognito();
+            const { userPoolId, clientId } = await createPool(client, {
+              MfaConfiguration: "OPTIONAL",
+            });
+            await client
+              .adminCreateUser({
+                UserPoolId: userPoolId,
+                Username: "jane",
+                MessageAction: "SUPPRESS",
+                UserAttributes: [
+                  { Name: "phone_number", Value: PHONE },
+                  { Name: "phone_number_verified", Value: "true" },
+                ],
+              })
+              .promise();
+            await client
+              .adminSetUserPassword({
+                UserPoolId: userPoolId,
+                Username: "jane",
+                Password: PASSWORD,
+                Permanent: true,
+              })
+              .promise();
+            await client
+              .adminSetUserMFAPreference({
+                UserPoolId: userPoolId,
+                Username: "jane",
+                SMSMfaSettings: { Enabled: true, PreferredMfa: true },
+              })
+              .promise();
+            handlers.CustomSMSSender = () => {};
+
+            const auth =
+              operation === "initiateAuth"
+                ? await client
+                    .initiateAuth({
+                      AuthFlow: "USER_PASSWORD_AUTH",
+                      ClientId: clientId,
+                      AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+                    })
+                    .promise()
+                : await client
+                    .adminInitiateAuth({
+                      AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+                      ClientId: clientId,
+                      UserPoolId: userPoolId,
+                      AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+                    })
+                    .promise();
+
+            expect(auth.ChallengeName).toEqual("SMS_MFA");
+            const code = expectSentBySmsSender(
+              "CustomSMSSender_Authentication",
+            );
+            const challengeResponses = { USERNAME: "jane", SMS_MFA_CODE: code };
+            const tokens =
+              operation === "initiateAuth"
+                ? await client
+                    .respondToAuthChallenge({
+                      ClientId: clientId,
+                      ChallengeName: "SMS_MFA",
+                      Session: auth.Session,
+                      ChallengeResponses: challengeResponses,
+                    })
+                    .promise()
+                : await client
+                    .adminRespondToAuthChallenge({
+                      ClientId: clientId,
+                      UserPoolId: userPoolId,
+                      ChallengeName: "SMS_MFA",
+                      Session: auth.Session,
+                      ChallengeResponses: challengeResponses,
+                    })
+                    .promise();
+            expect(tokens.AuthenticationResult?.AccessToken).toBeDefined();
+          },
+        );
+      });
+
+      describe("USER_AUTH", () => {
+        it("runs PreAuthentication once and sends the EMAIL_OTP code with CustomEmailSender_Authentication", async () => {
+          const v3 = new CognitoIdentityProviderClient({
+            endpoint: serverUrl(),
+            region: "local",
+            credentials: { accessKeyId: "local", secretAccessKey: "local" },
+            maxAttempts: 1,
+          });
+          const pool = await v3.send(
+            new CreateUserPoolCommand({
+              PoolName: "user-auth",
+              Policies: {
+                SignInPolicy: {
+                  AllowedFirstAuthFactors: ["PASSWORD", "EMAIL_OTP"],
+                },
+              },
+            }),
+          );
+          const userPoolId = pool.UserPool?.Id as string;
+          const appClient = await v3.send(
+            new CreateUserPoolClientCommand({
+              UserPoolId: userPoolId,
+              ClientName: "app",
+              ExplicitAuthFlows: ["ALLOW_USER_AUTH"],
+            }),
+          );
+          const clientId = appClient.UserPoolClient?.ClientId as string;
+          await Cognito()
+            .adminCreateUser({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              MessageAction: "SUPPRESS",
+              UserAttributes: [{ Name: "email", Value: "jane@example.test" }],
+            })
+            .promise();
+          await Cognito()
+            .adminSetUserPassword({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              Password: PASSWORD,
+              Permanent: true,
+            })
+            .promise();
+          handlers.PreAuthentication = () => {};
+          handlers.CustomEmailSender = () => {};
+
+          const select = await v3.send(
+            new InitiateAuthCommand({
+              AuthFlow: "USER_AUTH",
+              ClientId: clientId,
+              AuthParameters: { USERNAME: "jane" },
+              ClientMetadata: { source: "web" },
+            }),
+          );
+          expect(select.ChallengeName).toEqual("SELECT_CHALLENGE");
+          const otp = await v3.send(
+            new RespondToAuthChallengeCommand({
+              ClientId: clientId,
+              ChallengeName: "SELECT_CHALLENGE",
+              Session: select.Session,
+              ChallengeResponses: { USERNAME: "jane", ANSWER: "EMAIL_OTP" },
+            }),
+          );
+          expect(otp.ChallengeName).toEqual("EMAIL_OTP");
+
+          const [sent] = eventsFor("CustomEmailSender");
+          expect(sent.triggerSource).toEqual(
+            "CustomEmailSender_Authentication",
+          );
+          expect(messageDelivery().collectedMessages).toEqual([]);
+          const tokens = await v3.send(
+            new RespondToAuthChallengeCommand({
+              ClientId: clientId,
+              ChallengeName: "EMAIL_OTP",
+              Session: otp.Session,
+              ChallengeResponses: {
+                USERNAME: "jane",
+                EMAIL_OTP_CODE: sent.request.code.replace(/^encrypted:/, ""),
+              },
+            }),
+          );
+          expect(tokens.AuthenticationResult?.AccessToken).toBeDefined();
+
+          const preAuth = eventsFor("PreAuthentication");
+          expect(preAuth).toHaveLength(1);
+          expect(preAuth[0].request.validationData).toEqual({ source: "web" });
         });
       });
 

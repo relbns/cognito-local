@@ -529,6 +529,100 @@ describe("User Pool Service", () => {
     );
   });
 
+  describe("getUserByUsername with AliasAttributes", () => {
+    const aliasUser = (verified: boolean) =>
+      TDB.user({
+        Username: "jane",
+        Attributes: [
+          { Name: "sub", Value: "uuid-alias" },
+          { Name: "email", Value: "Jane@Example.test" },
+          { Name: "email_verified", Value: String(verified) },
+          { Name: "phone_number", Value: "+15555550100" },
+          { Name: "phone_number_verified", Value: String(verified) },
+          { Name: "preferred_username", Value: "JaneD" },
+        ],
+      });
+
+    const poolWith = (options: UserPool, user: User) => {
+      const users: Record<string, User> = { [user.Username]: user };
+      const ds = newMockDataStore();
+      ds.get.mockImplementation((_ctx, key) => {
+        if (key === "Users") return Promise.resolve(users);
+        if (Array.isArray(key) && key[0] === "Users") {
+          return Promise.resolve(users[key[1]] ?? null);
+        }
+        return Promise.resolve(null);
+      });
+      return new UserPoolServiceImpl(mockClientsDataStore, clock, ds, options);
+    };
+
+    const allAliases: UserPool = {
+      Id: "local",
+      AliasAttributes: ["email", "phone_number", "preferred_username"],
+    };
+
+    it("finds the user by a verified email or phone number and by preferred_username", async () => {
+      const user = aliasUser(true);
+      const userPool = poolWith(allAliases, user);
+
+      for (const alias of ["Jane@Example.test", "+15555550100", "JaneD"]) {
+        expect(await userPool.getUserByUsername(TestContext, alias)).toEqual(
+          user,
+        );
+      }
+    });
+
+    it("does not use an unverified email or phone number", async () => {
+      const userPool = poolWith(allAliases, aliasUser(false));
+
+      expect(
+        await userPool.getUserByUsername(TestContext, "Jane@Example.test"),
+      ).toBeNull();
+      expect(
+        await userPool.getUserByUsername(TestContext, "+15555550100"),
+      ).toBeNull();
+      expect(
+        await userPool.getUserByUsername(TestContext, "JaneD"),
+      ).not.toBeNull();
+    });
+
+    it("only uses the attributes the pool names as aliases", async () => {
+      const userPool = poolWith(
+        { Id: "local", AliasAttributes: ["preferred_username"] },
+        aliasUser(true),
+      );
+
+      expect(
+        await userPool.getUserByUsername(TestContext, "Jane@Example.test"),
+      ).toBeNull();
+      expect(
+        await userPool.getUserByUsername(TestContext, "JaneD"),
+      ).not.toBeNull();
+    });
+
+    it("matches email and preferred_username in any case when the pool is case-insensitive", async () => {
+      const user = aliasUser(true);
+      const caseSensitive = poolWith(allAliases, user);
+      const caseInsensitive = poolWith(
+        { ...allAliases, UsernameConfiguration: { CaseSensitive: false } },
+        user,
+      );
+
+      expect(
+        await caseSensitive.getUserByUsername(TestContext, "jane@example.test"),
+      ).toBeNull();
+      expect(
+        await caseInsensitive.getUserByUsername(
+          TestContext,
+          "jane@example.test",
+        ),
+      ).toEqual(user);
+      expect(
+        await caseInsensitive.getUserByUsername(TestContext, "janed"),
+      ).toEqual(user);
+    });
+  });
+
   describe("UsernameConfiguration.CaseSensitive", () => {
     const user = TDB.user({
       Username: "Jane",

@@ -371,6 +371,22 @@ export class UserPoolServiceImpl implements UserPoolService {
       }
     }
 
+    // AliasAttributes sign in with preferred_username, or with an email or phone number once verified.
+    for (const name of this.options.AliasAttributes ?? []) {
+      const foldAlias =
+        name === "phone_number" ? (value?: string) => value : fold;
+      const verifiedFlag =
+        name === "preferred_username" ? undefined : `${name}_verified`;
+      const match = Object.values(users).find(
+        (user) =>
+          foldAlias(attributeValue(name, user.Attributes)) ===
+            foldAlias(username) &&
+          (!verifiedFlag ||
+            attributeValue(verifiedFlag, user.Attributes) === "true"),
+      );
+      if (match) return match;
+    }
+
     return null;
   }
 
