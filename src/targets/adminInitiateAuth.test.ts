@@ -1,19 +1,33 @@
-import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockedObject,
+  vi,
+} from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
+import { UUID } from "../__tests__/patterns";
 import { srpClient } from "../__tests__/srpClient";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { NotAuthorizedError, UserNotConfirmedException } from "../errors";
+import {
+  InvalidParameterError,
+  NotAuthorizedError,
+  UserNotConfirmedException,
+} from "../errors";
 import {
   type CognitoService,
   DateClock,
   InMemoryAuthSessions,
   InMemorySrpSessions,
+  type Messages,
   type Triggers,
   type UserPoolService,
 } from "../services";
@@ -33,6 +47,7 @@ describe("AdminInitiateAuth target", () => {
   let mockTokenVerifier: MockedObject<TokenVerifier>;
   let mockTriggers: MockedObject<Triggers>;
   let mockUserPoolService: MockedObject<UserPoolService>;
+  let mockMessages: MockedObject<Messages>;
   let authSessions: InMemoryAuthSessions;
   let srpSessions: InMemorySrpSessions;
   const userPoolClient = TDB.appClient();
@@ -48,8 +63,11 @@ describe("AdminInitiateAuth target", () => {
     mockTokenVerifier = newMockTokenVerifier();
     authSessions = new InMemoryAuthSessions(new DateClock());
     srpSessions = new InMemorySrpSessions(new DateClock());
+    mockMessages = newMockMessages();
     adminInitiateAuth = AdminInitiateAuth({
       authSessions,
+      messages: mockMessages,
+      otp: vi.fn().mockReturnValue("123456"),
       srpSessions,
       triggers: mockTriggers,
       cognito: mockCognitoService,
@@ -147,6 +165,7 @@ describe("AdminInitiateAuth target", () => {
   describe("MFA enforcement", () => {
     it("returns SMS_MFA challenge when MfaConfiguration is ON and user has SMS MFA", async () => {
       const existingUser = TDB.user({
+        Attributes: [{ Name: "phone_number", Value: "0400000000" }],
         MFAOptions: [{ DeliveryMedium: "SMS", AttributeName: "phone_number" }],
       });
       mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
@@ -164,8 +183,24 @@ describe("AdminInitiateAuth target", () => {
 
       expect(response.ChallengeName).toEqual("SMS_MFA");
       expect(response.ChallengeParameters).toEqual({
+        CODE_DELIVERY_DELIVERY_MEDIUM: "SMS",
+        CODE_DELIVERY_DESTINATION: "0400000000",
         USER_ID_FOR_SRP: existingUser.Username,
       });
+      expect(mockMessages.deliver).toHaveBeenCalledWith(
+        TestContext,
+        "Authentication",
+        userPoolClient.ClientId,
+        userPoolClient.UserPoolId,
+        existingUser,
+        "123456",
+        undefined,
+        {
+          AttributeName: "phone_number",
+          DeliveryMedium: "SMS",
+          Destination: "0400000000",
+        },
+      );
       expect(response.AuthenticationResult).toBeUndefined();
       expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
     });
@@ -174,6 +209,7 @@ describe("AdminInitiateAuth target", () => {
       const existingUser = TDB.user({
         UserMFASettingList: ["SOFTWARE_TOKEN_MFA"],
         PreferredMfaSetting: "SOFTWARE_TOKEN_MFA",
+        SoftwareTokenMfaConfiguration: { Secret: "SECRET", Verified: true },
       });
       mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
       mockUserPoolService.options.MfaConfiguration = "ON";
@@ -192,28 +228,55 @@ describe("AdminInitiateAuth target", () => {
       expect(response.AuthenticationResult).toBeUndefined();
     });
 
-    it("throws NotAuthorizedError when MfaConfiguration is ON but user has no MFA configured", async () => {
+    it("returns MFA_SETUP when MfaConfiguration is ON but user has no MFA configured", async () => {
       const existingUser = TDB.user();
       mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
       mockUserPoolService.options.MfaConfiguration = "ON";
 
-      await expect(
-        adminInitiateAuth(TestContext, {
-          AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
-          ClientId: userPoolClient.ClientId,
-          UserPoolId: userPoolClient.UserPoolId,
-          AuthParameters: {
-            USERNAME: existingUser.Username,
-            PASSWORD: existingUser.Password,
-          },
-        }),
-      ).rejects.toThrow("User not authorized");
+      const response = await adminInitiateAuth(TestContext, {
+        AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+        ClientId: userPoolClient.ClientId,
+        UserPoolId: userPoolClient.UserPoolId,
+        AuthParameters: {
+          USERNAME: existingUser.Username,
+          PASSWORD: existingUser.Password,
+        },
+      });
+
+      expect(response).toEqual({
+        ChallengeName: "MFA_SETUP",
+        ChallengeParameters: {
+          MFAS_CAN_SETUP: '["SOFTWARE_TOKEN_MFA"]',
+          USER_ID_FOR_SRP: existingUser.Username,
+        },
+        Session: expect.stringMatching(UUID),
+      });
+      expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
+    });
+
+    it("returns NEW_PASSWORD_REQUIRED for a user with a temporary password", async () => {
+      const existingUser = TDB.user({ UserStatus: "FORCE_CHANGE_PASSWORD" });
+      mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
+
+      const response = await adminInitiateAuth(TestContext, {
+        AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+        ClientId: userPoolClient.ClientId,
+        UserPoolId: userPoolClient.UserPoolId,
+        AuthParameters: {
+          USERNAME: existingUser.Username,
+          PASSWORD: existingUser.Password,
+        },
+      });
+
+      expect(response.ChallengeName).toEqual("NEW_PASSWORD_REQUIRED");
+      expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
     });
 
     it("returns MFA challenge when MfaConfiguration is OPTIONAL and user has MFA", async () => {
       const existingUser = TDB.user({
         UserMFASettingList: ["SOFTWARE_TOKEN_MFA"],
         PreferredMfaSetting: "SOFTWARE_TOKEN_MFA",
+        SoftwareTokenMfaConfiguration: { Secret: "SECRET", Verified: true },
       });
       mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
       mockUserPoolService.options.MfaConfiguration = "OPTIONAL";
@@ -428,6 +491,63 @@ describe("AdminInitiateAuth target", () => {
           },
         }),
       ).rejects.toBeInstanceOf(UserNotConfirmedException);
+    });
+  });
+
+  describe("USER_AUTH auth flow", () => {
+    it("refuses an app client without ALLOW_USER_AUTH", async () => {
+      await expect(
+        adminInitiateAuth(TestContext, {
+          AuthFlow: "USER_AUTH",
+          ClientId: userPoolClient.ClientId,
+          UserPoolId: userPoolClient.UserPoolId,
+          AuthParameters: { USERNAME: "user" },
+        }),
+      ).rejects.toEqual(
+        new InvalidParameterError("USER_AUTH flow not enabled for this client"),
+      );
+    });
+
+    it("signs in with a preferred PASSWORD and passes ClientMetadata to token generation", async () => {
+      const client = TDB.appClient({
+        UserPoolId: userPoolClient.UserPoolId,
+        ExplicitAuthFlows: ["ALLOW_USER_AUTH"],
+      });
+      mockCognitoService.getAppClient.mockResolvedValue(client);
+      mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+      const existingUser = TDB.user();
+      mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
+
+      const select = await adminInitiateAuth(TestContext, {
+        AuthFlow: "USER_AUTH",
+        ClientId: client.ClientId,
+        UserPoolId: client.UserPoolId,
+        AuthParameters: { USERNAME: existingUser.Username },
+      });
+      expect(select.ChallengeName).toEqual("SELECT_CHALLENGE");
+      expect(select.AvailableChallenges).toEqual(["PASSWORD", "PASSWORD_SRP"]);
+
+      const response = await adminInitiateAuth(TestContext, {
+        AuthFlow: "USER_AUTH",
+        ClientId: client.ClientId,
+        UserPoolId: client.UserPoolId,
+        AuthParameters: {
+          USERNAME: existingUser.Username,
+          PREFERRED_CHALLENGE: "PASSWORD",
+          PASSWORD: existingUser.Password,
+        },
+        ClientMetadata: { client: "metadata" },
+      });
+
+      expect(response.AuthenticationResult?.AccessToken).toEqual("access");
+      expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
+        TestContext,
+        existingUser,
+        [],
+        client,
+        { client: "metadata" },
+        "Authentication",
+      );
     });
   });
 });

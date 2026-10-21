@@ -4,7 +4,8 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError } from "../errors";
 import type { Services } from "../services";
-import { generateSecret } from "../services/totp";
+import { newTotpSecret } from "../services/mfaSetup";
+import { advanceSignInSession, pendingSignInSession } from "../services/signIn";
 import type { Target } from "./Target";
 
 export type AssociateSoftwareTokenTarget = Target<
@@ -12,10 +13,15 @@ export type AssociateSoftwareTokenTarget = Target<
   AssociateSoftwareTokenResponse
 >;
 
-type AssociateSoftwareTokenServices = Pick<Services, "tokenVerifier">;
+type AssociateSoftwareTokenServices = Pick<
+  Services,
+  "authSessions" | "cognito" | "tokenVerifier"
+>;
 
 export const AssociateSoftwareToken =
   ({
+    authSessions,
+    cognito,
     tokenVerifier,
   }: AssociateSoftwareTokenServices): AssociateSoftwareTokenTarget =>
   async (ctx, req) => {
@@ -25,10 +31,29 @@ export const AssociateSoftwareToken =
       );
     }
 
-    if (!req.AccessToken) {
-      throw new InvalidParameterError(
-        "AssociateSoftwareToken via Session (MFA_SETUP flow) is not supported; call with AccessToken",
+    if (!req.AccessToken && req.Session) {
+      // MFA_SETUP: the secret stays with the sign-in session until VerifySoftwareToken checks a code.
+      const session = pendingSignInSession(
+        authSessions,
+        req.Session,
+        "MFA_SETUP",
       );
+      const client = await cognito.getAppClient(ctx, session.clientId);
+      const secret = newTotpSecret();
+      return {
+        SecretCode: secret,
+        Session: advanceSignInSession(
+          authSessions,
+          req.Session,
+          session,
+          { totpSecret: secret, totpVerified: false },
+          client?.AuthSessionValidity,
+        ),
+      };
+    }
+
+    if (!req.AccessToken) {
+      throw new InvalidParameterError("Missing required parameter AccessToken");
     }
 
     const { user, userPool } = await tokenVerifier.verifyAccessToken(
@@ -36,7 +61,7 @@ export const AssociateSoftwareToken =
       req.AccessToken,
     );
 
-    const secret = generateSecret();
+    const secret = newTotpSecret();
     await userPool.saveUser(ctx, {
       ...user,
       SoftwareTokenMfaConfiguration: {

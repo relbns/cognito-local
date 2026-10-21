@@ -3,6 +3,7 @@ import type {
   ConfirmDeviceResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
+import { confirmIssuedDevice } from "../services/devices";
 import type { Target } from "./Target";
 
 export type ConfirmDeviceTarget = Target<
@@ -21,24 +22,29 @@ export const ConfirmDevice =
     );
 
     const now = clock.get();
-    const device = {
-      DeviceKey: req.DeviceKey,
-      DeviceAttributes: [{ Name: "device_name", Value: req.DeviceName }],
-      DeviceCreateDate: now,
-      DeviceLastModifiedDate: now,
-      DeviceLastAuthenticatedDate: now,
-    };
+    const rememberOnConfirm =
+      userPool.options.DeviceConfiguration?.DeviceOnlyRememberedOnUserPrompt !==
+      true;
+    const verifier = req.DeviceSecretVerifierConfig;
 
-    const devices = user.Devices ?? [];
-    devices.push(device);
-
-    await userPool.saveUser(ctx, {
-      ...user,
-      Devices: devices,
+    await userPool.updateUser(ctx, user, (latest) => ({
+      ...confirmIssuedDevice(latest, {
+        deviceKey: req.DeviceKey,
+        deviceName: req.DeviceName,
+        verifier:
+          verifier?.PasswordVerifier && verifier.Salt
+            ? {
+                PasswordVerifier: verifier.PasswordVerifier,
+                Salt: verifier.Salt,
+              }
+            : undefined,
+        rememberOnConfirm,
+        now,
+      }),
       UserLastModifiedDate: now,
-    });
+    }));
 
     return {
-      UserConfirmationNecessary: false,
+      UserConfirmationNecessary: !rememberOnConfirm,
     };
   };

@@ -136,6 +136,9 @@ export interface SrpChallenge {
   b: bigint;
   B: bigint;
   verifier: bigint;
+  /** Set for a DEVICE_PASSWORD_VERIFIER challenge, whose identity is the device. */
+  device?: { deviceKey: string; deviceGroupKey: string };
+  deviceKey?: string;
 }
 
 export interface SrpSessions {
@@ -210,6 +213,16 @@ const parseSrpA = (srpA: string | undefined): bigint => {
   return A;
 };
 
+const newServerSecret = (verifier: bigint): { b: bigint; B: bigint } => {
+  let b: bigint;
+  let B: bigint;
+  do {
+    b = fromHex(crypto.randomBytes(128).toString("hex"));
+    B = serverPublicValue(verifier, b);
+  } while (B === ZERO);
+  return { b, B };
+};
+
 export const startPasswordVerifier = (
   srpSessions: SrpSessions,
   {
@@ -218,12 +231,14 @@ export const startPasswordVerifier = (
     user,
     srpA,
     validityMinutes,
+    deviceKey,
   }: {
     userPoolId: string;
     clientId: string;
     user: User;
     srpA: string | undefined;
     validityMinutes?: number;
+    deviceKey?: string;
   },
 ): Record<string, string> => {
   const A = parseSrpA(srpA);
@@ -235,15 +250,19 @@ export const startPasswordVerifier = (
     password: user.Password || crypto.randomBytes(32).toString("base64"),
     salt,
   });
-  let b: bigint;
-  let B: bigint;
-  do {
-    b = fromHex(crypto.randomBytes(128).toString("hex"));
-    B = serverPublicValue(verifier, b);
-  } while (B === ZERO);
+  const { b, B } = newServerSecret(verifier);
 
   const secretBlock = srpSessions.create(
-    { userPoolId, clientId, username: user.Username, A, b, B, verifier },
+    {
+      userPoolId,
+      clientId,
+      username: user.Username,
+      A,
+      b,
+      B,
+      verifier,
+      ...(deviceKey ? { deviceKey } : {}),
+    },
     validityMinutes,
   );
 
@@ -256,20 +275,61 @@ export const startPasswordVerifier = (
   };
 };
 
-export const verifyPasswordClaim = (
+// The device verifier comes from ConfirmDevice: base64 of the hex the client computed.
+export const startDeviceVerifier = (
   srpSessions: SrpSessions,
   {
     userPoolId,
     clientId,
     user,
-    challengeResponses,
+    srpA,
+    validityMinutes,
+    deviceKey,
+    deviceGroupKey,
+    passwordVerifier: verifierBase64,
+    salt: saltBase64,
   }: {
     userPoolId: string;
     clientId: string;
     user: User;
-    challengeResponses: Record<string, string>;
+    srpA: string | undefined;
+    validityMinutes?: number;
+    deviceKey: string;
+    deviceGroupKey: string;
+    passwordVerifier: string;
+    salt: string;
   },
-): void => {
+): Record<string, string> => {
+  const A = parseSrpA(srpA);
+  const verifier = fromHex(
+    Buffer.from(verifierBase64, "base64").toString("hex") || "0",
+  );
+  const salt = Buffer.from(saltBase64, "base64").toString("hex");
+  const { b, B } = newServerSecret(verifier);
+
+  const secretBlock = srpSessions.create(
+    {
+      userPoolId,
+      clientId,
+      username: user.Username,
+      A,
+      b,
+      B,
+      verifier,
+      device: { deviceKey, deviceGroupKey },
+    },
+    validityMinutes,
+  );
+
+  return {
+    SALT: salt,
+    SRP_B: B.toString(16),
+    SECRET_BLOCK: secretBlock,
+    USERNAME: user.Username,
+  };
+};
+
+const requireClaimParameters = (challengeResponses: Record<string, string>) => {
   for (const name of [
     "PASSWORD_CLAIM_SECRET_BLOCK",
     "PASSWORD_CLAIM_SIGNATURE",
@@ -279,26 +339,22 @@ export const verifyPasswordClaim = (
       throw new InvalidParameterError(`Missing required parameter ${name}`);
     }
   }
+};
 
-  const challenge = srpSessions.take(
-    challengeResponses.PASSWORD_CLAIM_SECRET_BLOCK,
-  );
-  if (
-    challenge.userPoolId !== userPoolId ||
-    challenge.clientId !== clientId ||
-    challenge.username !== user.Username
-  ) {
-    throw new NotAuthorizedError("Incorrect username or password.");
-  }
-
+const assertSignature = (
+  challenge: SrpChallenge,
+  challengeResponses: Record<string, string>,
+  poolName: string,
+  userIdForSrp: string,
+) => {
   const expected = Buffer.from(
     passwordClaimSignature({
       A: challenge.A,
       B: challenge.B,
       b: challenge.b,
       verifier: challenge.verifier,
-      poolName: poolNameOf(userPoolId),
-      userIdForSrp: challenge.username,
+      poolName,
+      userIdForSrp,
       secretBlock: challengeResponses.PASSWORD_CLAIM_SECRET_BLOCK,
       timestamp: challengeResponses.TIMESTAMP,
     }),
@@ -314,4 +370,76 @@ export const verifyPasswordClaim = (
   ) {
     throw new NotAuthorizedError("Incorrect username or password.");
   }
+};
+
+export const verifyDeviceClaim = (
+  srpSessions: SrpSessions,
+  {
+    userPoolId,
+    clientId,
+    user,
+    challengeResponses,
+  }: {
+    userPoolId: string;
+    clientId: string;
+    user: User;
+    challengeResponses: Record<string, string>;
+  },
+): { deviceKey: string } => {
+  requireClaimParameters(challengeResponses);
+  const challenge = srpSessions.take(
+    challengeResponses.PASSWORD_CLAIM_SECRET_BLOCK,
+  );
+  if (
+    !challenge.device ||
+    challenge.userPoolId !== userPoolId ||
+    challenge.clientId !== clientId ||
+    challenge.username !== user.Username ||
+    (challengeResponses.DEVICE_KEY &&
+      challengeResponses.DEVICE_KEY !== challenge.device.deviceKey)
+  ) {
+    throw new NotAuthorizedError("Incorrect username or password.");
+  }
+  assertSignature(
+    challenge,
+    challengeResponses,
+    challenge.device.deviceGroupKey,
+    challenge.device.deviceKey,
+  );
+  return { deviceKey: challenge.device.deviceKey };
+};
+
+export const verifyPasswordClaim = (
+  srpSessions: SrpSessions,
+  {
+    userPoolId,
+    clientId,
+    user,
+    challengeResponses,
+  }: {
+    userPoolId: string;
+    clientId: string;
+    user: User;
+    challengeResponses: Record<string, string>;
+  },
+): { deviceKey?: string } => {
+  requireClaimParameters(challengeResponses);
+  const challenge = srpSessions.take(
+    challengeResponses.PASSWORD_CLAIM_SECRET_BLOCK,
+  );
+  if (
+    challenge.device ||
+    challenge.userPoolId !== userPoolId ||
+    challenge.clientId !== clientId ||
+    challenge.username !== user.Username
+  ) {
+    throw new NotAuthorizedError("Incorrect username or password.");
+  }
+  assertSignature(
+    challenge,
+    challengeResponses,
+    poolNameOf(userPoolId),
+    challenge.username,
+  );
+  return { deviceKey: challengeResponses.DEVICE_KEY || challenge.deviceKey };
 };

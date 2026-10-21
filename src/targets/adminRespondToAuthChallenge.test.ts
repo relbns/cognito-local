@@ -1,6 +1,14 @@
-import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockedObject,
+  vi,
+} from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
+import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
@@ -57,6 +65,8 @@ describe("AdminRespondToAuthChallenge target", () => {
       authSessions,
       clock,
       cognito: mockCognitoService,
+      messages: newMockMessages(),
+      otp: vi.fn().mockReturnValue("123456"),
       srpSessions,
       tokenGenerator: mockTokenGenerator,
       tokenVerifier: newMockTokenVerifier(),

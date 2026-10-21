@@ -287,17 +287,25 @@ describe("InitiateAuth target", () => {
             mockUserPoolService.getUserByUsername.mockResolvedValue(user);
           });
 
-          it("throws an exception", async () => {
-            await expect(
-              initiateAuth(TestContext, {
-                ClientId: userPoolClient.ClientId,
-                AuthFlow: "USER_PASSWORD_AUTH",
-                AuthParameters: {
-                  USERNAME: user.Username,
-                  PASSWORD: user.Password,
-                },
-              }),
-            ).rejects.toBeInstanceOf(NotAuthorizedError);
+          it("returns an MFA_SETUP challenge", async () => {
+            const output = await initiateAuth(TestContext, {
+              ClientId: userPoolClient.ClientId,
+              AuthFlow: "USER_PASSWORD_AUTH",
+              AuthParameters: {
+                USERNAME: user.Username,
+                PASSWORD: user.Password,
+              },
+            });
+
+            expect(output).toEqual({
+              ChallengeName: "MFA_SETUP",
+              ChallengeParameters: {
+                MFAS_CAN_SETUP: '["SOFTWARE_TOKEN_MFA"]',
+                USER_ID_FOR_SRP: user.Username,
+              },
+              Session: expect.stringMatching(UUID),
+            });
+            expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
           });
         });
       });
@@ -1097,6 +1105,152 @@ describe("InitiateAuth target", () => {
         authSessions.peek(output.Session as string)?.pendingChallenge
           .challengeName,
       ).toEqual("PASSWORD_VERIFIER");
+    });
+  });
+
+  describe("USER_AUTH auth flow", () => {
+    const userAuthClient = TDB.appClient({
+      UserPoolId: userPoolClient.UserPoolId,
+      ExplicitAuthFlows: ["ALLOW_USER_AUTH"],
+    });
+
+    const userAuth = (AuthParameters: Record<string, string>) =>
+      initiateAuth(TestContext, {
+        ClientId: userAuthClient.ClientId,
+        AuthFlow: "USER_AUTH",
+        AuthParameters,
+      });
+
+    beforeEach(() => {
+      const cognito = newMockCognitoService(mockUserPoolService);
+      cognito.getAppClient.mockResolvedValue(userAuthClient);
+      initiateAuth = InitiateAuth({
+        authSessions,
+        cognito,
+        messages: mockMessages,
+        otp: mockOtp,
+        srpSessions,
+        triggers: mockTriggers,
+        tokenGenerator: mockTokenGenerator,
+        tokenVerifier: mockTokenVerifier,
+        clock,
+      });
+      mockUserPoolService.listUserGroupMembership.mockResolvedValue([]);
+    });
+
+    it("refuses an app client without ALLOW_USER_AUTH", async () => {
+      const cognito = newMockCognitoService(mockUserPoolService);
+      cognito.getAppClient.mockResolvedValue(
+        TDB.appClient({ ExplicitAuthFlows: ["ALLOW_USER_SRP_AUTH"] }),
+      );
+      await expect(
+        InitiateAuth({
+          authSessions,
+          cognito,
+          messages: mockMessages,
+          otp: mockOtp,
+          srpSessions,
+          triggers: mockTriggers,
+          tokenGenerator: mockTokenGenerator,
+          tokenVerifier: mockTokenVerifier,
+          clock,
+        })(TestContext, {
+          ClientId: "client",
+          AuthFlow: "USER_AUTH",
+          AuthParameters: { USERNAME: "user" },
+        }),
+      ).rejects.toEqual(
+        new InvalidParameterError("USER_AUTH flow not enabled for this client"),
+      );
+    });
+
+    it("requires USERNAME and an existing, enabled, confirmed user", async () => {
+      await expect(userAuth({})).rejects.toEqual(
+        new InvalidParameterError("Missing required parameter USERNAME"),
+      );
+
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+      await expect(userAuth({ USERNAME: "nobody" })).rejects.toBeInstanceOf(
+        NotAuthorizedError,
+      );
+
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ Enabled: false }),
+      );
+      await expect(userAuth({ USERNAME: "user" })).rejects.toEqual(
+        new NotAuthorizedError("User is disabled."),
+      );
+
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ UserStatus: "UNCONFIRMED" }),
+      );
+      await expect(userAuth({ USERNAME: "user" })).rejects.toBeInstanceOf(
+        UserNotConfirmedException,
+      );
+
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ UserStatus: "RESET_REQUIRED" }),
+      );
+      await expect(userAuth({ USERNAME: "user" })).rejects.toBeInstanceOf(
+        PasswordResetRequiredError,
+      );
+    });
+
+    it("returns SELECT_CHALLENGE, then signs in with the chosen PASSWORD", async () => {
+      const user = TDB.user();
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+
+      const select = await userAuth({ USERNAME: user.Username });
+      expect(select).toEqual({
+        ChallengeName: "SELECT_CHALLENGE",
+        ChallengeParameters: {},
+        AvailableChallenges: ["PASSWORD", "PASSWORD_SRP"],
+        Session: expect.stringMatching(UUID),
+      });
+
+      const preferred = await userAuth({
+        USERNAME: user.Username,
+        PREFERRED_CHALLENGE: "PASSWORD",
+        PASSWORD: user.Password,
+      });
+      expect(preferred.AuthenticationResult?.AccessToken).toEqual("access");
+      expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
+        TestContext,
+        user,
+        [],
+        userAuthClient,
+        undefined,
+        "Authentication",
+      );
+    });
+
+    it("carries DEVICE_KEY into the PASSWORD_VERIFIER challenge", async () => {
+      const user = TDB.user();
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      const srp = srpClient(userPoolClient.UserPoolId);
+
+      const output = await userAuth({
+        USERNAME: user.Username,
+        PREFERRED_CHALLENGE: "PASSWORD_SRP",
+        SRP_A: srp.srpA,
+        DEVICE_KEY: "local_device",
+      });
+
+      expect(output.ChallengeName).toEqual("PASSWORD_VERIFIER");
+      expect(
+        authSessions.peek(output.Session as string)?.signIn?.deviceKey,
+      ).toEqual("local_device");
+      expect(
+        verifyPasswordClaim(srpSessions, {
+          userPoolId: userPoolClient.UserPoolId,
+          clientId: userAuthClient.ClientId,
+          user,
+          challengeResponses: srp.respond(
+            output.ChallengeParameters ?? {},
+            user.Password,
+          ),
+        }),
+      ).toEqual({ deviceKey: "local_device" });
     });
   });
 });

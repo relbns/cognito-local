@@ -1,6 +1,7 @@
 import type { AdminForgetDeviceRequest } from "@aws-sdk/client-cognito-identity-provider";
-import { ResourceNotFoundError, UserNotFoundError } from "../errors";
+import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { withoutDevice } from "../services/devices";
 import type { Target } from "./Target";
 
 export type AdminForgetDeviceTarget = Target<AdminForgetDeviceRequest, {}>;
@@ -16,19 +17,10 @@ export const AdminForgetDevice =
       throw new UserNotFoundError();
     }
 
-    const devices = user.Devices ?? [];
-    const index = devices.findIndex((d) => d.DeviceKey === req.DeviceKey);
-    if (index === -1) {
-      throw new ResourceNotFoundError("Device not found.");
-    }
-
-    devices.splice(index, 1);
-
-    await userPool.saveUser(ctx, {
-      ...user,
-      Devices: devices,
+    await userPool.updateUser(ctx, user, (latest) => ({
+      ...withoutDevice(latest, req.DeviceKey),
       UserLastModifiedDate: clock.get(),
-    });
+    }));
 
     return {};
   };

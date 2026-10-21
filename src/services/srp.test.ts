@@ -1,7 +1,11 @@
 import * as crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
-import { srpClient } from "../__tests__/srpClient";
+import {
+  deviceSecret,
+  deviceSrpClient,
+  srpClient,
+} from "../__tests__/srpClient";
 import * as TDB from "../__tests__/testDataBuilder";
 import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import {
@@ -13,7 +17,9 @@ import {
   passwordClaimSignature,
   passwordVerifier,
   serverPublicValue,
+  startDeviceVerifier,
   startPasswordVerifier,
+  verifyDeviceClaim,
   verifyPasswordClaim,
 } from "./srp";
 
@@ -237,5 +243,131 @@ describe("password verifier challenge", () => {
         "Missing required parameter PASSWORD_CLAIM_SECRET_BLOCK",
       ),
     );
+  });
+});
+
+describe("device SRP", () => {
+  const userPoolId = "local_DevicePool";
+  const deviceGroupKey = "-AbCdEfGh1";
+  const deviceKey = "local_5a4c6e8b-0d1f-4c2a-9b3e-7f6a5d4c3b2a";
+
+  const start = (devicePassword?: string) => {
+    const sessions = new InMemorySrpSessions(new ClockFake(new Date()));
+    const user = TDB.user();
+    const secret = deviceSecret(deviceGroupKey, deviceKey);
+    const client = deviceSrpClient(
+      user.Username,
+      deviceGroupKey,
+      deviceKey,
+      devicePassword ?? secret.devicePassword,
+    );
+    const challenge = startDeviceVerifier(sessions, {
+      userPoolId,
+      clientId: "client",
+      user,
+      srpA: client.srpA,
+      deviceKey,
+      deviceGroupKey,
+      passwordVerifier: secret.verifierConfig.PasswordVerifier,
+      salt: secret.verifierConfig.Salt,
+    });
+    return { sessions, user, client, challenge };
+  };
+
+  it("verifies a claim made with the device secret the verifier was built from", () => {
+    const { sessions, user, client, challenge } = start();
+    expect(Object.keys(challenge).sort()).toEqual([
+      "SALT",
+      "SECRET_BLOCK",
+      "SRP_B",
+      "USERNAME",
+    ]);
+
+    expect(
+      verifyDeviceClaim(sessions, {
+        userPoolId,
+        clientId: "client",
+        user,
+        challengeResponses: client.respond(challenge),
+      }),
+    ).toEqual({ deviceKey });
+  });
+
+  it("refuses a claim made with another device secret", () => {
+    const { sessions, user, client, challenge } = start("wrong secret");
+    expect(() =>
+      verifyDeviceClaim(sessions, {
+        userPoolId,
+        clientId: "client",
+        user,
+        challengeResponses: client.respond(challenge),
+      }),
+    ).toThrow(new NotAuthorizedError("Incorrect username or password."));
+  });
+
+  it("keeps password and device challenges apart", () => {
+    const device = start();
+    expect(() =>
+      verifyPasswordClaim(device.sessions, {
+        userPoolId,
+        clientId: "client",
+        user: device.user,
+        challengeResponses: device.client.respond(device.challenge),
+      }),
+    ).toThrow(new NotAuthorizedError("Incorrect username or password."));
+
+    const sessions = new InMemorySrpSessions(new ClockFake(new Date()));
+    const user = TDB.user();
+    const srp = srpClient(userPoolId);
+    const challenge = startPasswordVerifier(sessions, {
+      userPoolId,
+      clientId: "client",
+      user,
+      srpA: srp.srpA,
+    });
+    expect(() =>
+      verifyDeviceClaim(sessions, {
+        userPoolId,
+        clientId: "client",
+        user,
+        challengeResponses: srp.respond(challenge, user.Password),
+      }),
+    ).toThrow(new NotAuthorizedError("Incorrect username or password."));
+  });
+
+  it("refuses a claim that names another DEVICE_KEY", () => {
+    const { sessions, user, client, challenge } = start();
+    expect(() =>
+      verifyDeviceClaim(sessions, {
+        userPoolId,
+        clientId: "client",
+        user,
+        challengeResponses: {
+          ...client.respond(challenge),
+          DEVICE_KEY: "local_other",
+        },
+      }),
+    ).toThrow(new NotAuthorizedError("Incorrect username or password."));
+  });
+
+  it("remembers the DEVICE_KEY sent with a password sign-in", () => {
+    const sessions = new InMemorySrpSessions(new ClockFake(new Date()));
+    const user = TDB.user();
+    const srp = srpClient(userPoolId);
+    const challenge = startPasswordVerifier(sessions, {
+      userPoolId,
+      clientId: "client",
+      user,
+      srpA: srp.srpA,
+      deviceKey,
+    });
+    expect(
+      verifyPasswordClaim(sessions, {
+        userPoolId,
+        clientId: "client",
+        user,
+        challengeResponses: srp.respond(challenge, user.Password),
+      }),
+    ).toEqual({ deviceKey });
   });
 });

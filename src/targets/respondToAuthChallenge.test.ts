@@ -198,7 +198,7 @@ describe("RespondToAuthChallenge target", () => {
 
         expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
           TestContext,
-          user,
+          { ...user, MFACode: undefined, UserLastModifiedDate: clock.get() },
           [],
           userPoolClient,
           {
@@ -356,11 +356,16 @@ describe("RespondToAuthChallenge target", () => {
 
       expect(mockTokenGenerator.generate).toHaveBeenCalledWith(
         TestContext,
-        user,
+        {
+          ...user,
+          Password: "foo-Aa1!",
+          UserLastModifiedDate: clock.get(),
+          UserStatus: "CONFIRMED",
+        },
         [],
         userPoolClient,
         { client: "metadata" },
-        "Authentication",
+        "NewPasswordChallenge",
       );
     });
 

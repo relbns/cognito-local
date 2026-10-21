@@ -118,6 +118,14 @@ describe(
         "sub",
         createUserResponse.User?.Attributes,
       );
+      await client
+        .adminSetUserPassword({
+          UserPoolId: userPoolId,
+          Username: "abc",
+          Password: "def-Aa1!",
+          Permanent: true,
+        })
+        .promise();
 
       const response = await client
         .adminInitiateAuth({
@@ -212,6 +220,14 @@ describe(
         "sub",
         createUserResponse.User?.Attributes,
       );
+      await client
+        .adminSetUserPassword({
+          UserPoolId: userPoolId,
+          Username: "abc",
+          Password: "def-Aa1!",
+          Permanent: true,
+        })
+        .promise();
 
       const initialLoginResponse = await client
         .adminInitiateAuth({

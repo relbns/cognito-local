@@ -2,8 +2,8 @@ import type {
   GetDeviceRequest,
   GetDeviceResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { requireConfirmedDevice, toDeviceType } from "../services/devices";
 import type { Target } from "./Target";
 
 export type GetDeviceTarget = Target<GetDeviceRequest, GetDeviceResponse>;
@@ -18,13 +18,7 @@ export const GetDevice =
       req.AccessToken,
     );
 
-    const devices = user.Devices ?? [];
-    const device = devices.find((d) => d.DeviceKey === req.DeviceKey);
-    if (!device) {
-      throw new ResourceNotFoundError("Device not found.");
-    }
-
     return {
-      Device: device,
+      Device: toDeviceType(requireConfirmedDevice(user, req.DeviceKey)),
     };
   };
