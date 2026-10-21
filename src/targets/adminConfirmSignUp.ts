@@ -2,7 +2,7 @@ import type {
   AdminConfirmSignUpRequest,
   AdminConfirmSignUpResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { NotAuthorizedError } from "../errors";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
@@ -28,7 +28,7 @@ export const AdminConfirmSignUp =
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
-      throw new NotAuthorizedError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     if (user.UserStatus !== "UNCONFIRMED") {

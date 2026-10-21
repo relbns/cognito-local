@@ -100,7 +100,7 @@ describe("AdminSetUser target", () => {
         Username: "Username",
         UserPoolId: "test",
       }),
-    ).rejects.toEqual(new UserNotFoundError("User does not exist"));
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it("rejects a password that breaks the password policy", async () => {

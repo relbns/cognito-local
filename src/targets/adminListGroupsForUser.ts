@@ -20,7 +20,7 @@ export const AdminListGroupsForUser =
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
-      throw new UserNotFoundError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     const groups = await userPool.listGroups(ctx);

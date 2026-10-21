@@ -80,6 +80,8 @@ DeleteUserAttributes, GetUserAttributeVerificationCode, VerifyUserAttribute, Set
 - SetUserSettings and AdminSetUserSettings store `MFAOptions` and enable SMS MFA when an option uses
   SMS.
 - AdminDisableUser revokes the user's tokens.
+- Every `Admin*` operation that takes a `Username` returns `UserNotFoundException` ("User does not
+  exist.") when no user matches.
 
 ## Groups
 

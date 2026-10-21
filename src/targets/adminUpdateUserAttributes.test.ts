@@ -8,7 +8,7 @@ import * as TDB from "../__tests__/testDataBuilder";
 import {
   AliasExistsError,
   InvalidParameterError,
-  NotAuthorizedError,
+  UserNotFoundError,
 } from "../errors";
 import type { Messages, UserPoolService } from "../services";
 import {
@@ -49,7 +49,7 @@ describe("AdminUpdateUserAttributes target", () => {
         UserAttributes: [{ Name: "custom:example", Value: "1" }],
         Username: "abc",
       }),
-    ).rejects.toEqual(new NotAuthorizedError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it("saves the updated attributes on the user", async () => {

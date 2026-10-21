@@ -2,7 +2,7 @@ import type {
   AdminDeleteUserAttributesRequest,
   AdminDeleteUserAttributesResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { NotAuthorizedError } from "../errors";
+import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import { attributesRemove } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -23,7 +23,7 @@ export const AdminDeleteUserAttributes =
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
-      throw new NotAuthorizedError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     const updatedUser = {
