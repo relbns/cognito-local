@@ -6,7 +6,6 @@ import { v4 } from "uuid";
 import {
   CodeMismatchError,
   InvalidParameterError,
-  InvalidPasswordError,
   NotAuthorizedError,
   UnsupportedError,
 } from "../errors";
@@ -16,7 +15,9 @@ import {
   respondToCustomAuthChallenge,
 } from "../services/customAuth";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import { verifyPasswordClaim } from "../services/srp";
 import { verify as verifyTotp } from "../services/totp";
+import { attributesToRecord } from "../services/userPoolService";
 import type { Target } from "./Target";
 
 export type AdminRespondToAuthChallengeTarget = Target<
@@ -29,6 +30,7 @@ type AdminRespondToAuthChallengeServices = Pick<
   | "authSessions"
   | "clock"
   | "cognito"
+  | "srpSessions"
   | "triggers"
   | "tokenGenerator"
   | "tokenVerifier"
@@ -49,7 +51,7 @@ export const AdminRespondToAuthChallenge =
     if (!req.ChallengeResponses.USERNAME) {
       throw new InvalidParameterError("Missing required parameter USERNAME");
     }
-    if (!req.Session) {
+    if (!req.Session && req.ChallengeName !== "PASSWORD_VERIFIER") {
       throw new InvalidParameterError("Missing required parameter Session");
     }
 
@@ -74,13 +76,14 @@ export const AdminRespondToAuthChallenge =
     if (
       req.ChallengeName === "CUSTOM_CHALLENGE" ||
       (req.ChallengeName === "PASSWORD_VERIFIER" &&
+        req.Session &&
         isCustomAuthSession(services, req.Session))
     ) {
       return respondToCustomAuthChallenge(ctx, services, {
         userPool,
         user,
         client: userPoolClient,
-        sessionId: req.Session,
+        sessionId: req.Session as string,
         challengeName: req.ChallengeName,
         challengeResponses: req.ChallengeResponses,
         clientMetadata: req.ClientMetadata,
@@ -132,9 +135,12 @@ export const AdminRespondToAuthChallenge =
         UserStatus: "CONFIRMED",
       });
     } else if (req.ChallengeName === "PASSWORD_VERIFIER") {
-      if (user.Password === undefined) {
-        throw new InvalidPasswordError();
-      }
+      verifyPasswordClaim(services.srpSessions, {
+        userPoolId: userPool.options.Id,
+        clientId: userPoolClient.ClientId,
+        user,
+        challengeResponses: req.ChallengeResponses,
+      });
       if (
         (userPool.options.MfaConfiguration === "OPTIONAL" &&
           ((user.MFAOptions ?? []).length > 0 ||
@@ -158,6 +164,7 @@ export const AdminRespondToAuthChallenge =
           ChallengeParameters: {
             USER_ID_FOR_SRP: user.Username,
             requiredAttributes: JSON.stringify([]),
+            userAttributes: JSON.stringify(attributesToRecord(user.Attributes)),
           } as AdminRespondToAuthChallengeResponse["ChallengeParameters"],
           Session: v4(),
         };

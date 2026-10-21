@@ -14,6 +14,7 @@ import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
+import { srpClient } from "../__tests__/srpClient";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
@@ -24,10 +25,12 @@ import {
 } from "../errors";
 import {
   InMemoryAuthSessions,
+  InMemorySrpSessions,
   type Messages,
   type Triggers,
   type UserPoolService,
 } from "../services";
+import { startPasswordVerifier } from "../services/srp";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import { generateSecret, generate as genTotp } from "../services/totp";
 import {
@@ -46,6 +49,7 @@ describe("RespondToAuthChallenge target", () => {
   let mockOtp: Mock<() => string>;
   let clock: ClockFake;
   let authSessions: InMemoryAuthSessions;
+  let srpSessions: InMemorySrpSessions;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -62,12 +66,14 @@ describe("RespondToAuthChallenge target", () => {
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
 
     authSessions = new InMemoryAuthSessions(clock);
+    srpSessions = new InMemorySrpSessions(clock);
     respondToAuthChallenge = RespondToAuthChallenge({
       authSessions,
       clock,
       cognito: mockCognitoService,
       messages: mockMessages,
       otp: mockOtp,
+      srpSessions,
       tokenGenerator: mockTokenGenerator,
       tokenVerifier: newMockTokenVerifier(),
       triggers: mockTriggers,
@@ -733,26 +739,12 @@ describe("RespondToAuthChallenge target", () => {
         issueTokens: false,
         failAuthentication: false,
       });
-      const session = authSessions.create({
-        userPoolId: userPoolClient.UserPoolId,
-        clientId: userPoolClient.ClientId,
-        username: user.Username,
-        history: [{ challengeName: "SRP_A", challengeResult: true }],
-        pendingChallenge: {
-          challengeName: "PASSWORD_VERIFIER",
-          privateChallengeParameters: {},
-        },
-      });
+      const { session, client, challenge } = seedPasswordVerifierSession();
 
       const output = await respondToAuthChallenge(TestContext, {
         ClientId: userPoolClient.ClientId,
         ChallengeName: "PASSWORD_VERIFIER",
-        ChallengeResponses: {
-          USERNAME: user.Username,
-          PASSWORD_CLAIM_SIGNATURE: "signature",
-          PASSWORD_CLAIM_SECRET_BLOCK: "block",
-          TIMESTAMP: "now",
-        },
+        ChallengeResponses: client.respond(challenge, user.Password as string),
         Session: session,
       });
 
@@ -766,6 +758,138 @@ describe("RespondToAuthChallenge target", () => {
           ],
         }),
       );
+    });
+
+    it("fails a CUSTOM_AUTH PASSWORD_VERIFIER signed with a wrong password", async () => {
+      const { session, client, challenge } = seedPasswordVerifierSession();
+
+      await expect(
+        respondToAuthChallenge(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          ChallengeName: "PASSWORD_VERIFIER",
+          ChallengeResponses: client.respond(challenge, "wrong-password"),
+          Session: session,
+        }),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
+      expect(mockTriggers.defineAuthChallenge).not.toHaveBeenCalled();
+    });
+
+    const seedPasswordVerifierSession = () => {
+      const client = srpClient(userPoolClient.UserPoolId);
+      const challenge = startPasswordVerifier(srpSessions, {
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        user,
+        srpA: client.srpA,
+      });
+      const session = authSessions.create({
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        username: user.Username,
+        history: [{ challengeName: "SRP_A", challengeResult: true }],
+        srpA: client.srpA,
+        pendingChallenge: {
+          challengeName: "PASSWORD_VERIFIER",
+          privateChallengeParameters: {},
+        },
+      });
+      return { session, client, challenge };
+    };
+  });
+
+  describe("PASSWORD_VERIFIER", () => {
+    const user = TDB.user({ Password: "Example-Passw0rd!" });
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockTokenGenerator.generate.mockResolvedValue({
+        AccessToken: "access",
+        IdToken: "id",
+        RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
+      });
+    });
+
+    const passwordVerifier = (password: string, target = user) => {
+      const client = srpClient(userPoolClient.UserPoolId);
+      const challenge = startPasswordVerifier(srpSessions, {
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        user: target,
+        srpA: client.srpA,
+      });
+      return client.respond(challenge, password);
+    };
+
+    it("issues tokens for a claim made with the right password", async () => {
+      const output = await respondToAuthChallenge(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        ChallengeName: "PASSWORD_VERIFIER",
+        ChallengeResponses: passwordVerifier("Example-Passw0rd!"),
+        Session: "Session",
+      });
+
+      expect(output.AuthenticationResult?.AccessToken).toEqual("access");
+    });
+
+    it("accepts the claim without a Session, as SRP clients may send it", async () => {
+      const output = await respondToAuthChallenge(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        ChallengeName: "PASSWORD_VERIFIER",
+        ChallengeResponses: passwordVerifier("Example-Passw0rd!"),
+      });
+
+      expect(output.AuthenticationResult?.AccessToken).toEqual("access");
+    });
+
+    it("throws NotAuthorized for a claim made with a wrong password", async () => {
+      await expect(
+        respondToAuthChallenge(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          ChallengeName: "PASSWORD_VERIFIER",
+          ChallengeResponses: passwordVerifier("wrong-password"),
+          Session: "Session",
+        }),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
+      expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
+    });
+
+    it("throws NotAuthorized for a forged signature", async () => {
+      await expect(
+        respondToAuthChallenge(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          ChallengeName: "PASSWORD_VERIFIER",
+          ChallengeResponses: {
+            ...passwordVerifier("Example-Passw0rd!"),
+            PASSWORD_CLAIM_SIGNATURE: "c2lnbmF0dXJl",
+          },
+          Session: "Session",
+        }),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
+    });
+
+    it("returns NEW_PASSWORD_REQUIRED after a correct temporary password", async () => {
+      const temporary = TDB.user({
+        Password: "Temp-Passw0rd!",
+        UserStatus: "FORCE_CHANGE_PASSWORD",
+      });
+      mockUserPoolService.getUserByUsername.mockResolvedValue(temporary);
+
+      const output = await respondToAuthChallenge(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        ChallengeName: "PASSWORD_VERIFIER",
+        ChallengeResponses: passwordVerifier("Temp-Passw0rd!", temporary),
+        Session: "Session",
+      });
+
+      expect(output.ChallengeName).toEqual("NEW_PASSWORD_REQUIRED");
     });
   });
 });

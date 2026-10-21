@@ -4,6 +4,7 @@ import type { Clock } from "./clock";
 import type { CodeLog } from "./codeLog";
 import type { CognitoService } from "./cognitoService";
 import type { Messages } from "./messages";
+import type { SrpSessions } from "./srp";
 import type { TokenGenerator } from "./tokenGenerator";
 import type { TokenVerifier } from "./tokenVerifier";
 import type { Triggers } from "./triggers";
@@ -14,6 +15,7 @@ export { CodeLog, InMemoryCodeLog } from "./codeLog";
 export { CognitoService, CognitoServiceImpl } from "./cognitoService";
 export { Lambda, LambdaService } from "./lambda";
 export { Messages, MessagesService } from "./messages";
+export { InMemorySrpSessions, SrpSessions } from "./srp";
 export { Triggers, TriggersService } from "./triggers";
 export { UserPoolService, UserPoolServiceImpl } from "./userPoolService";
 
@@ -25,6 +27,7 @@ export interface Services {
   config: Config;
   messages: Messages;
   otp: () => string;
+  srpSessions: SrpSessions;
   tokenGenerator: TokenGenerator;
   tokenVerifier: TokenVerifier;
   triggers: Triggers;

@@ -408,8 +408,6 @@ Not supported yet:
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
 - The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
 - The `USER_AUTH` (choice-based) flow, and with it passkey sign-in.
-- SRP. `USER_SRP_AUTH` returns random SRP parameters and accepts any `PASSWORD_CLAIM_SIGNATURE`,
-  so a wrong password signs in. Use `USER_PASSWORD_AUTH` to test password checks.
 - Device tracking (`NewDeviceMetadata`, device challenges) and the `MFA_SETUP` challenge.
 - Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
 - Some operations only store their input: user import jobs import nothing, and risk, log delivery,

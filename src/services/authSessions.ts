@@ -22,6 +22,7 @@ export interface AuthSession {
   username: string;
   clientMetadata?: Record<string, string>;
   history: ChallengeResult[];
+  srpA?: string;
   pendingChallenge: PendingChallenge;
 }
 

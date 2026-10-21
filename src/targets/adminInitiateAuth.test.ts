@@ -5,15 +5,19 @@ import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
+import { srpClient } from "../__tests__/srpClient";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
+import { NotAuthorizedError, UserNotConfirmedException } from "../errors";
 import {
   type CognitoService,
   DateClock,
   InMemoryAuthSessions,
+  InMemorySrpSessions,
   type Triggers,
   type UserPoolService,
 } from "../services";
+import { verifyPasswordClaim } from "../services/srp";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import type { TokenVerifier } from "../services/tokenVerifier";
 import {
@@ -30,6 +34,7 @@ describe("AdminInitiateAuth target", () => {
   let mockTriggers: MockedObject<Triggers>;
   let mockUserPoolService: MockedObject<UserPoolService>;
   let authSessions: InMemoryAuthSessions;
+  let srpSessions: InMemorySrpSessions;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -42,8 +47,10 @@ describe("AdminInitiateAuth target", () => {
     mockTokenGenerator = newMockTokenGenerator();
     mockTokenVerifier = newMockTokenVerifier();
     authSessions = new InMemoryAuthSessions(new DateClock());
+    srpSessions = new InMemorySrpSessions(new DateClock());
     adminInitiateAuth = AdminInitiateAuth({
       authSessions,
+      srpSessions,
       triggers: mockTriggers,
       cognito: mockCognitoService,
       tokenGenerator: mockTokenGenerator,
@@ -335,6 +342,66 @@ describe("AdminInitiateAuth target", () => {
       challengeName: "CUSTOM_CHALLENGE",
       privateChallengeParameters: { secretLoginCode: "123456" },
       challengeMetadata: "CODE-123456",
+    });
+  });
+
+  describe("USER_SRP_AUTH", () => {
+    it("returns a PASSWORD_VERIFIER challenge a client with the password can answer", async () => {
+      const user = TDB.user({ Password: "Example-Passw0rd!" });
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      const client = srpClient(userPoolClient.UserPoolId);
+
+      const output = await adminInitiateAuth(TestContext, {
+        AuthFlow: "USER_SRP_AUTH",
+        ClientId: userPoolClient.ClientId,
+        UserPoolId: userPoolClient.UserPoolId,
+        AuthParameters: { USERNAME: user.Username, SRP_A: client.srpA },
+      });
+
+      expect(output.ChallengeName).toEqual("PASSWORD_VERIFIER");
+      const challenge = output.ChallengeParameters as Record<string, string>;
+      expect(() =>
+        verifyPasswordClaim(srpSessions, {
+          userPoolId: userPoolClient.UserPoolId,
+          clientId: userPoolClient.ClientId,
+          user,
+          challengeResponses: client.respond(challenge, "Example-Passw0rd!"),
+        }),
+      ).not.toThrow();
+    });
+
+    it("throws NotAuthorized for an unknown user", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+
+      await expect(
+        adminInitiateAuth(TestContext, {
+          AuthFlow: "USER_SRP_AUTH",
+          ClientId: userPoolClient.ClientId,
+          UserPoolId: userPoolClient.UserPoolId,
+          AuthParameters: {
+            USERNAME: "nobody",
+            SRP_A: srpClient(userPoolClient.UserPoolId).srpA,
+          },
+        }),
+      ).rejects.toBeInstanceOf(NotAuthorizedError);
+    });
+
+    it("throws UserNotConfirmed for an unconfirmed user", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ UserStatus: "UNCONFIRMED" }),
+      );
+
+      await expect(
+        adminInitiateAuth(TestContext, {
+          AuthFlow: "USER_SRP_AUTH",
+          ClientId: userPoolClient.ClientId,
+          UserPoolId: userPoolClient.UserPoolId,
+          AuthParameters: {
+            USERNAME: "user",
+            SRP_A: srpClient(userPoolClient.UserPoolId).srpA,
+          },
+        }),
+      ).rejects.toBeInstanceOf(UserNotConfirmedException);
     });
   });
 });

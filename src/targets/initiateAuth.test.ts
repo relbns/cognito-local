@@ -15,19 +15,23 @@ import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { UUID } from "../__tests__/patterns";
+import { srpClient } from "../__tests__/srpClient";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
   InvalidParameterError,
   NotAuthorizedError,
   PasswordResetRequiredError,
+  UserNotConfirmedException,
 } from "../errors";
 import {
   InMemoryAuthSessions,
+  InMemorySrpSessions,
   type Messages,
   type Triggers,
   type UserPoolService,
 } from "../services";
+import { verifyPasswordClaim } from "../services/srp";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import type { TokenVerifier } from "../services/tokenVerifier";
 import {
@@ -46,6 +50,7 @@ describe("InitiateAuth target", () => {
   let mockTokenGenerator: MockedObject<TokenGenerator>;
   let mockTokenVerifier: MockedObject<TokenVerifier>;
   let authSessions: InMemoryAuthSessions;
+  let srpSessions: InMemorySrpSessions;
   let clock: ClockFake;
   const userPoolClient = TDB.appClient();
 
@@ -60,6 +65,7 @@ describe("InitiateAuth target", () => {
     mockTokenVerifier = newMockTokenVerifier();
     clock = new ClockFake(new Date());
     authSessions = new InMemoryAuthSessions(clock);
+    srpSessions = new InMemorySrpSessions(clock);
 
     const mockCognitoService = newMockCognitoService(mockUserPoolService);
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
@@ -69,6 +75,7 @@ describe("InitiateAuth target", () => {
       cognito: mockCognitoService,
       messages: mockMessages,
       otp: mockOtp,
+      srpSessions,
       triggers: mockTriggers,
       tokenGenerator: mockTokenGenerator,
       tokenVerifier: mockTokenVerifier,
@@ -682,6 +689,70 @@ describe("InitiateAuth target", () => {
     });
   });
 
+  describe("USER_SRP_AUTH auth flow", () => {
+    const user = TDB.user({ Password: "Example-Passw0rd!" });
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+    });
+
+    it("returns a PASSWORD_VERIFIER challenge only the right password can answer", async () => {
+      const client = srpClient(userPoolClient.UserPoolId);
+      const output = await initiateAuth(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        AuthFlow: "USER_SRP_AUTH",
+        AuthParameters: { USERNAME: user.Username, SRP_A: client.srpA },
+      });
+
+      expect(output.ChallengeName).toEqual("PASSWORD_VERIFIER");
+      const challenge = output.ChallengeParameters as Record<string, string>;
+      expect(challenge).toEqual({
+        SALT: expect.stringMatching(/^[0-9a-f]{32}$/),
+        SRP_B: expect.stringMatching(/^[0-9a-f]+$/),
+        SECRET_BLOCK: expect.any(String),
+        USER_ID_FOR_SRP: user.Username,
+        USERNAME: user.Username,
+      });
+      expect(() =>
+        verifyPasswordClaim(srpSessions, {
+          userPoolId: userPoolClient.UserPoolId,
+          clientId: userPoolClient.ClientId,
+          user,
+          challengeResponses: client.respond(challenge, "wrong-password"),
+        }),
+      ).toThrow(new NotAuthorizedError("Incorrect username or password."));
+    });
+
+    it("throws if SRP_A is missing", async () => {
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: "USER_SRP_AUTH",
+          AuthParameters: { USERNAME: user.Username },
+        }),
+      ).rejects.toEqual(
+        new InvalidParameterError("Missing required parameter SRP_A"),
+      );
+    });
+
+    it("throws UserNotConfirmed for an unconfirmed user", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(
+        TDB.user({ UserStatus: "UNCONFIRMED" }),
+      );
+
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: "USER_SRP_AUTH",
+          AuthParameters: {
+            USERNAME: user.Username,
+            SRP_A: srpClient(userPoolClient.UserPoolId).srpA,
+          },
+        }),
+      ).rejects.toBeInstanceOf(UserNotConfirmedException);
+    });
+  });
+
   describe("REFRESH_TOKEN_AUTH auth flow", () => {
     const existingUser = TDB.user({
       RefreshTokens: ["refresh token"],
@@ -886,6 +957,7 @@ describe("InitiateAuth target", () => {
         cognito,
         messages: mockMessages,
         otp: mockOtp,
+        srpSessions,
         triggers: mockTriggers,
         tokenGenerator: mockTokenGenerator,
         tokenVerifier: newMockTokenVerifier(),
@@ -955,7 +1027,10 @@ describe("InitiateAuth target", () => {
       const output = await initiateAuth(TestContext, {
         ClientId: userPoolClient.ClientId,
         AuthFlow: "CUSTOM_AUTH",
-        AuthParameters: { USERNAME: user.Username, SRP_A: "srp-a" },
+        AuthParameters: {
+          USERNAME: user.Username,
+          SRP_A: srpClient(userPoolClient.UserPoolId).srpA,
+        },
       });
 
       expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledWith(

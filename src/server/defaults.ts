@@ -7,6 +7,7 @@ import {
   DateClock,
   InMemoryAuthSessions,
   InMemoryCodeLog,
+  InMemorySrpSessions,
   LambdaService,
   MessagesService,
   type Services,
@@ -141,6 +142,10 @@ export const createDefaultServices = async (
     config,
     messages: codeLog ? new RecordingMessages(messages, codeLog) : messages,
     otp,
+    srpSessions: new InMemorySrpSessions(
+      clock,
+      config.AuthSessionConfig.AuthSessionValidity,
+    ),
     tokenGenerator: new JwtTokenGenerator(clock, triggers, config.TokenConfig),
     tokenVerifier: new JwtTokenVerifier(
       clock,

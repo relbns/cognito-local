@@ -1,8 +1,6 @@
-import * as crypto from "node:crypto";
 import type { InitiateAuthResponse } from "@aws-sdk/client-cognito-identity-provider";
 import {
   InvalidParameterError,
-  InvalidPasswordError,
   NotAuthorizedError,
   UnsupportedError,
 } from "../errors";
@@ -10,11 +8,12 @@ import type { AppClient } from "./appClient";
 import type { AuthSessions, ChallengeResult } from "./authSessions";
 import type { Context } from "./context";
 import type { Services } from "./index";
+import { startPasswordVerifier, verifyPasswordClaim } from "./srp";
 import type { User, UserPoolService } from "./userPoolService";
 
 export type CustomAuthServices = Pick<
   Services,
-  "authSessions" | "tokenGenerator" | "triggers"
+  "authSessions" | "srpSessions" | "tokenGenerator" | "triggers"
 >;
 
 export type CustomAuthResponse = Pick<
@@ -27,17 +26,10 @@ interface CustomAuthRound {
   user: User;
   client: AppClient;
   history: ChallengeResult[];
+  srpA?: string;
   clientMetadata?: Record<string, string>;
   postAuthenticationClientMetadata?: Record<string, string>;
 }
-
-export const passwordVerifierChallengeParameters = (user: User) => ({
-  SALT: crypto.randomBytes(16).toString("hex"),
-  SRP_B: crypto.randomBytes(128).toString("hex"),
-  SECRET_BLOCK: crypto.randomBytes(64).toString("base64"),
-  USER_ID_FOR_SRP: user.Username,
-  USERNAME: user.Username,
-});
 
 const triggerBase = (round: CustomAuthRound) => ({
   clientId: round.client.ClientId,
@@ -105,6 +97,7 @@ const runCustomAuthRound = async (
         username: round.user.Username,
         clientMetadata: round.clientMetadata,
         history: round.history,
+        srpA: round.srpA,
         pendingChallenge,
       },
       round.client.AuthSessionValidity,
@@ -113,7 +106,13 @@ const runCustomAuthRound = async (
   if (challengeName === "PASSWORD_VERIFIER") {
     return {
       ChallengeName: "PASSWORD_VERIFIER",
-      ChallengeParameters: passwordVerifierChallengeParameters(round.user),
+      ChallengeParameters: startPasswordVerifier(services.srpSessions, {
+        userPoolId: round.userPool.options.Id,
+        clientId: round.client.ClientId,
+        user: round.user,
+        srpA: round.srpA,
+        validityMinutes: round.client.AuthSessionValidity,
+      }),
       Session: newSession({ challengeName, privateChallengeParameters: {} }),
     };
   }
@@ -181,6 +180,7 @@ export const startCustomAuth = async (
     history: authParameters?.SRP_A
       ? [{ challengeName: "SRP_A", challengeResult: true }]
       : [],
+    srpA: authParameters?.SRP_A,
     clientMetadata,
   });
 };
@@ -230,14 +230,18 @@ export const respondToCustomAuthChallenge = async (
     user,
     client,
     history: [...session.history],
+    srpA: session.srpA,
     clientMetadata: clientMetadata ?? session.clientMetadata,
     postAuthenticationClientMetadata: clientMetadata,
   };
 
   if (challengeName === "PASSWORD_VERIFIER") {
-    if (user.Password === undefined) {
-      throw new InvalidPasswordError();
-    }
+    verifyPasswordClaim(services.srpSessions, {
+      userPoolId: userPool.options.Id,
+      clientId: client.ClientId,
+      user,
+      challengeResponses,
+    });
     round.history.push({ challengeName, challengeResult: true });
     return runCustomAuthRound(ctx, services, round);
   }

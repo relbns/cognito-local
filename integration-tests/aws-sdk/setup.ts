@@ -14,6 +14,7 @@ import {
   DateClock,
   InMemoryAuthSessions,
   InMemoryCodeLog,
+  InMemorySrpSessions,
   type Lambda,
   MessagesService,
   TriggersService,
@@ -101,6 +102,7 @@ export const withCognitoSdk =
           codeLog,
         ),
         otp,
+        srpSessions: new InMemorySrpSessions(clock),
         triggers,
         tokenGenerator: new JwtTokenGenerator(
           clock,

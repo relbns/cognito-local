@@ -14,12 +14,10 @@ import {
 import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
-import {
-  passwordVerifierChallengeParameters,
-  startCustomAuth,
-} from "../services/customAuth";
+import { startCustomAuth } from "../services/customAuth";
 import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
+import { startPasswordVerifier } from "../services/srp";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import {
   attributesToRecord,
@@ -41,6 +39,7 @@ type InitiateAuthServices = Pick<
   | "cognito"
   | "messages"
   | "otp"
+  | "srpSessions"
   | "tokenGenerator"
   | "tokenVerifier"
   | "triggers"
@@ -353,8 +352,8 @@ const userSrpAuthFlow = async (
   ctx: Context,
   req: Present<InitiateAuthRequest>,
   userPool: UserPoolService,
-  _userPoolClient: AppClient,
-  _services: InitiateAuthServices,
+  userPoolClient: AppClient,
+  services: InitiateAuthServices,
 ): Promise<InitiateAuthResponse> => {
   if (!req.AuthParameters) {
     throw new InvalidParameterError(
@@ -383,12 +382,15 @@ const userSrpAuthFlow = async (
     throw new UserNotConfirmedException();
   }
 
-  // Simplified SRP: return fake SRP_B, SALT, SECRET_BLOCK
-  // The emulator doesn't perform real SRP math — PASSWORD_VERIFIER
-  // response handler will verify the password directly.
   return {
     ChallengeName: "PASSWORD_VERIFIER",
-    ChallengeParameters: passwordVerifierChallengeParameters(user),
+    ChallengeParameters: startPasswordVerifier(services.srpSessions, {
+      userPoolId: userPool.options.Id,
+      clientId: userPoolClient.ClientId,
+      user,
+      srpA: req.AuthParameters.SRP_A,
+      validityMinutes: userPoolClient.AuthSessionValidity,
+    }),
     Session: v4(),
   };
 };

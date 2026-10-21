@@ -6,6 +6,7 @@ import { v4 } from "uuid";
 import {
   InvalidParameterError,
   NotAuthorizedError,
+  PasswordResetRequiredError,
   UnsupportedError,
   UserNotConfirmedException,
 } from "../errors";
@@ -14,6 +15,7 @@ import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
 import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
+import { startPasswordVerifier } from "../services/srp";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import type { Target } from "./Target";
 
@@ -27,6 +29,7 @@ type AdminInitiateAuthServices = Pick<
   | "authSessions"
   | "clock"
   | "cognito"
+  | "srpSessions"
   | "triggers"
   | "tokenGenerator"
   | "tokenVerifier"
@@ -203,6 +206,50 @@ const refreshTokenAuthFlow = async (
   };
 };
 
+const userSrpAuthFlow = async (
+  ctx: Context,
+  services: AdminInitiateAuthServices,
+  req: Present<AdminInitiateAuthRequest>,
+): Promise<AdminInitiateAuthResponse> => {
+  if (!req.AuthParameters?.USERNAME) {
+    throw new InvalidParameterError("Missing required parameter USERNAME");
+  }
+  if (!req.AuthParameters.SRP_A) {
+    throw new InvalidParameterError("Missing required parameter SRP_A");
+  }
+
+  const userPool = await services.cognito.getUserPoolForClientId(
+    ctx,
+    req.ClientId,
+  );
+  const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
+  const user = await userPool.getUserByUsername(
+    ctx,
+    req.AuthParameters.USERNAME,
+  );
+  if (!user || !userPoolClient) {
+    throw new NotAuthorizedError();
+  }
+  if (user.UserStatus === "RESET_REQUIRED") {
+    throw new PasswordResetRequiredError();
+  }
+  if (user.UserStatus === "UNCONFIRMED") {
+    throw new UserNotConfirmedException();
+  }
+
+  return {
+    ChallengeName: "PASSWORD_VERIFIER",
+    ChallengeParameters: startPasswordVerifier(services.srpSessions, {
+      userPoolId: userPool.options.Id,
+      clientId: userPoolClient.ClientId,
+      user,
+      srpA: req.AuthParameters.SRP_A,
+      validityMinutes: userPoolClient.AuthSessionValidity,
+    }),
+    Session: v4(),
+  };
+};
+
 const customAuthFlow = async (
   ctx: Context,
   services: AdminInitiateAuthServices,
@@ -256,6 +303,8 @@ export const AdminInitiateAuth =
       req.AuthFlow === "ADMIN_NO_SRP_AUTH"
     ) {
       return adminUserPasswordAuthFlow(ctx, services, req);
+    } else if (req.AuthFlow === "USER_SRP_AUTH") {
+      return userSrpAuthFlow(ctx, services, req);
     } else if (
       req.AuthFlow === "REFRESH_TOKEN_AUTH" ||
       req.AuthFlow === "REFRESH_TOKEN"

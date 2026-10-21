@@ -5,6 +5,7 @@ import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
+import { srpClient } from "../__tests__/srpClient";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
@@ -15,9 +16,11 @@ import {
 } from "../errors";
 import {
   InMemoryAuthSessions,
+  InMemorySrpSessions,
   type Triggers,
   type UserPoolService,
 } from "../services";
+import { startPasswordVerifier } from "../services/srp";
 import type { TokenGenerator } from "../services/tokenGenerator";
 import { generateSecret, generate as genTotp } from "../services/totp";
 import {
@@ -34,6 +37,7 @@ describe("AdminRespondToAuthChallenge target", () => {
   let mockUserPoolService: MockedObject<UserPoolService>;
   let clock: ClockFake;
   let authSessions: InMemoryAuthSessions;
+  let srpSessions: InMemorySrpSessions;
   const userPoolClient = TDB.appClient();
 
   beforeEach(() => {
@@ -48,10 +52,12 @@ describe("AdminRespondToAuthChallenge target", () => {
     mockCognitoService.getAppClient.mockResolvedValue(userPoolClient);
 
     authSessions = new InMemoryAuthSessions(clock);
+    srpSessions = new InMemorySrpSessions(clock);
     adminRespondToAuthChallenge = AdminRespondToAuthChallenge({
       authSessions,
       clock,
       cognito: mockCognitoService,
+      srpSessions,
       tokenGenerator: mockTokenGenerator,
       tokenVerifier: newMockTokenVerifier(),
       triggers: mockTriggers,
@@ -340,6 +346,51 @@ describe("AdminRespondToAuthChallenge target", () => {
 
       const second = await respond(first.Session as string, "123456");
       expect(second.AuthenticationResult?.IdToken).toEqual("id");
+    });
+  });
+
+  describe("PASSWORD_VERIFIER", () => {
+    const user = TDB.user({ Password: "Example-Passw0rd!" });
+
+    const respond = (password: string) => {
+      const client = srpClient(userPoolClient.UserPoolId);
+      const challenge = startPasswordVerifier(srpSessions, {
+        userPoolId: userPoolClient.UserPoolId,
+        clientId: userPoolClient.ClientId,
+        user,
+        srpA: client.srpA,
+      });
+      return adminRespondToAuthChallenge(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        UserPoolId: userPoolClient.UserPoolId,
+        ChallengeName: "PASSWORD_VERIFIER",
+        ChallengeResponses: client.respond(challenge, password),
+        Session: "Session",
+      });
+    };
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockTokenGenerator.generate.mockResolvedValue({
+        AccessToken: "access",
+        IdToken: "id",
+        RefreshToken: "refresh",
+        ExpiresIn: 3600,
+        TokenType: "Bearer",
+      });
+    });
+
+    it("issues tokens for a claim made with the right password", async () => {
+      const output = await respond("Example-Passw0rd!");
+
+      expect(output.AuthenticationResult?.IdToken).toEqual("id");
+    });
+
+    it("throws NotAuthorized for a claim made with a wrong password", async () => {
+      await expect(respond("wrong-password")).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
+      expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
     });
   });
 });

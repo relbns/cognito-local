@@ -7,7 +7,6 @@ import { v4 } from "uuid";
 import {
   CodeMismatchError,
   InvalidParameterError,
-  InvalidPasswordError,
   NotAuthorizedError,
   UnsupportedError,
 } from "../errors";
@@ -18,8 +17,10 @@ import {
 } from "../services/customAuth";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import type { Present } from "../services/sdkTypes";
+import { verifyPasswordClaim } from "../services/srp";
 import { verify as verifyTotp } from "../services/totp";
 import {
+  attributesToRecord,
   attributeValue,
   type MFAOption,
   type User,
@@ -38,6 +39,7 @@ type RespondToAuthChallengeService = Pick<
   | "cognito"
   | "messages"
   | "otp"
+  | "srpSessions"
   | "triggers"
   | "tokenGenerator"
   | "tokenVerifier"
@@ -109,7 +111,7 @@ export const RespondToAuthChallenge =
     if (!req.ChallengeResponses.USERNAME) {
       throw new InvalidParameterError("Missing required parameter USERNAME");
     }
-    if (!req.Session) {
+    if (!req.Session && req.ChallengeName !== "PASSWORD_VERIFIER") {
       throw new InvalidParameterError("Missing required parameter Session");
     }
 
@@ -134,13 +136,14 @@ export const RespondToAuthChallenge =
     if (
       req.ChallengeName === "CUSTOM_CHALLENGE" ||
       (req.ChallengeName === "PASSWORD_VERIFIER" &&
+        req.Session &&
         isCustomAuthSession(services, req.Session))
     ) {
       return respondToCustomAuthChallenge(ctx, services, {
         userPool,
         user,
         client: userPoolClient,
-        sessionId: req.Session,
+        sessionId: req.Session as string,
         challengeName: req.ChallengeName,
         challengeResponses: req.ChallengeResponses,
         clientMetadata: req.ClientMetadata,
@@ -228,14 +231,12 @@ export const RespondToAuthChallenge =
         UserStatus: "CONFIRMED",
       });
     } else if (req.ChallengeName === "PASSWORD_VERIFIER") {
-      // Simplified SRP: we don't verify the actual SRP proof.
-      // Instead, we just verify the password matches directly.
-      // The real SRP math is skipped in this emulator.
-      if (user.Password === undefined) {
-        throw new InvalidPasswordError();
-      }
-      // In a real SRP flow, PASSWORD_CLAIM_SIGNATURE would be verified
-      // against the SRP shared secret. For the emulator, we trust the client.
+      verifyPasswordClaim(services.srpSessions, {
+        userPoolId: userPool.options.Id,
+        clientId: userPoolClient.ClientId,
+        user,
+        challengeResponses: req.ChallengeResponses,
+      });
 
       // Check if MFA is required
       if (
@@ -262,6 +263,7 @@ export const RespondToAuthChallenge =
           ChallengeParameters: {
             USER_ID_FOR_SRP: user.Username,
             requiredAttributes: JSON.stringify([]),
+            userAttributes: JSON.stringify(attributesToRecord(user.Attributes)),
           } as RespondToAuthChallengeResponse["ChallengeParameters"],
           Session: v4(),
         };
