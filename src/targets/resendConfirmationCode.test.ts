@@ -73,6 +73,7 @@ describe("ResendConfirmationCode target", () => {
 
   it("generates code, delivers message, saves on user", async () => {
     const user = TDB.user({
+      UserStatus: "UNCONFIRMED",
       Attributes: [
         { Name: "email", Value: "user@example.com" },
         { Name: "sub", Value: "user-sub" },

@@ -1,6 +1,6 @@
 import {
-  CodeMismatchError,
   CognitoError,
+  EnableSoftwareTokenMFAError,
   InvalidParameterError,
   InvalidPasswordError,
   NotAuthorizedError,
@@ -432,7 +432,7 @@ export async function continueHostedLogin(
           clock: services.clock,
         });
       } catch (e) {
-        if (e instanceof CodeMismatchError) {
+        if (e instanceof EnableSoftwareTokenMFAError) {
           return retry(HOSTED_LOGIN_MESSAGES.codeMismatch);
         }
         throw e;

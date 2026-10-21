@@ -521,6 +521,10 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
   ResendConfirmationCode return a simulated `CodeDeliveryDetails`: see
   [docs/api-coverage.md](docs/api-coverage.md#user-existence-errors).
 
+- **Error messages.** Exceptions carry the messages Cognito returns, such as "Invalid verification
+  code provided, please try again." and "Invalid code or auth state for the user.": see
+  [docs/api-coverage.md](docs/api-coverage.md#error-messages).
+
 ### Stricter than upstream cognito-local
 
 Each row below has a switch that restores upstream's lenient behaviour:

@@ -16,7 +16,7 @@ export class NotAuthorizedError extends CognitoError {
 }
 
 export class UserNotFoundError extends CognitoError {
-  public constructor(message = "User not found.") {
+  public constructor(message = "User does not exist.") {
     super("UserNotFoundException", message);
   }
 }
@@ -27,9 +27,20 @@ export class UsernameExistsError extends CognitoError {
   }
 }
 
+export const CodeMismatchMessages = {
+  verificationCode: "Invalid verification code provided, please try again.",
+  authChallenge: "Invalid code or auth state for the user.",
+} as const;
+
 export class CodeMismatchError extends CognitoError {
+  public constructor(message: string = CodeMismatchMessages.verificationCode) {
+    super("CodeMismatchException", message);
+  }
+}
+
+export class EnableSoftwareTokenMFAError extends CognitoError {
   public constructor() {
-    super("CodeMismatchException", "Incorrect confirmation code");
+    super("EnableSoftwareTokenMFAException", "Code mismatch");
   }
 }
 
@@ -50,7 +61,10 @@ export class InvalidPasswordError extends CognitoError {
 
 export class PasswordResetRequiredError extends CognitoError {
   public constructor() {
-    super("PasswordResetRequiredException", "Password reset required");
+    super(
+      "PasswordResetRequiredException",
+      "Password reset required for the user",
+    );
   }
 }
 

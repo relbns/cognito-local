@@ -1,4 +1,4 @@
-import { CodeMismatchError } from "../errors";
+import { EnableSoftwareTokenMFAError } from "../errors";
 import type { Clock } from "./clock";
 import type { Context } from "./context";
 import {
@@ -96,7 +96,7 @@ export const completeTotpSetup = async (
   },
 ): Promise<User> => {
   if (!verifyTotp(secret, code)) {
-    throw new CodeMismatchError();
+    throw new EnableSoftwareTokenMFAError();
   }
   return userPool.updateUser(ctx, user, (latest) => {
     const methods = latest.UserMFASettingList ?? [];

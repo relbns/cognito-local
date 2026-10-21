@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
   CodeMismatchError,
+  CodeMismatchMessages,
   InvalidParameterError,
   NotAuthorizedError,
   UnsupportedError,
@@ -648,7 +649,7 @@ export const respondToPhantomChallenge = (
     }
     case "EMAIL_OTP":
     case "SMS_OTP":
-      throw new CodeMismatchError();
+      throw new CodeMismatchError(CodeMismatchMessages.authChallenge);
     default:
       throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
   }
@@ -785,7 +786,7 @@ export const respondToSignInChallenge = async (
     case "SMS_OTP": {
       const code = responses[`${answer.challengeName}_CODE`];
       if (!code || code !== state.code) {
-        throw new CodeMismatchError();
+        throw new CodeMismatchError(CodeMismatchMessages.authChallenge);
       }
       consume();
       round.user = await markDeliveryVerified(
@@ -861,7 +862,7 @@ export const respondToSignInChallenge = async (
     case "SMS_MFA": {
       const expected = state.code ?? user.MFACode;
       if (!expected || responses.SMS_MFA_CODE !== expected) {
-        throw new CodeMismatchError();
+        throw new CodeMismatchError(CodeMismatchMessages.authChallenge);
       }
       consume();
       round.user = await userPool.updateUser(ctx, user, (latest) => ({
@@ -881,7 +882,7 @@ export const respondToSignInChallenge = async (
         !totp.Verified ||
         !verifyTotp(totp.Secret, code)
       ) {
-        throw new CodeMismatchError();
+        throw new CodeMismatchError(CodeMismatchMessages.authChallenge);
       }
       consume();
       return finishSignIn(ctx, services, round);

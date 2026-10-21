@@ -63,8 +63,8 @@ describe(
           })
           .promise(),
       ).rejects.toMatchObject({
-        code: "CodeMismatchException",
-        message: "Incorrect confirmation code",
+        code: "EnableSoftwareTokenMFAException",
+        message: "Code mismatch",
       });
     });
 

@@ -605,7 +605,7 @@ describe("AdminCreateUser target", () => {
         Username: existingUser.Username,
         UserPoolId: "test",
       }),
-    ).rejects.toEqual(new UsernameExistsError());
+    ).rejects.toEqual(new UsernameExistsError("User account already exists"));
   });
 
   it.todo("invokes the PreSignUp lambda");

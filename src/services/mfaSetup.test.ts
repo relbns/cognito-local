@@ -3,7 +3,7 @@ import { ClockFake } from "../__tests__/clockFake";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { CodeMismatchError } from "../errors";
+import { EnableSoftwareTokenMFAError } from "../errors";
 import {
   completeTotpSetup,
   mfaSetupOptions,
@@ -146,7 +146,7 @@ describe("MFA setup", () => {
           code: "000000",
           clock,
         }),
-      ).rejects.toBeInstanceOf(CodeMismatchError);
+      ).rejects.toBeInstanceOf(EnableSoftwareTokenMFAError);
       expect(userPool.saveUser).not.toHaveBeenCalled();
     });
 

@@ -285,7 +285,9 @@ describe(
           login_session: session,
           code: first === "000000" ? "111111" : "000000",
         });
-        expect(await wrong.text()).toContain("Incorrect confirmation code");
+        expect(await wrong.text()).toContain(
+          "Invalid verification code provided, please try again.",
+        );
 
         const resent = await (
           await post("/resendcode", { login_session: session })
@@ -440,8 +442,19 @@ describe(
           .adminCreateUser({
             UserPoolId: userPoolId,
             Username: "reset@example.test",
-            UserAttributes: [{ Name: "email", Value: "reset@example.test" }],
+            UserAttributes: [
+              { Name: "email", Value: "reset@example.test" },
+              { Name: "email_verified", Value: "true" },
+            ],
             MessageAction: "SUPPRESS",
+          })
+          .promise();
+        await client
+          .adminSetUserPassword({
+            UserPoolId: userPoolId,
+            Username: "reset@example.test",
+            Password: "Example-Passw0rd!",
+            Permanent: true,
           })
           .promise();
         const forgot = await (
@@ -554,7 +567,7 @@ describe(
               confirm_password: NEW_PASSWORD,
             })
           ).text(),
-        ).toContain("Incorrect confirmation code");
+        ).toContain("Invalid verification code provided, please try again.");
 
         const done = await confirm({
           code,

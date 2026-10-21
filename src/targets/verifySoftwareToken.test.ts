@@ -8,7 +8,7 @@ import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
 import {
-  CodeMismatchError,
+  EnableSoftwareTokenMFAError,
   InvalidParameterError,
   NotAuthorizedError,
 } from "../errors";
@@ -97,7 +97,7 @@ describe("VerifySoftwareToken target", () => {
         AccessToken: signAccessToken(user.Username),
         UserCode: "000000",
       }),
-    ).rejects.toBeInstanceOf(CodeMismatchError);
+    ).rejects.toBeInstanceOf(EnableSoftwareTokenMFAError);
     expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });
 
@@ -161,7 +161,7 @@ describe("VerifySoftwareToken target", () => {
           Session: associated.Session,
           UserCode: "000000",
         }),
-      ).rejects.toBeInstanceOf(CodeMismatchError);
+      ).rejects.toBeInstanceOf(EnableSoftwareTokenMFAError);
 
       const verified = await verify(TestContext, {
         Session: associated.Session,

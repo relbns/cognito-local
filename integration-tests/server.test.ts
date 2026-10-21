@@ -138,7 +138,7 @@ describe("HTTP server", () => {
         ${new CognitoError("CognitoError", "message")} | ${"CognitoError"}             | ${"message"}
         ${new NotAuthorizedError()}                    | ${"NotAuthorizedException"}   | ${"User not authorized"}
         ${new UsernameExistsError()}                   | ${"UsernameExistsException"}  | ${"User already exists"}
-        ${new CodeMismatchError()}                     | ${"CodeMismatchException"}    | ${"Incorrect confirmation code"}
+        ${new CodeMismatchError()}                     | ${"CodeMismatchException"}    | ${"Invalid verification code provided, please try again."}
         ${new InvalidPasswordError()}                  | ${"InvalidPasswordException"} | ${"Invalid password"}
       `(
         "it converts $code to the format Cognito SDK expects",

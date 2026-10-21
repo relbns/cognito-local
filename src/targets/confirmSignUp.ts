@@ -5,6 +5,7 @@ import type {
 import {
   CodeMismatchError,
   ExpiredCodeError,
+  NotAuthorizedError,
   UserNotFoundError,
 } from "../errors";
 import type { Services } from "../services";
@@ -50,6 +51,11 @@ export const ConfirmSignUp =
         : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
+    if (user.UserStatus !== "UNCONFIRMED") {
+      throw new NotAuthorizedError(
+        `User cannot be confirmed. Current status is ${user.UserStatus}`,
+      );
+    }
     if (!user.ConfirmationCode) {
       throw new ExpiredCodeError();
     }

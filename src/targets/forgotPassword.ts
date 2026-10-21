@@ -91,6 +91,12 @@ export const ForgotPassword =
         : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
+    if (user.UserStatus === "FORCE_CHANGE_PASSWORD") {
+      throw new NotAuthorizedError(
+        "User password cannot be reset in the current state.",
+      );
+    }
+
     const userEmail = attributeValue("email", user.Attributes);
     if (!userEmail) {
       throw new UnsupportedError("ForgotPassword without email on user");

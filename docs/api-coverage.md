@@ -85,6 +85,26 @@ A simulated destination is the username itself when it is an email address or a 
 otherwise a masked placeholder (`u***@e***`, or `+*******0000` when the pool verifies phone numbers
 first). PreAuthentication runs for an unknown user only under `ENABLED`, with `userNotFound: true`.
 
+### Error messages
+
+Errors carry the messages Cognito returns:
+
+| Case | Exception and message |
+| --- | --- |
+| Wrong code in ConfirmSignUp, ConfirmForgotPassword or VerifyUserAttribute | `CodeMismatchException` "Invalid verification code provided, please try again." |
+| Wrong `SMS_MFA`, `SOFTWARE_TOKEN_MFA`, `EMAIL_OTP` or `SMS_OTP` code | `CodeMismatchException` "Invalid code or auth state for the user." |
+| Wrong code in VerifySoftwareToken | `EnableSoftwareTokenMFAException` "Code mismatch" |
+| ConfirmSignUp or ConfirmForgotPassword when no code is pending | `ExpiredCodeException` "Invalid code provided, please request a code again." |
+| ConfirmSignUp or AdminConfirmSignUp of a user who is not `UNCONFIRMED` | `NotAuthorizedException` "User cannot be confirmed. Current status is CONFIRMED" (the user's status) |
+| ResendConfirmationCode for a confirmed user | `InvalidParameterException` "User is already confirmed." |
+| ForgotPassword for a `FORCE_CHANGE_PASSWORD` user | `NotAuthorizedException` "User password cannot be reset in the current state." |
+| SignUp with a taken username | `UsernameExistsException` "User already exists", or "An account with the given email already exists." / "An account with the given phone_number already exists." when the pool signs in with that attribute |
+| AdminCreateUser with a taken username | `UsernameExistsException` "User account already exists" |
+| Sign-in of a `RESET_REQUIRED` user | `PasswordResetRequiredException` "Password reset required for the user" |
+| Sign-in of an unconfirmed user | `UserNotConfirmedException` "User is not confirmed." |
+| A password that breaks the policy | `InvalidPasswordException` "Password did not conform with policy: Password not long enough" from SignUp, "Password does not conform to policy: ..." elsewhere |
+| An unknown user in an admin operation | `UserNotFoundException` "User does not exist." |
+
 RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`,
 `SELECT_CHALLENGE`, `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP`, `WEB_AUTHN`, `SMS_MFA`,
 `SOFTWARE_TOKEN_MFA`, `SELECT_MFA_TYPE`, `MFA_SETUP`, `NEW_PASSWORD_REQUIRED`, `DEVICE_SRP_AUTH` and

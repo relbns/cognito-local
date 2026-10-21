@@ -152,7 +152,7 @@ export const AdminCreateUser =
         userPool.options.UsernameAttributes?.includes("email") &&
           req.Username.includes("@")
           ? "An account with the given email already exists."
-          : undefined,
+          : "User account already exists",
       );
     }
 

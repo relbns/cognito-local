@@ -61,6 +61,10 @@ export const ResendConfirmationCode =
         : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
+    if (user.UserStatus === "CONFIRMED") {
+      throw new InvalidParameterError("User is already confirmed.");
+    }
+
     const deliveryDetails = selectAppropriateDeliveryMethod(
       userPool.options.AutoVerifiedAttributes ?? [],
       user,

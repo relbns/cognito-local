@@ -3,7 +3,7 @@ import type {
   VerifySoftwareTokenResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
-  CodeMismatchError,
+  EnableSoftwareTokenMFAError,
   InvalidParameterError,
   NotAuthorizedError,
 } from "../errors";
@@ -97,7 +97,7 @@ export const VerifySoftwareToken =
     }
 
     if (!verify(secret, req.UserCode)) {
-      throw new CodeMismatchError();
+      throw new EnableSoftwareTokenMFAError();
     }
 
     const existingMethods = user.UserMFASettingList ?? [];

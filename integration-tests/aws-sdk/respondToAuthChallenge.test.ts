@@ -176,7 +176,7 @@ describe(
           .promise(),
       ).rejects.toMatchObject({
         code: "CodeMismatchException",
-        message: "Incorrect confirmation code",
+        message: "Invalid code or auth state for the user.",
       });
     });
 

@@ -77,6 +77,21 @@ const deliverWelcomeMessage = async (
   return deliveryDetails;
 };
 
+// An email or phone username names the attribute it collides on, as Cognito's message does.
+const usernameExistsMessage = (
+  userPool: UserPoolService,
+  username: string,
+): string | undefined => {
+  const attributes = userPool.options.UsernameAttributes ?? [];
+  if (attributes.includes("email") && username.includes("@")) {
+    return "An account with the given email already exists.";
+  }
+  if (attributes.includes("phone_number") && /^\+\d+$/.test(username)) {
+    return "An account with the given phone_number already exists.";
+  }
+  return undefined;
+};
+
 export const SignUp =
   ({
     clock,
@@ -107,10 +122,7 @@ export const SignUp =
     const existingUser = await userPool.getUserByUsername(ctx, req.Username);
     if (existingUser) {
       throw new UsernameExistsError(
-        userPool.options.UsernameAttributes?.includes("email") &&
-          req.Username.includes("@")
-          ? "An account with the given email already exists."
-          : undefined,
+        usernameExistsMessage(userPool, req.Username),
       );
     }
 
