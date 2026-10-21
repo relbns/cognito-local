@@ -85,6 +85,9 @@ interface StoredResourceServer extends SeedResourceServer {
   UserPoolId: string;
 }
 
+// Pool settings a CreateUserPool request does not carry; the seed stores them as given.
+const SEED_ONLY_POOL_KEYS = new Set(["WebAuthnConfiguration"]);
+
 const POOL_SETTING_FOR_SEED_KEY: Record<string, string> = {
   PoolName: "Name",
   Schema: "SchemaAttributes",
@@ -168,7 +171,9 @@ class SeedApplier {
     for (const [key, value] of Object.entries(request)) {
       if (value === undefined) continue;
       const settingKey = POOL_SETTING_FOR_SEED_KEY[key] ?? key;
-      desired[settingKey] = settings[settingKey];
+      desired[settingKey] = SEED_ONLY_POOL_KEYS.has(key)
+        ? value
+        : settings[settingKey];
     }
     return desired as Partial<UserPool>;
   }

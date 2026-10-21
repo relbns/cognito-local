@@ -39,6 +39,7 @@ const POOL_FIELDS = [
   "UserPoolAddOns",
   "UsernameConfiguration",
   "AccountRecoverySetting",
+  "WebAuthnConfiguration",
 ] as const;
 
 const CLIENT_FIELDS = [

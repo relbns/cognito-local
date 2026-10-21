@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { InvalidParameterError } from "../errors";
 import type { Services } from "../services";
+import { passkeyMfaPreference } from "../services/passkeys";
 import type { Target } from "./Target";
 
 export type SetUserMFAPreferenceTarget = Target<
@@ -58,10 +59,18 @@ export const SetUserMFAPreference =
       );
     }
 
+    const webAuthnMfa = passkeyMfaPreference(
+      userPool.options,
+      req.WebAuthnMfaSettings,
+      user.WebAuthnMfaEnabled,
+      [...methods],
+    );
+
     await userPool.saveUser(ctx, {
       ...user,
       UserMFASettingList: [...methods],
       PreferredMfaSetting: preferred,
+      WebAuthnMfaEnabled: webAuthnMfa,
     });
 
     return {};

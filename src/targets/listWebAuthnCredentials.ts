@@ -1,16 +1,11 @@
+import type {
+  ListWebAuthnCredentialsRequest,
+  ListWebAuthnCredentialsResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
 import { paginate } from "../services/pagination";
+import { credentialDescription } from "../services/webAuthn";
 import type { Target } from "./Target";
-
-interface ListWebAuthnCredentialsRequest {
-  AccessToken: string;
-  NextToken?: string;
-  MaxResults?: number;
-}
-interface ListWebAuthnCredentialsResponse {
-  Credentials?: any[];
-  NextToken?: string;
-}
 
 export type ListWebAuthnCredentialsTarget = Target<
   ListWebAuthnCredentialsRequest,
@@ -27,10 +22,8 @@ export const ListWebAuthnCredentials =
       req.AccessToken,
     );
 
-    const credentials = ((user as any)._webauthnCredentials as any[]) ?? [];
-
     const { items, nextToken } = paginate(
-      credentials,
+      (user.WebAuthnCredentials ?? []).map(credentialDescription),
       req.MaxResults,
       req.NextToken,
     );

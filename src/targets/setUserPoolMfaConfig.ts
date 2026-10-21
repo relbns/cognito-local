@@ -3,6 +3,7 @@ import type {
   SetUserPoolMfaConfigResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
+import { webAuthnConfigurationResponse } from "../services/webAuthn";
 import type { Target } from "./Target";
 
 export type SetUserPoolMfaConfigTarget = Target<
@@ -35,6 +36,8 @@ export const SetUserPoolMfaConfig =
             Enabled: req.SoftwareTokenMfaConfiguration.Enabled ?? false,
           }
         : userPool.options.SoftwareTokenMfaConfiguration,
+      WebAuthnConfiguration:
+        req.WebAuthnConfiguration ?? userPool.options.WebAuthnConfiguration,
       LastModifiedDate: clock.get(),
     });
 
@@ -55,5 +58,8 @@ export const SetUserPoolMfaConfig =
           userPool.options.SoftwareTokenMfaConfiguration?.Enabled ??
           false,
       },
+      WebAuthnConfiguration: webAuthnConfigurationResponse(
+        req.WebAuthnConfiguration ?? userPool.options.WebAuthnConfiguration,
+      ),
     };
   };

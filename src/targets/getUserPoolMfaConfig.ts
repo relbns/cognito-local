@@ -3,6 +3,7 @@ import type {
   GetUserPoolMfaConfigResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
+import { webAuthnConfigurationResponse } from "../services/webAuthn";
 import type { Target } from "./Target";
 
 export type GetUserPoolMfaConfigTarget = Target<
@@ -27,5 +28,8 @@ export const GetUserPoolMfaConfig =
         Enabled:
           userPool.options.SoftwareTokenMfaConfiguration?.Enabled ?? false,
       },
+      WebAuthnConfiguration: webAuthnConfigurationResponse(
+        userPool.options.WebAuthnConfiguration,
+      ),
     };
   };

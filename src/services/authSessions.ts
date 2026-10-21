@@ -23,6 +23,8 @@ export interface SignInState {
   code?: string;
   totpSecret?: string;
   totpVerified?: boolean;
+  webAuthnChallenge?: string;
+  webAuthnRequireUserVerification?: boolean;
   tokenSource?: "Authentication" | "NewPasswordChallenge";
 }
 
