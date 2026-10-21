@@ -78,6 +78,40 @@ describe("HTTP server", () => {
         });
       });
 
+      it.each([
+        [
+          { AuthFlow: "USER_PASSWORD_AUTH" },
+          "InvalidParameterException",
+          "1 validation error detected: Value null at 'clientId' failed to satisfy constraint: Member must not be null",
+        ],
+        [
+          { AuthFlow: "USER_PASSWORD_AUTH", ClientId: 42 },
+          "SerializationException",
+          "class com.amazon.coral.value.json.numbers.TruncatingBigNumber can not be converted to an String",
+        ],
+      ])(
+        "answers a request that breaks the model with a 400 (%j)",
+        async (body, type, message) => {
+          const server = createServer(
+            Router({} as Services),
+            MockLogger as any,
+            {},
+          );
+
+          const response = await supertest(server.application)
+            .post("/")
+            .set(
+              "x-amz-target",
+              "AWSCognitoIdentityProviderService.InitiateAuth",
+            )
+            .set("content-type", "application/x-amz-json-1.1")
+            .send(JSON.stringify(body));
+
+          expect(response.status).toEqual(400);
+          expect(response.body).toEqual({ __type: type, message });
+        },
+      );
+
       it("converts UnsupportedErrors from within a target route to a 400 error, which SDKs do not retry", async () => {
         const route = vi
           .fn()

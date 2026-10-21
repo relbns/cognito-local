@@ -1,0 +1,10 @@
+src/server/validation/cognitoIdpModel.generated.ts is derived from the Amazon Cognito Identity
+Provider service model in botocore 1.43.116 (botocore/data/cognito-idp/2016-04-18/service-2.json,
+https://github.com/boto/botocore), licensed under the Apache License, Version 2.0 (see LICENSE in
+this directory). The derived file keeps the operation input shapes and their constraints, and drops
+documentation, outputs and errors.
+
+The botocore NOTICE reads:
+
+Botocore
+Copyright 2012-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.

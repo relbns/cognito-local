@@ -5,6 +5,17 @@ The emulator answers 122 Cognito User Pools operations, the keys of
 `UnknownOperationException`, and an unsupported flow or challenge inside a known operation returns
 HTTP 400 `CognitoLocal#Unsupported`.
 
+Before an operation runs, its input is checked against the Cognito service model, as the service
+does. A missing required member, a length, pattern, enum or range violation returns HTTP 400
+`InvalidParameterException` with the service's message format, for example `1 validation error
+detected: Value null at 'clientId' failed to satisfy constraint: Member must not be null`. Values of
+sensitive members (passwords, tokens, client IDs) are left out of the message. A JSON value of the
+wrong type (a number where a string belongs) returns `SerializationException`. Members the model
+does not have are ignored. `ValidationConfig.Enabled: false` in `config.json`, or
+`COGNITO_LOCAL_VALIDATION=off`, turns the check off. The model is derived from botocore's
+`cognito-idp` service model (Apache-2.0, see [`licenses/cognito-idp-model`](../licenses/cognito-idp-model))
+by `npm run generate:validation-model`.
+
 Having a handler does not mean the operation behaves like AWS. Operations marked **stored only**
 save their input on the pool or user and return it; nothing else in the emulator reads it. Other
 simplifications are listed next to the operation. For the gaps that cut across operations, see

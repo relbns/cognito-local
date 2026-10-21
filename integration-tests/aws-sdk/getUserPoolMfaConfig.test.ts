@@ -11,7 +11,7 @@ describe(
         .createUserPool({
           PoolName: "pool",
           MfaConfiguration: "OPTIONAL",
-          SmsAuthenticationMessage: "hello, world!",
+          SmsAuthenticationMessage: "Your code is {####}",
         })
         .promise();
 
@@ -24,7 +24,7 @@ describe(
       expect(getResponse).toEqual({
         MfaConfiguration: "OPTIONAL",
         SmsMfaConfiguration: {
-          SmsAuthenticationMessage: "hello, world!",
+          SmsAuthenticationMessage: "Your code is {####}",
         },
         SoftwareTokenMfaConfiguration: {
           Enabled: false,

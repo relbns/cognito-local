@@ -163,4 +163,14 @@ describe("DefaultConfig", () => {
     expect(config.ServerConfig.hostname).toBe(host);
     expect(config.TokenConfig.IssuerDomain).toBe(issuer);
   });
+
+  it("validates requests unless COGNITO_LOCAL_VALIDATION turns it off", async () => {
+    expect(DefaultConfig.ValidationConfig.Enabled).toBe(true);
+
+    vi.stubEnv("COGNITO_LOCAL_VALIDATION", "off");
+    vi.resetModules();
+    const { DefaultConfig: config } = await import("./config");
+
+    expect(config.ValidationConfig.Enabled).toBe(false);
+  });
 });

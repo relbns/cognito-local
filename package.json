@@ -15,7 +15,8 @@
   "types": "lib/index.d.ts",
   "files": [
     "lib",
-    "examples"
+    "examples",
+    "licenses"
   ],
   "scripts": {
     "build": "rm -rf lib && tsc --emitDeclarationOnly --project tsconfig.build.json && esbuild $(find src -name '*.ts' ! -name '*.test.ts' ! -path '*/__tests__/*') --outdir=lib --platform=node --target=node22 --format=cjs && cp -r src/keys lib/keys",
@@ -26,6 +27,7 @@
     "test": "vitest",
     "type-check": "tsc --target es2019 --esModuleInterop --resolveJsonModule --noEmit",
     "check:vendor-terms": "node scripts/check-no-vendor-terms.mjs",
+    "generate:validation-model": "node scripts/generate-validation-model.mjs",
     "semantic-release": "semantic-release",
     "prepare": "node scripts/prepare.js",
     "cli": "tsx src/bin/cli.ts"

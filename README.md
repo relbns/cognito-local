@@ -407,6 +407,7 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `COGNITO_LOCAL_DATA_DIR`         | `.cognito`                 | Data directory (`--data`)                                                                |
 | `COGNITO_LOCAL_SEED`             | none                       | Seed file applied at startup (`--seed`)                                                  |
 | `COGNITO_LOCAL_ADMIN_UI`         | on                         | `false`, `0` or `off` disables the admin UI and its API (`--no-admin`)                   |
+| `COGNITO_LOCAL_VALIDATION`       | on                         | `false`, `0` or `off` stops checking requests against the API model                      |
 | `CODE`                           | random                     | Fixed code for confirmation, forgot-password, MFA and temporary passwords                |
 | `SMTP_HOST`, `SMTP_PORT`         | unset, `1025`              | Send emails to an SMTP server (for example a local mail catcher) instead of logging them |
 | `DEBUG`                          | unset                      | Verbose logging                                                                          |
@@ -425,6 +426,7 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `TokenConfig.Verify`                         | `true`                 | Verify access and refresh tokens as Cognito does; `false` decodes access tokens unchecked: see [docs/tokens.md](docs/tokens.md)                                                              |
 | `TokenConfig.CheckSecretHash`                | `true`                 | Require `SECRET_HASH` / `SecretHash` / `ClientSecret` from clients with a secret                                                                                                             |
 | `PasswordPolicyConfig.Enforce`               | `true`                 | Enforce each pool's `PasswordPolicy` (the AWS default when unset)                                                                                                                            |
+| `ValidationConfig.Enabled`                   | `true`                 | Check every request against the operation's input model (required members, types, length, pattern, enum, range) before it runs, as Cognito does                                              |
 | `AuthSessionConfig.AuthSessionValidity`      | `3`                    | Minutes a CUSTOM_AUTH `Session` stays valid when the client sets no `AuthSessionValidity`                                                                                                    |
 | `AdminUIConfig.Enabled`                      | `true`                 | Serve the admin UI at `/_admin` and record codes                                                                                                                                             |
 | `AdminUIConfig.CodeLogSize`                  | `100`                  | How many recent codes the admin UI keeps                                                                                                                                                     |
@@ -464,8 +466,6 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
 - Some operations only store their input: user import jobs import nothing, and risk, log delivery,
   branding and terms settings have no effect.
-- Request parameters are not validated against the API model, so a missing parameter may give a
-  different error than `InvalidParameterException`.
 - The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
   for a new password and for SMS or TOTP MFA codes, and runs PostAuthentication, but has no sign-up,
   forgot-password or MFA setup pages.
@@ -480,6 +480,7 @@ Each row below has a switch that restores upstream's lenient behaviour:
 | Access and refresh tokens verified (signature, issuer, expiry, user, revocation) | `TokenConfig.Verify: false`                    |
 | `SECRET_HASH` required from clients with a secret                                | `TokenConfig.CheckSecretHash: false`           |
 | Pool `PasswordPolicy` enforced                                                   | `PasswordPolicyConfig.Enforce: false`          |
+| Requests checked against the API model (`InvalidParameterException`)             | `ValidationConfig.Enabled: false`              |
 | Admin UI on, codes recorded                                                      | `AdminUIConfig.Enabled: false` or `--no-admin` |
 
 ### A default that differs from Cognito

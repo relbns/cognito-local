@@ -112,9 +112,12 @@ describe(
       ).rejects.toMatchObject({ code: "InvalidParameterException" });
     });
 
-    it.each(["1234", "abcdef"])(
-      "returns CodeMismatchException for malformed code %j",
-      async (code) => {
+    it.each([
+      ["1234", "Member must have length greater than or equal to 6"],
+      ["abcdef", "Member must satisfy regular expression pattern: [0-9]+"],
+    ])(
+      "rejects the malformed code %j before checking it",
+      async (code, constraint) => {
         const client = Cognito();
         const pool = await client
           .createUserPool({ PoolName: "test" })
@@ -160,7 +163,8 @@ describe(
             .verifySoftwareToken({ AccessToken: accessToken, UserCode: code })
             .promise(),
         ).rejects.toMatchObject({
-          code: "CodeMismatchException",
+          code: "InvalidParameterException",
+          message: `1 validation error detected: Value at 'userCode' failed to satisfy constraint: ${constraint}`,
           statusCode: 400,
         });
       },

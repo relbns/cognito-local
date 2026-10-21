@@ -27,7 +27,7 @@ describe(
             Description: "Description",
             GroupName: "abc",
             Precedence: 1,
-            RoleArn: "arn",
+            RoleArn: "arn:aws:iam::123456789012:role/GroupRole",
             UserPoolId: userPoolId,
           })
           .promise();
@@ -45,7 +45,7 @@ describe(
           GroupName: "abc",
           LastModifiedDate: roundedDate,
           Precedence: 1,
-          RoleArn: "arn",
+          RoleArn: "arn:aws:iam::123456789012:role/GroupRole",
           UserPoolId: userPoolId,
         });
       });

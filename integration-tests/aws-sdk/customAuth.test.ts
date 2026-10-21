@@ -204,7 +204,7 @@ describe(
         const clientId = await setup(Cognito());
 
         await expect(
-          answer(clientId, "not-a-session", "000001"),
+          answer(clientId, "not-a-session-issued-here", "000001"),
         ).rejects.toMatchObject({
           code: "NotAuthorizedException",
           message: "Invalid session for the user.",

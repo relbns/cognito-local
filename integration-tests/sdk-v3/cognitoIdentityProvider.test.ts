@@ -609,6 +609,19 @@ describe(
         });
       });
 
+      it("answers input that breaks the model with InvalidParameterException", async () => {
+        const { cognito, UserPoolId } = await setup();
+        const error = await cognito
+          .send(new ListUsersCommand({ UserPoolId, Limit: 100 }))
+          .catch((e) => e);
+
+        expect(error).toBeInstanceOf(InvalidParameterException);
+        expect(error.message).toBe(
+          "1 validation error detected: Value '100' at 'limit' failed to satisfy constraint: Member must have value less than or equal to 60",
+        );
+        expect(error.$metadata.attempts).toBe(1);
+      });
+
       describe("endpoint from the environment", () => {
         const saved = process.env.AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER;
         afterEach(() => {

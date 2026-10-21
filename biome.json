@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**/*.ts", "!lib"]
+    "includes": ["**/*.ts", "!lib", "!src/server/validation/*.generated.ts"]
   },
   "formatter": {
     "enabled": true,

@@ -29,6 +29,11 @@ export interface PasswordPolicyConfig {
   Enforce: boolean;
 }
 
+export interface ValidationConfig {
+  /** Check every request against the service's input model before the target runs. */
+  Enabled: boolean;
+}
+
 export interface FileTriggerConfig {
   /** How long a file: trigger may run before it fails, like a Lambda timeout. */
   TimeoutMs: number;
@@ -52,6 +57,7 @@ export interface Config {
   AuthSessionConfig: AuthSessionConfig;
   AdminUIConfig: AdminUIConfig;
   PasswordPolicyConfig: PasswordPolicyConfig;
+  ValidationConfig: ValidationConfig;
   FileTriggerConfig: FileTriggerConfig;
 }
 
@@ -59,9 +65,9 @@ const port = parseInt(process.env.PORT ?? "9229", 10);
 const hostname = process.env.HOST ?? "localhost";
 const issuerHostFor = (host: string | undefined): string | undefined =>
   ["0.0.0.0", "::", "[::]"].includes(host ?? "") ? "localhost" : host;
-const adminUIEnabled = !["0", "false", "off"].includes(
-  (process.env.COGNITO_LOCAL_ADMIN_UI ?? "").toLowerCase(),
-);
+const isOff = (value: string | undefined): boolean =>
+  ["0", "false", "off"].includes((value ?? "").toLowerCase());
+const adminUIEnabled = !isOff(process.env.COGNITO_LOCAL_ADMIN_UI);
 
 export const DefaultConfig: Config = {
   LambdaClient: {
@@ -89,6 +95,9 @@ export const DefaultConfig: Config = {
   },
   PasswordPolicyConfig: {
     Enforce: true,
+  },
+  ValidationConfig: {
+    Enabled: !isOff(process.env.COGNITO_LOCAL_VALIDATION),
   },
   FileTriggerConfig: {
     TimeoutMs: DEFAULT_FILE_TRIGGER_TIMEOUT_MS,
