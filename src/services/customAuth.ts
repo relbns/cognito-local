@@ -8,6 +8,7 @@ import type { AppClient } from "./appClient";
 import type { AuthSessions, ChallengeResult } from "./authSessions";
 import type { Context } from "./context";
 import type { Services } from "./index";
+import { afterFirstFactor, type SignInServices } from "./signIn";
 import { withPasswordLockout } from "./signInLockout";
 import {
   startPasswordVerifier,
@@ -21,11 +22,7 @@ import {
 } from "./userExistence";
 import type { User, UserPoolService } from "./userPoolService";
 
-export type CustomAuthServices = Pick<
-  Services,
-  "authSessions" | "clock" | "srpSessions" | "tokenGenerator" | "triggers"
-> &
-  Partial<Pick<Services, "config">>;
+export type CustomAuthServices = SignInServices;
 
 export type CustomAuthResponse = Pick<
   InitiateAuthResponse,
@@ -42,6 +39,7 @@ interface CustomAuthRound {
   postAuthenticationClientMetadata?: Record<string, string>;
   /** The username matches no user; the triggers run with userNotFound and tokens are refused. */
   userNotFound?: boolean;
+  deviceKey?: string;
 }
 
 const triggerBase = (round: CustomAuthRound) => ({
@@ -54,34 +52,27 @@ const triggerBase = (round: CustomAuthRound) => ({
   ...(round.userNotFound ? { userNotFound: true } : {}),
 });
 
-const issueTokens = async (
+// Devices replace nothing here but still apply: a remembered DEVICE_KEY gets a final DEVICE_SRP_AUTH,
+// otherwise tokens and, when the pool tracks devices, NewDeviceMetadata (device tracking guide).
+const issueTokens = (
   ctx: Context,
   services: CustomAuthServices,
   round: CustomAuthRound,
-): Promise<CustomAuthResponse> => {
-  const { userPool, user, client } = round;
-  if (services.triggers.enabled("PostAuthentication", userPool.options.Id)) {
-    await services.triggers.postAuthentication(ctx, {
-      clientId: client.ClientId,
-      clientMetadata: round.postAuthenticationClientMetadata,
-      source: "PostAuthentication_Authentication",
-      userAttributes: user.Attributes,
-      username: user.Username,
-      userPoolId: userPool.options.Id,
-    });
-  }
-  const userGroups = await userPool.listUserGroupMembership(ctx, user);
-  const tokens = await services.tokenGenerator.generate(
+): Promise<CustomAuthResponse> =>
+  afterFirstFactor(
     ctx,
-    user,
-    userGroups,
-    client,
-    round.clientMetadata,
-    "Authentication",
+    services,
+    {
+      userPool: round.userPool,
+      client: round.client,
+      user: round.user,
+      deviceKey: round.deviceKey,
+      clientMetadata: round.clientMetadata,
+      postAuthenticationClientMetadata: round.postAuthenticationClientMetadata,
+      tokenClientMetadata: round.clientMetadata,
+    },
+    true,
   );
-  await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
-  return { ChallengeParameters: {}, AuthenticationResult: tokens };
-};
 
 const runCustomAuthRound = async (
   ctx: Context,
@@ -117,6 +108,7 @@ const runCustomAuthRound = async (
         srpA: round.srpA,
         pendingChallenge,
         ...(round.userNotFound ? { userNotFound: true } : {}),
+        ...(round.deviceKey ? { deviceKey: round.deviceKey } : {}),
       },
       round.client.AuthSessionValidity,
     );
@@ -213,6 +205,7 @@ export const startCustomAuth = async (
     srpA: authParameters?.SRP_A,
     clientMetadata,
     userNotFound,
+    deviceKey: authParameters?.DEVICE_KEY,
   });
 };
 
@@ -271,6 +264,7 @@ export const respondToCustomAuthChallenge = async (
     clientMetadata: clientMetadata ?? session.clientMetadata,
     postAuthenticationClientMetadata: clientMetadata,
     userNotFound,
+    deviceKey: session.deviceKey,
   };
 
   if (challengeName === "PASSWORD_VERIFIER") {

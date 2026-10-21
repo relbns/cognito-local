@@ -41,6 +41,8 @@ export interface AuthSession {
   signIn?: SignInState;
   /** A custom authentication session for a user who does not exist. */
   userNotFound?: boolean;
+  /** The DEVICE_KEY a custom authentication started with. */
+  deviceKey?: string;
 }
 
 export interface ActiveAuthSession {

@@ -2,6 +2,7 @@ import type { CognitoIdentityServiceProvider } from "aws-sdk";
 import { describe, expect, it } from "vitest";
 import { ClockFake } from "../../src/__tests__/clockFake";
 import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
+import { deviceSecret, deviceSrpClient } from "../../src/__tests__/srpClient";
 import { LambdaService } from "../../src/services";
 import { withCognitoSdk } from "./setup";
 
@@ -113,6 +114,109 @@ describe(
             ChallengeResponses: { USERNAME: "otp-user", ANSWER },
           })
           .promise();
+
+      it("issues NewDeviceMetadata, then ends with DEVICE_SRP_AUTH on a remembered device", async () => {
+        const client = Cognito();
+        invocations.length = 0;
+        const pool = await client
+          .createUserPool({
+            PoolName: "devices",
+            DeviceConfiguration: {
+              ChallengeRequiredOnNewDevice: false,
+              DeviceOnlyRememberedOnUserPrompt: true,
+            },
+          })
+          .promise();
+        const userPoolId = pool.UserPool?.Id as string;
+        const upc = await client
+          .createUserPoolClient({ UserPoolId: userPoolId, ClientName: "test" })
+          .promise();
+        const clientId = upc.UserPoolClient?.ClientId as string;
+        await client
+          .adminCreateUser({
+            UserPoolId: userPoolId,
+            Username: "otp-user",
+            MessageAction: "SUPPRESS",
+          })
+          .promise();
+
+        const first = await answer(
+          clientId,
+          (await start(clientId)).Session as string,
+          lastCode(),
+        );
+        const metadata = first.AuthenticationResult?.NewDeviceMetadata;
+        expect(metadata?.DeviceKey).toEqual(expect.any(String));
+        const DeviceKey = metadata?.DeviceKey as string;
+        const DeviceGroupKey = metadata?.DeviceGroupKey as string;
+        const secret = deviceSecret(DeviceGroupKey, DeviceKey);
+        const accessToken = first.AuthenticationResult?.AccessToken as string;
+        await client
+          .confirmDevice({
+            AccessToken: accessToken,
+            DeviceKey,
+            DeviceSecretVerifierConfig: secret.verifierConfig,
+          })
+          .promise();
+        await client
+          .updateDeviceStatus({
+            AccessToken: accessToken,
+            DeviceKey,
+            DeviceRememberedStatus: "remembered",
+          })
+          .promise();
+
+        const challenge = await client
+          .initiateAuth({
+            ClientId: clientId,
+            AuthFlow: "CUSTOM_AUTH",
+            AuthParameters: { USERNAME: "otp-user", DEVICE_KEY: DeviceKey },
+          })
+          .promise();
+        const deviceChallenge = await answer(
+          clientId,
+          challenge.Session as string,
+          lastCode(),
+        );
+        expect(deviceChallenge.ChallengeName).toEqual("DEVICE_SRP_AUTH");
+        expect(deviceChallenge.AuthenticationResult).toBeUndefined();
+
+        const device = deviceSrpClient(
+          "otp-user",
+          DeviceGroupKey,
+          DeviceKey,
+          secret.devicePassword,
+        );
+        const verifier = await client
+          .respondToAuthChallenge({
+            ClientId: clientId,
+            ChallengeName: "DEVICE_SRP_AUTH",
+            Session: deviceChallenge.Session,
+            ChallengeResponses: {
+              USERNAME: "otp-user",
+              DEVICE_KEY: DeviceKey,
+              SRP_A: device.srpA,
+            },
+          })
+          .promise();
+        expect(verifier.ChallengeName).toEqual("DEVICE_PASSWORD_VERIFIER");
+        const signedIn = await client
+          .respondToAuthChallenge({
+            ClientId: clientId,
+            ChallengeName: "DEVICE_PASSWORD_VERIFIER",
+            Session: verifier.Session,
+            ChallengeResponses: device.respond(
+              verifier.ChallengeParameters ?? {},
+            ),
+          })
+          .promise();
+        expect(signedIn.AuthenticationResult?.AccessToken).toEqual(
+          expect.any(String),
+        );
+        expect(
+          signedIn.AuthenticationResult?.NewDeviceMetadata,
+        ).toBeUndefined();
+      });
 
       it("issues tokens for the correct answer and passes privateChallengeParameters to Verify", async () => {
         const clientId = await setup(Cognito());

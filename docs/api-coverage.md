@@ -262,7 +262,7 @@ AdminUpdateDeviceStatus, ListDevices, AdminListDevices.
 A pool tracks devices when its `DeviceConfiguration` sets `ChallengeRequiredOnNewDevice` or
 `DeviceOnlyRememberedOnUserPrompt`. Then:
 
-- Every sign-in without a `DEVICE_KEY` (password, SRP, choice-based and MFA flows) returns
+- Every sign-in without a `DEVICE_KEY` (password, SRP, choice-based, custom and MFA flows) returns
   `NewDeviceMetadata` with a `DeviceKey` of the form `<region>_<uuid>` and the user's
   `DeviceGroupKey`.
 - ConfirmDevice accepts only a key issued to that user (otherwise `ResourceNotFoundException`, "Device
@@ -276,6 +276,10 @@ A pool tracks devices when its `DeviceConfiguration` sets `ChallengeRequiredOnNe
   Tokens then come from the `TokenGeneration_AuthenticateDevice` source. A confirmed device that is
   not remembered signs in with MFA as usual, and a `DEVICE_KEY` the user does not have returns
   `ResourceNotFoundException`.
+- `CUSTOM_AUTH` with the `DEVICE_KEY` of a remembered device ends with a `DEVICE_SRP_AUTH`
+  challenge once DefineAuthChallenge issues tokens, as the
+  [device tracking guide](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-device-tracking.html)
+  describes.
 - The device operations return `DeviceAttributes` `device_status`, `device_name` and
   `dev:device_remembered_status`. List and get show confirmed devices only.
 

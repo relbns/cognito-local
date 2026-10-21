@@ -502,7 +502,6 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
   use the mock page too unless `FederationConfig.Mode` is `real`: see
   [docs/federation.md](docs/federation.md#real-providers).
 - The managed login prompt to add a passkey right after sign-up.
-- Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no
   effect.
 - The built-in login page and its sign-up, confirm, forgot-password and MFA setup pages are plain
