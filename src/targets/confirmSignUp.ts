@@ -11,6 +11,12 @@ import {
 import type { Services } from "../services";
 import { enforceAliasUniqueness } from "../services/aliases";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
+import {
+  consumeSignUpSession,
+  createSignUpSession,
+  SIGN_UP_CONFIRMED_STEP,
+  userAuthAllowed,
+} from "../services/signUpSession";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
   preventsUserExistenceErrors,
@@ -31,10 +37,9 @@ export const ConfirmSignUp =
     clock,
     triggers,
     tokenVerifier,
-  }: Pick<
-    Services,
-    "clock" | "cognito" | "tokenVerifier" | "triggers"
-  >): ConfirmSignUpTarget =>
+    authSessions,
+  }: Pick<Services, "clock" | "cognito" | "tokenVerifier" | "triggers"> &
+    Partial<Pick<Services, "authSessions">>): ConfirmSignUpTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
     const client = await verifyRequestSecretHash(
@@ -111,5 +116,21 @@ export const ConfirmSignUp =
       });
     }
 
-    return {};
+    if (!authSessions || !client || !userAuthAllowed(client)) {
+      return {};
+    }
+    consumeSignUpSession(
+      authSessions,
+      req.Session,
+      client,
+      updatedUser.Username,
+    );
+    return {
+      Session: createSignUpSession(
+        authSessions,
+        client,
+        updatedUser.Username,
+        SIGN_UP_CONFIRMED_STEP,
+      ),
+    };
   };

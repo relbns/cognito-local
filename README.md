@@ -501,7 +501,6 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - SAML providers are a mock page, with no SAML request or assertion. OIDC and social providers
   use the mock page too unless `FederationConfig.Mode` is `real`: see
   [docs/federation.md](docs/federation.md#real-providers).
-- The `SESSION` parameter of the `USER_AUTH` flow that signs a user in after ConfirmSignUp.
 - The managed login prompt to add a passkey right after sign-up.
 - Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no

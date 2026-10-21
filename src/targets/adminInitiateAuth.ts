@@ -20,6 +20,7 @@ import { startCustomAuth } from "../services/customAuth";
 import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
 import {
+  afterFirstFactor,
   afterPassword,
   assertUserAuthAllowed,
   passwordVerifierChallenge,
@@ -29,6 +30,7 @@ import {
   startUserAuth,
 } from "../services/signIn";
 import { checkPassword } from "../services/signInLockout";
+import { takeSignUpConfirmedSession } from "../services/signUpSession";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import {
@@ -338,6 +340,20 @@ const userAuthFlow = async (
   }
   if (user.UserStatus === "UNCONFIRMED") {
     throw new UserNotConfirmedException();
+  }
+
+  if (req.Session) {
+    // The code ConfirmSignUp accepted is the first factor (InitiateAuth Session parameter).
+    takeSignUpConfirmedSession(
+      services.authSessions,
+      req.Session,
+      userPoolClient,
+      user.Username,
+    );
+    return afterFirstFactor(ctx, services, {
+      ...signInRound(req, userPool, userPoolClient, user),
+      deviceKey: req.AuthParameters.DEVICE_KEY,
+    });
   }
 
   return startUserAuth(

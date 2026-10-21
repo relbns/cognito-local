@@ -99,8 +99,6 @@ The untested SDKs use the same protocol and are expected to work. Report what br
 
 These apply to every SDK, since they are server behaviour:
 
-- **`USER_AUTH` does not take the `SESSION` parameter** that signs a user in after ConfirmSignUp.
-  `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP` and `WEB_AUTHN` work.
 - **`CUSTOM_AUTH` ignores devices.** It returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - **The default pool uses email as the username** (`UserPoolDefaults.UsernameAttributes:
   ["email"]`), where Cognito defaults to free-form usernames. Pass `UsernameAttributes: []` to

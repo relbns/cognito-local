@@ -15,6 +15,11 @@ import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
+import {
+  createSignUpSession,
+  SIGN_UP_STEP,
+  userAuthAllowed,
+} from "../services/signUpSession";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
   assertNoDeveloperOnlyAttributes,
@@ -37,7 +42,8 @@ type SignUpServices = Pick<
   | "otp"
   | "tokenVerifier"
   | "triggers"
->;
+> &
+  Partial<Pick<Services, "authSessions">>;
 
 const deliverWelcomeMessage = async (
   ctx: Context,
@@ -101,13 +107,14 @@ export const SignUp =
     triggers,
     config,
     tokenVerifier,
+    authSessions,
   }: SignUpServices): SignUpTarget =>
   async (ctx, req) => {
     // TODO: This should behave differently depending on if PreventUserExistenceErrors
     // is enabled on the updatedUser pool. This will be the default after Feb 2020.
     // See: https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-managing-errors.html
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
-    await verifyRequestSecretHash(
+    const client = await verifyRequestSecretHash(
       ctx,
       { cognito, tokenVerifier },
       req.ClientId,
@@ -325,5 +332,15 @@ export const SignUp =
       CodeDeliveryDetails: deliveryDetails ?? undefined,
       UserConfirmed: updatedUser.UserStatus === "CONFIRMED",
       UserSub: sub,
+      ...(authSessions && client && userAuthAllowed(client)
+        ? {
+            Session: createSignUpSession(
+              authSessions,
+              client,
+              username,
+              SIGN_UP_STEP,
+            ),
+          }
+        : {}),
     };
   };
