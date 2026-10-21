@@ -5,12 +5,14 @@ import {
   AdminInitiateAuthCommand,
   AdminListDevicesCommand,
   AdminSetUserPasswordCommand,
+  AdminUpdateDeviceStatusCommand,
   AssociateSoftwareTokenCommand,
   CognitoIdentityProviderClient,
   ConfirmDeviceCommand,
   CreateUserPoolClientCommand,
   CreateUserPoolCommand,
   type CreateUserPoolCommandInput,
+  ForgetDeviceCommand,
   GetDeviceCommand,
   GetUserCommand,
   InitiateAuthCommand,
@@ -21,6 +23,7 @@ import {
   RespondToAuthChallengeCommand,
   SetUserPoolMfaConfigCommand,
   UpdateDeviceStatusCommand,
+  UserNotFoundException,
   VerifySoftwareTokenCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
@@ -416,6 +419,63 @@ describe(
         await expect(
           cognito.send(new GetDeviceCommand({ AccessToken, DeviceKey })),
         ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      });
+
+      it("lets an admin set the remembered status and the user forget the device", async () => {
+        const cognito = newClient(serverUrl());
+        const { userPoolId, clientId } = await setUp(cognito, devicePool);
+        const signedIn = await cognito.send(
+          new InitiateAuthCommand({
+            AuthFlow: "USER_PASSWORD_AUTH",
+            ClientId: clientId,
+            AuthParameters: { USERNAME: "flow-user", PASSWORD },
+          }),
+        );
+        const metadata = signedIn.AuthenticationResult?.NewDeviceMetadata;
+        const AccessToken = signedIn.AuthenticationResult?.AccessToken;
+        const DeviceKey = metadata?.DeviceKey as string;
+        await cognito.send(
+          new ConfirmDeviceCommand({
+            AccessToken,
+            DeviceKey,
+            DeviceSecretVerifierConfig: deviceSecret(
+              metadata?.DeviceGroupKey as string,
+              DeviceKey,
+            ).verifierConfig,
+          }),
+        );
+
+        await cognito.send(
+          new AdminUpdateDeviceStatusCommand({
+            UserPoolId: userPoolId,
+            Username: "flow-user",
+            DeviceKey,
+            DeviceRememberedStatus: "remembered",
+          }),
+        );
+        const remembered = await cognito.send(
+          new GetDeviceCommand({ AccessToken, DeviceKey }),
+        );
+        expect(remembered.Device?.DeviceAttributes).toContainEqual({
+          Name: "dev:device_remembered_status",
+          Value: "remembered",
+        });
+        await expect(
+          cognito.send(
+            new AdminUpdateDeviceStatusCommand({
+              UserPoolId: userPoolId,
+              Username: "nobody",
+              DeviceKey,
+              DeviceRememberedStatus: "not_remembered",
+            }),
+          ),
+        ).rejects.toBeInstanceOf(UserNotFoundException);
+
+        await cognito.send(new ForgetDeviceCommand({ AccessToken, DeviceKey }));
+        const listed = await cognito.send(
+          new ListDevicesCommand({ AccessToken }),
+        );
+        expect(listed.Devices).toEqual([]);
       });
 
       it("replaces TOTP with DEVICE_SRP_AUTH on a remembered device", async () => {

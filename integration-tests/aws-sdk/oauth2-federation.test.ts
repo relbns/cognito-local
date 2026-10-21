@@ -294,6 +294,128 @@ describe(
       expect(users.Users!.map((u) => u.Username)).toEqual(["jane"]);
     });
 
+    it("unlinks with AdminDisableProviderForUser, so the next sign-in creates the federated user", async () => {
+      const client = Cognito();
+      const app = await setupPool(client);
+      await client
+        .adminCreateUser({
+          UserPoolId: app.userPoolId,
+          Username: "jane",
+          UserAttributes: [{ Name: "email", Value: "jane@corp.example" }],
+          MessageAction: "SUPPRESS",
+        })
+        .promise();
+      for (const [ProviderName, ProviderAttributeValue] of [
+        ["Google", "777"],
+        ["ExampleOIDC", "oidc-1"],
+      ]) {
+        await client
+          .adminLinkProviderForUser({
+            UserPoolId: app.userPoolId,
+            DestinationUser: {
+              ProviderName: "Cognito",
+              ProviderAttributeValue: "jane",
+            },
+            SourceUser: {
+              ProviderName,
+              ProviderAttributeName: "Cognito_Subject",
+              ProviderAttributeValue,
+            },
+          })
+          .promise();
+      }
+
+      await client
+        .adminDisableProviderForUser({
+          UserPoolId: app.userPoolId,
+          User: {
+            ProviderName: "Google",
+            ProviderAttributeName: "Cognito_Subject",
+            ProviderAttributeValue: "777",
+          },
+        })
+        .promise();
+
+      const jane = await client
+        .adminGetUser({ UserPoolId: app.userPoolId, Username: "jane" })
+        .promise();
+      const identities = JSON.parse(
+        jane.UserAttributes!.find((a) => a.Name === "identities")!.Value!,
+      );
+      expect(identities).toEqual([
+        expect.objectContaining({
+          providerName: "ExampleOIDC",
+          userId: "oidc-1",
+        }),
+      ]);
+      const idToken = await exchange(
+        serverUrl(),
+        app,
+        (
+          await federatedSignIn(
+            serverUrl(),
+            hostedUiAuthorizeUrl(serverUrl(), app.clientId, "Google"),
+            "777",
+            GOOGLE_CLAIMS,
+          )
+        ).searchParams.get("code")!,
+      );
+      expect(idToken["cognito:username"]).toBe("Google_777");
+      await expect(
+        client
+          .adminDisableProviderForUser({
+            UserPoolId: app.userPoolId,
+            User: {
+              ProviderName: "Google",
+              ProviderAttributeName: "Cognito_Subject",
+              ProviderAttributeValue: "999",
+            },
+          })
+          .promise(),
+      ).rejects.toMatchObject({ code: "UserNotFoundException" });
+    });
+
+    it("clears the identities attribute when the last link is removed", async () => {
+      const client = Cognito();
+      const app = await setupPool(client);
+      await client
+        .adminCreateUser({
+          UserPoolId: app.userPoolId,
+          Username: "jane",
+          MessageAction: "SUPPRESS",
+        })
+        .promise();
+      const google = {
+        ProviderName: "Google",
+        ProviderAttributeName: "Cognito_Subject",
+        ProviderAttributeValue: "777",
+      };
+      await client
+        .adminLinkProviderForUser({
+          UserPoolId: app.userPoolId,
+          DestinationUser: {
+            ProviderName: "Cognito",
+            ProviderAttributeValue: "jane",
+          },
+          SourceUser: google,
+        })
+        .promise();
+
+      await client
+        .adminDisableProviderForUser({
+          UserPoolId: app.userPoolId,
+          User: google,
+        })
+        .promise();
+
+      const jane = await client
+        .adminGetUser({ UserPoolId: app.userPoolId, Username: "jane" })
+        .promise();
+      expect(
+        jane.UserAttributes!.find((a) => a.Name === "identities")?.Value ?? "",
+      ).toBe("");
+    });
+
     it("resolves an OIDC IdP by idp_identifier and records its issuer", async () => {
       const client = Cognito();
       const app = await setupPool(client);

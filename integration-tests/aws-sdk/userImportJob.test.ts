@@ -228,6 +228,35 @@ describe(
       ).rejects.toMatchObject({ code: "InvalidParameterException" });
     });
 
+    it("stops a job that has not finished, and only once", async () => {
+      const { client, UserPoolId } = await setup();
+      const job = await createJob(client, UserPoolId);
+
+      const stopped = await client
+        .stopUserImportJob({ UserPoolId, JobId: job.JobId! })
+        .promise();
+
+      expect(stopped.UserImportJob).toMatchObject({
+        JobId: job.JobId,
+        Status: "Stopped",
+        CompletionDate: expect.any(Date),
+      });
+      await expect(
+        client.stopUserImportJob({ UserPoolId, JobId: job.JobId! }).promise(),
+      ).rejects.toMatchObject({
+        code: "InvalidParameterException",
+        message: `User import job ${job.JobId} is Stopped and cannot be stopped.`,
+      });
+      await expect(
+        client
+          .stopUserImportJob({
+            UserPoolId,
+            JobId: "import-0000000000000000000000",
+          })
+          .promise(),
+      ).rejects.toMatchObject({ code: "ResourceNotFoundException" });
+    });
+
     it("refuses an upload with a wrong signature or after the job started", async () => {
       const { client, UserPoolId } = await setup();
       const job = await createJob(client, UserPoolId);

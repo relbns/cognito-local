@@ -255,4 +255,43 @@ describe("messages service", () => {
       },
     );
   });
+
+  it("tells CustomMessage that an admin operation has no app client", async () => {
+    mockTriggers.enabled.mockImplementation((name) => name === "CustomMessage");
+    mockTriggers.customMessage.mockResolvedValue({
+      emailSubject: "Your invitation",
+      emailMessage: "Sign in with {username} and {####}",
+      smsMessage: "Sign in with {username} and {####}",
+    });
+
+    await new MessagesService(mockTriggers, mockMessageDelivery).deliver(
+      TestContext,
+      "AdminCreateUser",
+      null,
+      "userPoolId",
+      user,
+      "Temp-Passw0rd",
+      undefined,
+      deliveryDetails,
+    );
+
+    expect(mockTriggers.customMessage).toHaveBeenCalledWith(
+      TestContext,
+      expect.objectContaining({
+        clientId: "CLIENT_ID_NOT_APPLICABLE",
+        source: "CustomMessage_AdminCreateUser",
+      }),
+    );
+    expect(mockMessageDelivery.deliver).toHaveBeenCalledWith(
+      TestContext,
+      user,
+      deliveryDetails,
+      {
+        __code: "Temp-Passw0rd",
+        emailSubject: "Your invitation",
+        emailMessage: "Sign in with {username} and {####}",
+        smsMessage: "Sign in with {username} and {####}",
+      },
+    );
+  });
 });

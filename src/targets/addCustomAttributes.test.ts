@@ -67,6 +67,29 @@ describe("AddCustomAttributes target", () => {
     );
   });
 
+  it.each([
+    [0, "valid min length: 1"],
+    [26, "valid max length: 25"],
+  ])("refuses a list of %i attributes", async (count, limit) => {
+    mockCognitoService.getUserPool.mockResolvedValue(
+      newMockUserPoolService(TDB.userPool()),
+    );
+
+    await expect(
+      addCustomAttributes(TestContext, {
+        UserPoolId: "test",
+        CustomAttributes: Array.from({ length: count }, (_, i) => ({
+          AttributeDataType: "String",
+          Name: `attr${i}`,
+        })),
+      }),
+    ).rejects.toEqual(
+      new InvalidParameterError(
+        `Invalid length for parameter CustomAttributes, value: ${count}, ${limit}`,
+      ),
+    );
+  });
+
   it("can create a custom attribute with no name", async () => {
     const userPool = TDB.userPool();
     const mockUserPoolService = newMockUserPoolService(userPool);
