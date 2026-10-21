@@ -338,6 +338,31 @@ describe(
         await expectRefreshKeepsChange(sdk, clientId, tokens.refresh_token);
       });
 
+      it.each(["code", "token"] as const)(
+        "the hosted login (%s) runs PostAuthentication and keeps its change",
+        async (responseType) => {
+          const { userPoolId, clientId } = await setupPool(sdk);
+          await setPermanentPassword(sdk, userPoolId);
+          changingTrigger = "PostAuthentication";
+
+          const redirect = await hostedLogin(
+            serverUrl(),
+            clientId,
+            responseType,
+          );
+
+          expect(await emailVerified(sdk, userPoolId, "jane")).toBe("true");
+          if (responseType === "token") {
+            const idToken = new URLSearchParams(redirect.hash.slice(1)).get(
+              "id_token",
+            ) as string;
+            expect(
+              (jwt.decode(idToken) as Record<string, unknown>).email_verified,
+            ).toBe(true);
+          }
+        },
+      );
+
       it("the hosted login implicit grant keeps a PreTokenGeneration change", async () => {
         const { userPoolId, clientId } = await setupPool(sdk);
         await setPermanentPassword(sdk, userPoolId);

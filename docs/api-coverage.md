@@ -189,9 +189,22 @@ ListUserPoolClientSecrets return everything in one response.
 | `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`. |
 | `/oauth2/idpresponse` | GET, POST | Return leg of a federated sign-in. |
 
-The built-in login form checks the password and refuses an unconfirmed user, and nothing more. It
-does not refuse a disabled user or a user in `FORCE_CHANGE_PASSWORD`, does not ask for MFA, and does
-not run PostAuthentication.
+The built-in login form checks the password, then follows the user's state:
+
+| User | What the form does |
+| --- | --- |
+| Unknown | Runs UserMigration when the pool has it, and signs in the user it returns. Otherwise shows `Incorrect username or password.` |
+| Disabled | Shows `User is disabled.` and issues nothing. A wrong password shows `Incorrect username or password.` first. |
+| `RESET_REQUIRED` | Shows `Password reset required for the user.` |
+| `UNCONFIRMED` | Shows `Incorrect username or password.` |
+| `FORCE_CHANGE_PASSWORD` | Asks for a new password, checks it against the pool password policy (unless `PasswordPolicyConfig.Enforce` is `false`), stores it and marks the user `CONFIRMED`. |
+| MFA required | Applies the InitiateAuth rule (pool MFA `ON`, or not `OFF` and the user has MFA). An SMS code goes to `phone_number` through message delivery and appears in the admin Codes viewer. A TOTP code is checked against the user's verified authenticator. A user with both methods and no preferred one chooses first. A user with no method set up is refused, since the form does not offer MFA setup. A wrong code shows `Invalid code or auth state for the user.` |
+
+A successful sign-in runs PostAuthentication (`PostAuthentication_Authentication`) and issues the code
+or tokens from the user as the trigger left it. The steps after the password are kept on the server
+under a random id that expires after 3 minutes, so the username, client, redirect URI, PKCE challenge,
+scope and state come from the server, not from the page. The form has no sign-up or forgot-password
+pages and does not run PreAuthentication.
 
 The emulator also serves `/mock-idp/{providerName}/authorize` (the [mock IdP](federation.md) form),
 `/health`, and the admin UI and its API under `/_admin` (see [oauth-callback.md](oauth-callback.md)
@@ -206,9 +219,9 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | --- | --- |
 | PreSignUp | SignUp, and the first federated sign-in (`PreSignUp_ExternalProvider`) |
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
-| PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response or a federated provider. The built-in login form does not run it. |
+| PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
 | PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
-| UserMigration | Sign-in of an unknown user (`UserMigration_Authentication`) |
+| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`) |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA |
 | CustomEmailSender | Replaces message delivery for the same events except SMS MFA. The code is encrypted with the configured KMS key. |

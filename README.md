@@ -414,8 +414,9 @@ Not supported yet:
   branding and terms settings have no effect.
 - Request parameters are not validated against the API model, so a missing parameter may give a
   different error than `InvalidParameterException`.
-- The built-in login page is a plain form without Cognito's styling. It checks the password and refuses an
-  unconfirmed user, and nothing more: no MFA, no new-password step, no check that the user is enabled.
+- The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
+  for a new password and for SMS or TOTP MFA codes, and runs PostAuthentication, but has no sign-up,
+  forgot-password or MFA setup pages.
 - The admin UI has no authentication.
 
 Stricter than upstream cognito-local, and the switch that restores the lenient behaviour:

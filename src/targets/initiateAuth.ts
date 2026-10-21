@@ -15,6 +15,7 @@ import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
+import { enabledMfaMethods, isMfaRequired } from "../services/mfa";
 import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
 import { startPasswordVerifier } from "../services/srp";
@@ -113,30 +114,6 @@ const softwareTokenMfaChallenge = (user: User): InitiateAuthResponse => ({
   },
   Session: v4(),
 });
-
-const enabledMfaMethods = (
-  user: User,
-): readonly ("SMS_MFA" | "SOFTWARE_TOKEN_MFA")[] => {
-  const explicit = user.UserMFASettingList ?? [];
-  const legacy =
-    explicit.length === 0 &&
-    (user.MFAOptions ?? []).some((o) => o.DeliveryMedium === "SMS")
-      ? ["SMS_MFA"]
-      : [];
-  const methods = new Set<string>([...explicit, ...legacy]);
-
-  const result: ("SMS_MFA" | "SOFTWARE_TOKEN_MFA")[] = [];
-  if (methods.has("SMS_MFA")) result.push("SMS_MFA");
-  // Only advertise SOFTWARE_TOKEN_MFA if the user has completed TOTP
-  // registration; otherwise the challenge would always fail on response.
-  if (
-    methods.has("SOFTWARE_TOKEN_MFA") &&
-    user.SoftwareTokenMfaConfiguration?.Verified
-  ) {
-    result.push("SOFTWARE_TOKEN_MFA");
-  }
-  return result;
-};
 
 const verifyMfaChallenge = async (
   ctx: Context,
@@ -265,13 +242,7 @@ const userPasswordAuthFlow = async (
     throw new UserNotConfirmedException();
   }
 
-  const userHasMfa =
-    (user.MFAOptions ?? []).length > 0 ||
-    (user.UserMFASettingList ?? []).length > 0;
-  if (
-    userPool.options.MfaConfiguration === "ON" ||
-    (userPool.options.MfaConfiguration !== "OFF" && userHasMfa)
-  ) {
+  if (isMfaRequired(userPool.options, user)) {
     return verifyMfaChallenge(ctx, user, req, userPool, services);
   }
 
