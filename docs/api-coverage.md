@@ -162,7 +162,8 @@ CreateIdentityProvider, DescribeIdentityProvider, UpdateIdentityProvider, Delete
 ListIdentityProviders, GetIdentityProviderByIdentifier, AdminLinkProviderForUser,
 AdminDisableProviderForUser.
 
-Sign-in through a provider goes to the mock IdP page; see [federation.md](federation.md).
+Sign-in through a provider goes to the mock IdP page, or to the provider itself for OIDC and
+social providers when `FederationConfig.Mode` is `real`; see [federation.md](federation.md).
 AdminLinkProviderForUser and AdminDisableProviderForUser add and remove entries in the user's
 `identities` attribute.
 
@@ -273,7 +274,7 @@ ListUserPoolClientSecrets return everything in one response.
 
 | Endpoint | Method | Behaviour |
 | --- | --- | --- |
-| `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form, or issues the code at once when the browser has a session for the pool. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. `prompt=login` always shows the form, and `prompt=none` uses the session or redirects with `error=login_required`. |
+| `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form, or issues the code at once when the browser has a session for the pool. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP, or in [real mode](federation.md#real-providers) to the provider's authorize endpoint with `state`, `nonce` and PKCE kept server-side. `prompt=login` always shows the form, and `prompt=none` uses the session or redirects with `error=login_required`. |
 | `/login` | GET | The same as `/oauth2/authorize`; `/logout` sends the browser here. |
 | `/signup` | GET, POST | The sign-up page, linked from the login page. Answers HTTP 400 when the pool's `AllowAdminCreateUserOnly` is `true`. See [Hosted sign-up and password reset](#hosted-sign-up-and-password-reset). |
 | `/confirm` | GET, POST | The confirmation code page after sign-up. GET with `username` opens it for an existing unconfirmed user. |
@@ -286,7 +287,7 @@ ListUserPoolClientSecrets return everything in one response.
 | `/logout` | GET | Ends the browser session for the client's pool, then redirects to `logout_uri` when it is one of the client's `LogoutURLs`, or, with `redirect_uri` (one of the `CallbackURLs`) and `response_type`, to `/login` with `client_id`, `response_type`, `redirect_uri`, `state`, `scope` and `nonce`. `logout_uri` wins when both are sent. An unregistered URL answers HTTP 400 `redirect_mismatch` and keeps the session. |
 | `/{poolId}/.well-known/jwks.json` | GET | JSON Web Key Set. Every pool uses the same signing key. |
 | `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`, or on the request's scheme and `Host` header with `TokenConfig.IssuerFromRequest`. |
-| `/oauth2/idpresponse` | GET, POST | Return leg of a federated sign-in. |
+| `/oauth2/idpresponse` | GET, POST | Return leg of a federated sign-in. In real mode it exchanges the code at the provider's token endpoint (`client_secret_post`), checks the `id_token` (JWKS signature, `iss`, `aud`, `exp`, `nonce`), reads `attributes_url`, then signs the user in; failures redirect to `redirect_uri` with `error` and `error_description`. |
 
 The built-in login form checks the password, then follows the user's state:
 

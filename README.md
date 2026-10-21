@@ -324,7 +324,7 @@ tokens checked against the pool's JWKS. See [docs/oauth-callback.md](docs/oauth-
   <img src="docs/images/hosted-login.png" alt="Hosted login" width="520">
 </p>
 
-### Federated sign-in with the mock IdP
+### Federated sign-in
 
 Sign-in through Google, Facebook, Apple, Amazon, OIDC or SAML providers is emulated by a mock IdP
 page: `identity_provider=<name>` on `/oauth2/authorize` redirects to a form where you type the
@@ -332,6 +332,18 @@ federated subject and claims. `AttributeMapping`, `EXTERNAL_PROVIDER` users (`Go
 users, the `identities` claim and the triggers then behave as in Cognito.
 [`seed.federation.json`](examples/seed.federation.json) has a Google and a generic OIDC provider; start
 it and use `/_admin/callback` with identity provider `Google`. See [docs/federation.md](docs/federation.md).
+
+To sign in through a real OIDC provider (a local OIDC server, Google, Apple, Facebook or Amazon)
+instead, register `http://localhost:9229/oauth2/idpresponse` as a redirect URI at the provider, put
+its client in the IdP's `ProviderDetails`, and switch that provider to real mode in `config.json`:
+
+```json
+{ "FederationConfig": { "Providers": { "Google": { "Mode": "real" } } } }
+```
+
+The emulator then exchanges the code, checks the `id_token` against the provider's JWKS, reads
+userInfo and signs the user in with the same mapping, linking and triggers. SAML stays on the mock
+IdP. See [Real providers](docs/federation.md#real-providers).
 
 ### Seed files and export
 
@@ -437,6 +449,8 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `AdminUIConfig.Token`                        | unset                  | Require this token for `/_admin` and `/_admin/api/*`: see [Admin token](#admin-token)                                                                                                        |
 | `FileTriggerConfig.TimeoutMs`                | `5000`                 | How long a `file:` trigger may run                                                                                                                                                           |
 | `FileTriggerConfig.HotReload`                | `true`                 | Reload a `file:` trigger when the file changes                                                                                                                                               |
+| `FederationConfig.Mode`                      | `"mock"`               | `"real"` signs federated users in through the OIDC or social provider itself instead of the mock IdP page: see [docs/federation.md](docs/federation.md#real-providers)                     |
+| `FederationConfig.Providers.<name>.Mode`     | unset                  | `"mock"` or `"real"` for one `ProviderName`, over `FederationConfig.Mode`                                                                                                                    |
 | `TriggerFunctions`                           | `{}`                   | Triggers for every pool: Lambda names, or `file:` paths resolved against the data directory                                                                                                  |
 | `UserPoolDefaults.UsernameAttributes`        | `["email"]`            | Pools created without `UsernameAttributes` use email as the username; `[]` gives free-form usernames as in Cognito                                                                           |
 | `LambdaClient`, `KMSConfig`                  | local credentials      | AWS SDK v3 client options; v2 names are translated with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md)                                                                |
@@ -479,7 +493,9 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 
 ### Not supported yet
 
-- Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
+- SAML providers are a mock page, with no SAML request or assertion. OIDC and social providers
+  use the mock page too unless `FederationConfig.Mode` is `real`: see
+  [docs/federation.md](docs/federation.md#real-providers).
 - Passkey (`WEB_AUTHN`) sign-in in the `USER_AUTH` flow, and its `SESSION` parameter that signs a
   user in after ConfirmSignUp.
 - Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
