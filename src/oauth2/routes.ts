@@ -12,7 +12,16 @@ import { sendAuthorizationResponse } from "./authorizationResponse";
 import { type IdentityProviderConfig, identityProvidersOf } from "./federation";
 import { attachFederationRoutes, beginFederation } from "./federationRoutes";
 import { FederationStore } from "./federationStore";
-import { escapeHtml, hiddenInput } from "./html";
+import {
+  continueHostedLogin,
+  HOSTED_LOGIN_MESSAGES,
+  type HostedLoginContext,
+  type HostedLoginForm,
+  type HostedLoginOutcome,
+  signInWithPassword,
+} from "./hostedLogin";
+import { loginForm, noticePage, stepPage } from "./hostedLoginPages";
+import { HostedLoginStore } from "./hostedLoginStore";
 import {
   type AuthorizeParams,
   buildErrorRedirect,
@@ -24,28 +33,6 @@ import {
   parseScopes,
 } from "./oauthRequest";
 import { verifyS256 } from "./pkce";
-
-const LOGIN_FORM = (params: {
-  clientId: string;
-  redirectUri: string;
-  responseType: string;
-  codeChallenge: string | undefined;
-  codeChallengeMethod: string | undefined;
-  scope: string;
-  state: string;
-  error?: string;
-}) => `<!DOCTYPE html>
-<html>
-<head><title>Sign in</title></head>
-<body>
-${params.error ? `<p style="color:red">${escapeHtml(params.error)}</p>` : ""}
-<form method="POST" action="/oauth2/authorize">
-${hiddenInput("client_id", params.clientId)}${hiddenInput("redirect_uri", params.redirectUri)}${hiddenInput("response_type", params.responseType)}${hiddenInput("code_challenge", params.codeChallenge)}${hiddenInput("code_challenge_method", params.codeChallengeMethod)}${hiddenInput("scope", params.scope)}${hiddenInput("state", params.state)}  <label>Username: <input type="text" name="username" /></label><br />
-  <label>Password: <input type="password" name="password" /></label><br />
-  <button type="submit">Sign in</button>
-</form>
-</body>
-</html>`;
 
 function badRequest(res: Response, message: string) {
   res
@@ -101,8 +88,105 @@ export function attachOAuth2Routes(
   services: Services,
   codeStore: AuthorizationCodeStore,
   federationStore: FederationStore = new FederationStore(),
+  hostedLoginStore: HostedLoginStore = new HostedLoginStore(services.clock),
 ): void {
   attachFederationRoutes(app, services, codeStore, federationStore);
+
+  const sendHtml = (res: Response, status: number, html: string) =>
+    res.status(status).type("text/html").send(html);
+
+  const renderOutcome = (
+    ctx: Context,
+    res: Response,
+    login: HostedLoginContext,
+    outcome: HostedLoginOutcome,
+  ) => {
+    switch (outcome.kind) {
+      case "loginError":
+        return sendHtml(
+          res,
+          200,
+          loginForm({
+            clientId: login.appClient.ClientId,
+            redirectUri: login.redirectUri,
+            responseType: login.flow.responseType,
+            codeChallenge: login.flow.codeChallenge,
+            codeChallengeMethod: login.flow.codeChallengeMethod,
+            scope: login.scope,
+            state: login.state ?? "",
+            error: outcome.error,
+          }),
+        );
+      case "step":
+        return sendHtml(
+          res,
+          200,
+          stepPage(outcome.sessionId, outcome.step, outcome.error),
+        );
+      case "signedIn":
+        return sendAuthorizationResponse(ctx, res, services, codeStore, {
+          appClient: login.appClient,
+          userPool: login.userPool,
+          user: outcome.user,
+          redirectUri: login.redirectUri,
+          state: login.state,
+          flow: login.flow,
+        });
+    }
+  };
+
+  const formFields = (body: Record<string, unknown>): HostedLoginForm => {
+    const field = (name: string) =>
+      typeof body[name] === "string" ? body[name] : undefined;
+    return {
+      new_password: field("new_password"),
+      confirm_password: field("confirm_password"),
+      mfa_method: field("mfa_method"),
+      code: field("code"),
+    };
+  };
+
+  const continueLogin = async (
+    ctx: Context,
+    res: Response,
+    sessionId: string,
+    body: Record<string, unknown>,
+  ) => {
+    const expired = () =>
+      sendHtml(res, 400, noticePage(HOSTED_LOGIN_MESSAGES.sessionExpired));
+    const pending = hostedLoginStore.peek(sessionId);
+    if (!pending) return expired();
+    const appClient = await findAppClient(services, ctx, pending.clientId);
+    let userPool: Awaited<ReturnType<typeof services.cognito.getUserPool>>;
+    try {
+      userPool = await services.cognito.getUserPool(ctx, pending.userPoolId);
+    } catch {
+      hostedLoginStore.delete(sessionId);
+      return expired();
+    }
+    if (!appClient) {
+      hostedLoginStore.delete(sessionId);
+      return expired();
+    }
+    const login: HostedLoginContext = {
+      userPool,
+      appClient,
+      redirectUri: pending.redirectUri,
+      state: pending.state,
+      scope: pending.scope,
+      flow: pending.flow,
+    };
+    const outcome = await continueHostedLogin(
+      ctx,
+      services,
+      hostedLoginStore,
+      login,
+      sessionId,
+      pending,
+      formFields(body),
+    );
+    return renderOutcome(ctx, res, login, outcome);
+  };
 
   app.get("/oauth2/authorize", async (req: Request, res: Response) => {
     const params = req.query as AuthorizeParams;
@@ -150,7 +234,7 @@ export function attachOAuth2Routes(
           .status(200)
           .type("text/html")
           .send(
-            LOGIN_FORM({
+            loginForm({
               clientId: params.client_id ?? "",
               redirectUri: params.redirect_uri ?? "",
               responseType: decision.responseType,
@@ -167,9 +251,13 @@ export function attachOAuth2Routes(
     const body = req.body as AuthorizeParams & {
       username?: string;
       password?: string;
+      login_session?: unknown;
     };
-    const { client_id, redirect_uri, scope, state, username, password } = body;
     const ctx: Context = { logger: req.log };
+    if (typeof body.login_session === "string") {
+      return continueLogin(ctx, res, body.login_session, req.body);
+    }
+    const { client_id, redirect_uri, scope, state, username, password } = body;
 
     const appClient = await findAppClient(services, ctx, client_id);
     const decision = decideAuthorize(
@@ -205,39 +293,24 @@ export function attachOAuth2Routes(
       return badRequest(res, "Invalid client_id");
     }
 
-    const user = await userPool.getUserByUsername(ctx, username);
-
-    if (
-      !user ||
-      user.Password !== password ||
-      user.UserStatus === "UNCONFIRMED"
-    ) {
-      res
-        .status(200)
-        .type("text/html")
-        .send(
-          LOGIN_FORM({
-            clientId: client_id,
-            redirectUri: redirect_uri ?? "",
-            responseType: decision.responseType,
-            codeChallenge: decision.codeChallenge,
-            codeChallengeMethod: decision.codeChallengeMethod,
-            scope: scope ?? "",
-            state: state ?? "",
-            error: "Incorrect username or password.",
-          }),
-        );
-      return;
-    }
-
-    return sendAuthorizationResponse(ctx, res, services, codeStore, {
-      appClient,
+    const { kind: _, ...flow } = decision;
+    const login: HostedLoginContext = {
       userPool,
-      user,
+      appClient,
       redirectUri: redirect_uri ?? "",
       state,
-      flow: decision,
-    });
+      scope: scope ?? "",
+      flow,
+    };
+    const outcome = await signInWithPassword(
+      ctx,
+      services,
+      hostedLoginStore,
+      login,
+      username,
+      password,
+    );
+    return renderOutcome(ctx, res, login, outcome);
   });
 
   app.post("/oauth2/token", async (req: Request, res: Response) => {

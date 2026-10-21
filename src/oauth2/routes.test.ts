@@ -7,6 +7,7 @@ import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
+import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import * as TDB from "../__tests__/testDataBuilder";
 import { NotAuthorizedError } from "../errors";
@@ -46,6 +47,8 @@ const buildApp = (
       return { claims: { "cognito:username": user.Username }, user, userPool };
     },
   );
+  const triggers = newMockTriggers();
+  triggers.enabled.mockReturnValue(false);
   attachOAuth2Routes(
     app,
     {
@@ -53,6 +56,7 @@ const buildApp = (
       cognito,
       tokenGenerator,
       tokenVerifier,
+      triggers,
     } as any,
     codeStore,
   );
