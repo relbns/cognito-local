@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import supertest from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { localRequest } from "../__tests__/localRequest";
 import { MockLogger } from "../__tests__/mockLogger";
 import { TestContext } from "../__tests__/testContext";
 import { createDefaultServices } from "../server/defaults";
@@ -14,6 +14,8 @@ import { exportSeed } from "./export";
 import { loadSeedFile, parseSeed, relativizeSeedFileTargets } from "./load";
 import type { SeedFile } from "./types";
 import type { SeedValidationError } from "./validate";
+
+const request = localRequest();
 
 const EXAMPLES = path.resolve(__dirname, "../../examples");
 
@@ -496,7 +498,7 @@ describe("seed files", () => {
 
     it("applies a seed and exports it", async () => {
       const seed = basic();
-      const applied = await supertest(app())
+      const applied = await request(app())
         .post("/_admin/api/seed?source=test.json")
         .send(seed)
         .expect(200);
@@ -507,7 +509,7 @@ describe("seed files", () => {
       });
       expect(applied.body.lines[0]).toBe("created UserPool local_Example1");
 
-      const exported = await supertest(app())
+      const exported = await request(app())
         .get("/_admin/api/export?download=1")
         .expect(200);
       expect(exported.header["content-disposition"]).toContain(
@@ -515,14 +517,12 @@ describe("seed files", () => {
       );
       expect(exported.body.UserPools[0].Id).toBe("local_Example1");
 
-      const status = await supertest(app())
-        .get("/_admin/api/status")
-        .expect(200);
+      const status = await request(app()).get("/_admin/api/status").expect(200);
       expect(status.body).toMatchObject({ running: true, pools: 1 });
     });
 
     it("returns validation issues as 400", async () => {
-      const res = await supertest(app())
+      const res = await request(app())
         .post("/_admin/api/seed")
         .send({ UserPools: [{}] })
         .expect(400);
@@ -532,7 +532,7 @@ describe("seed files", () => {
     });
 
     it("links the export from the pools page", async () => {
-      const res = await supertest(app()).get("/_admin").expect(200);
+      const res = await request(app()).get("/_admin").expect(200);
       expect(res.text).toContain('href="/_admin/api/export?download=1"');
       expect(res.text).toContain("Export as seed");
     });

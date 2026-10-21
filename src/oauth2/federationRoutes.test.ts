@@ -1,8 +1,8 @@
 import bodyParser from "body-parser";
 import express from "express";
-import supertest from "supertest";
 import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
+import { localRequest } from "../__tests__/localRequest";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTriggers } from "../__tests__/mockTriggers";
@@ -13,6 +13,8 @@ import type { CognitoService, Triggers, UserPoolService } from "../services";
 import type { User } from "../services/userPoolService";
 import { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { attachOAuth2Routes } from "./routes";
+
+const request = localRequest();
 
 const CALLBACK = "http://localhost:9999/cb";
 
@@ -92,7 +94,7 @@ describe("federated sign-in through the mock IdP", () => {
   });
 
   async function startFlow(): Promise<{ stateId: string; page: string }> {
-    const authorize = await supertest(app).get("/oauth2/authorize").query({
+    const authorize = await request(app).get("/oauth2/authorize").query({
       identity_provider: "Google",
       redirect_uri: CALLBACK,
       response_type: "CODE",
@@ -108,13 +110,13 @@ describe("federated sign-in through the mock IdP", () => {
       /\/oauth2\/idpresponse$/,
     );
     const stateId = location.searchParams.get("state") ?? "";
-    const page = await supertest(app).get(location.pathname + location.search);
+    const page = await request(app).get(location.pathname + location.search);
     expect(page.status).toBe(200);
     return { stateId, page: page.text };
   }
 
   const respond = (fields: Record<string, string | string[]>) =>
-    supertest(app)
+    request(app)
       .post("/oauth2/idpresponse")
       .type("form")
       .send(
@@ -208,7 +210,7 @@ describe("federated sign-in through the mock IdP", () => {
     await respond({ state: stateId, subject: "1234" });
     const replay = await respond({ state: stateId, subject: "1234" });
     expect(replay.status).toBe(400);
-    const page = await supertest(app)
+    const page = await request(app)
       .get("/mock-idp/Google/authorize")
       .query({ state: stateId });
     expect(page.status).toBe(400);
@@ -216,7 +218,7 @@ describe("federated sign-in through the mock IdP", () => {
 
   it("accepts an OIDC-style error on GET /oauth2/idpresponse", async () => {
     const { stateId } = await startFlow();
-    const res = await supertest(app)
+    const res = await request(app)
       .get("/oauth2/idpresponse")
       .query({ state: stateId, error: "access_denied" });
     const location = new URL(res.header.location);

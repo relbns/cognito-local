@@ -76,8 +76,10 @@ describe("SDK v3 Lambda and KMS clients against a local endpoint", () => {
         res.end(JSON.stringify({ __type: "UnknownOperationException" }));
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, resolve));
-    endpoint = `http://localhost:${(server.address() as AddressInfo).port}`;
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
 
   afterAll(() => new Promise((resolve) => server.close(resolve)));

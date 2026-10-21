@@ -1,9 +1,10 @@
 import bodyParser from "body-parser";
 import express from "express";
-import supertest from "supertest";
+import type supertest from "supertest";
 import type { MockedObject } from "vitest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
+import { localRequest } from "../__tests__/localRequest";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
@@ -18,6 +19,8 @@ import type { User } from "../services/userPoolService";
 import { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { HostedLoginStore } from "./hostedLoginStore";
 import { attachOAuth2Routes } from "./routes";
+
+const request = localRequest();
 
 const CALLBACK = "http://localhost:9876/cb";
 const LOGOUT = "http://localhost:9876/bye";
@@ -67,13 +70,13 @@ describe("hosted login form", () => {
   };
 
   const login = (overrides: Record<string, string> = {}) =>
-    supertest(app)
+    request(app)
       .post("/oauth2/authorize")
       .type("form")
       .send({ ...loginForm, ...overrides });
 
   const submitStep = (fields: Record<string, string>) =>
-    supertest(app).post("/oauth2/authorize").type("form").send(fields);
+    request(app).post("/oauth2/authorize").type("form").send(fields);
 
   const expectCodeRedirect = (res: supertest.Response) => {
     expect(res.status).toBe(302);
@@ -188,7 +191,7 @@ describe("hosted login form", () => {
       extra: Record<string, string> = {},
       path = "/oauth2/authorize",
     ) => {
-      const req = supertest(app).get(path).query(authorizeQuery(extra));
+      const req = request(app).get(path).query(authorizeQuery(extra));
       return cookie ? req.set("Cookie", cookie) : req;
     };
 
@@ -283,7 +286,7 @@ describe("hosted login form", () => {
         cookie: string | undefined,
         query: Record<string, string>,
       ) => {
-        const req = supertest(app)
+        const req = request(app)
           .get("/logout")
           .query({ client_id: "client-1", ...query });
         return cookie ? req.set("Cookie", cookie) : req;

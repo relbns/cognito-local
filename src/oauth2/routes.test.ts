@@ -1,9 +1,9 @@
 import bodyParser from "body-parser";
 import express from "express";
-import supertest from "supertest";
 import type { MockedObject } from "vitest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
+import { localRequest } from "../__tests__/localRequest";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockTokenGenerator } from "../__tests__/mockTokenGenerator";
 import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
@@ -16,6 +16,8 @@ import type { TokenGenerator } from "../services/tokenGenerator";
 import { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { verifyS256 } from "./pkce";
 import { attachOAuth2Routes } from "./routes";
+
+const request = localRequest();
 
 const buildApp = (
   cognito: MockedObject<CognitoService>,
@@ -112,7 +114,7 @@ describe("OAuth2 routes", () => {
   describe("GET /oauth2/authorize", () => {
     it("returns 400 if client_id is missing", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).get("/oauth2/authorize").query({
+      const res = await request(app).get("/oauth2/authorize").query({
         redirect_uri: "http://localhost:9876",
         response_type: "code",
         code_challenge: "abc",
@@ -124,7 +126,7 @@ describe("OAuth2 routes", () => {
 
     it("redirects unauthorized_client when the client does not allow the implicit flow", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).get("/oauth2/authorize").query({
+      const res = await request(app).get("/oauth2/authorize").query({
         client_id: "test-client-id",
         redirect_uri: "http://localhost:9876",
         response_type: "token",
@@ -139,7 +141,7 @@ describe("OAuth2 routes", () => {
 
     it("redirects invalid_request if code_challenge_method is not S256", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).get("/oauth2/authorize").query({
+      const res = await request(app).get("/oauth2/authorize").query({
         client_id: "test-client-id",
         redirect_uri: "http://localhost:9876",
         response_type: "code",
@@ -155,7 +157,7 @@ describe("OAuth2 routes", () => {
 
     it("returns 400 if redirect_uri is not registered", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).get("/oauth2/authorize").query({
+      const res = await request(app).get("/oauth2/authorize").query({
         client_id: "test-client-id",
         redirect_uri: "http://evil.com/callback",
         response_type: "code",
@@ -168,7 +170,7 @@ describe("OAuth2 routes", () => {
     it("returns 400 if client_id does not exist", async () => {
       mockCognito.getAppClient.mockResolvedValue(null);
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).get("/oauth2/authorize").query({
+      const res = await request(app).get("/oauth2/authorize").query({
         client_id: "unknown-client",
         redirect_uri: "http://localhost:9876",
         response_type: "code",
@@ -180,7 +182,7 @@ describe("OAuth2 routes", () => {
 
     it("returns HTML login form for valid request", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).get("/oauth2/authorize").query({
+      const res = await request(app).get("/oauth2/authorize").query({
         client_id: "test-client-id",
         redirect_uri: "http://localhost:9876",
         response_type: "code",
@@ -214,7 +216,7 @@ describe("OAuth2 routes", () => {
 
     it("redirects with code and state on valid credentials", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send(validFormData);
@@ -232,7 +234,7 @@ describe("OAuth2 routes", () => {
         Password: "different-password",
       });
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send(validFormData);
@@ -243,7 +245,7 @@ describe("OAuth2 routes", () => {
     it("shows login form with error when user not found", async () => {
       mockUserPoolService.getUserByUsername.mockResolvedValue(null);
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send(validFormData);
@@ -257,7 +259,7 @@ describe("OAuth2 routes", () => {
         UserStatus: "UNCONFIRMED",
       });
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send(validFormData);
@@ -267,7 +269,7 @@ describe("OAuth2 routes", () => {
 
     it("returns 400 if redirect_uri not registered", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send({ ...validFormData, redirect_uri: "http://evil.com" });
@@ -296,7 +298,7 @@ describe("OAuth2 routes", () => {
 
     it("returns an access token only", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("m2m", "m2m-secret"))
         .type("form")
@@ -322,7 +324,7 @@ describe("OAuth2 routes", () => {
 
     it("accepts the secret in the body", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app).post("/oauth2/token").type("form").send({
+      const res = await request(app).post("/oauth2/token").type("form").send({
         grant_type: "client_credentials",
         client_id: "m2m",
         client_secret: "m2m-secret",
@@ -336,7 +338,7 @@ describe("OAuth2 routes", () => {
       ["no secret", { client_id: "m2m" }],
     ])("refuses invalid_client for %s", async (_, credentials) => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .type("form")
         .send({ grant_type: "client_credentials", ...credentials });
@@ -351,7 +353,7 @@ describe("OAuth2 routes", () => {
         ClientSecret: undefined,
       });
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .type("form")
         .send({ grant_type: "client_credentials", client_id: "m2m" });
@@ -374,7 +376,7 @@ describe("OAuth2 routes", () => {
         ...(overrides as Partial<typeof appClient>),
       });
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("m2m", "m2m-secret"))
         .type("form")
@@ -392,7 +394,7 @@ describe("OAuth2 routes", () => {
 
     it("refuses aws_client_metadata that is not a JSON object", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("m2m", "m2m-secret"))
         .type("form")
@@ -418,17 +420,14 @@ describe("OAuth2 routes", () => {
           state: "my-state",
         });
 
-        const res = await supertest(app)
-          .post("/oauth2/token")
-          .type("form")
-          .send({
-            grant_type: "authorization_code",
-            code,
-            redirect_uri: "http://localhost:9876",
-            client_id: "test-client-id",
-            // Verifier that produces the challenge above
-            code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-          });
+        const res = await request(app).post("/oauth2/token").type("form").send({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: "http://localhost:9876",
+          client_id: "test-client-id",
+          // Verifier that produces the challenge above
+          code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        });
 
         expect(res.status).toBe(200);
         expect(res.body).toMatchObject({
@@ -442,16 +441,13 @@ describe("OAuth2 routes", () => {
 
       it("returns 400 for expired or unknown code", async () => {
         const { app } = buildApp(mockCognito, mockTokenGenerator);
-        const res = await supertest(app)
-          .post("/oauth2/token")
-          .type("form")
-          .send({
-            grant_type: "authorization_code",
-            code: "nonexistent-code",
-            redirect_uri: "http://localhost:9876",
-            client_id: "test-client-id",
-            code_verifier: "some-verifier",
-          });
+        const res = await request(app).post("/oauth2/token").type("form").send({
+          grant_type: "authorization_code",
+          code: "nonexistent-code",
+          redirect_uri: "http://localhost:9876",
+          client_id: "test-client-id",
+          code_verifier: "some-verifier",
+        });
         expect(res.status).toBe(400);
         expect(res.body.error).toBe("invalid_grant");
       });
@@ -468,16 +464,13 @@ describe("OAuth2 routes", () => {
           state: undefined,
         });
 
-        const res = await supertest(app)
-          .post("/oauth2/token")
-          .type("form")
-          .send({
-            grant_type: "authorization_code",
-            code,
-            redirect_uri: "http://localhost:9876",
-            client_id: "test-client-id",
-            code_verifier: "wrong-verifier",
-          });
+        const res = await request(app).post("/oauth2/token").type("form").send({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: "http://localhost:9876",
+          client_id: "test-client-id",
+          code_verifier: "wrong-verifier",
+        });
         expect(res.status).toBe(400);
         expect(res.body.error).toBe("invalid_grant");
       });
@@ -494,16 +487,13 @@ describe("OAuth2 routes", () => {
           state: undefined,
         });
 
-        const res = await supertest(app)
-          .post("/oauth2/token")
-          .type("form")
-          .send({
-            grant_type: "authorization_code",
-            code,
-            redirect_uri: "http://localhost:9999",
-            client_id: "test-client-id",
-            code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-          });
+        const res = await request(app).post("/oauth2/token").type("form").send({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: "http://localhost:9999",
+          client_id: "test-client-id",
+          code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        });
         expect(res.status).toBe(400);
         expect(res.body).toEqual({
           error: "unauthorized_client",
@@ -531,13 +521,13 @@ describe("OAuth2 routes", () => {
           code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
         };
 
-        const first = await supertest(app)
+        const first = await request(app)
           .post("/oauth2/token")
           .type("form")
           .send(body);
         expect(first.status).toBe(200);
 
-        const second = await supertest(app)
+        const second = await request(app)
           .post("/oauth2/token")
           .type("form")
           .send(body);
@@ -551,14 +541,11 @@ describe("OAuth2 routes", () => {
         mockUserPoolService.getUserByRefreshToken.mockResolvedValue(user);
         const { app } = buildApp(mockCognito, mockTokenGenerator);
 
-        const res = await supertest(app)
-          .post("/oauth2/token")
-          .type("form")
-          .send({
-            grant_type: "refresh_token",
-            refresh_token: "some-refresh-token",
-            client_id: "test-client-id",
-          });
+        const res = await request(app).post("/oauth2/token").type("form").send({
+          grant_type: "refresh_token",
+          refresh_token: "some-refresh-token",
+          client_id: "test-client-id",
+        });
 
         expect(res.status).toBe(200);
         expect(res.body).toMatchObject({
@@ -574,14 +561,11 @@ describe("OAuth2 routes", () => {
         mockUserPoolService.getUserByRefreshToken.mockResolvedValue(null);
         const { app } = buildApp(mockCognito, mockTokenGenerator);
 
-        const res = await supertest(app)
-          .post("/oauth2/token")
-          .type("form")
-          .send({
-            grant_type: "refresh_token",
-            refresh_token: "bad-token",
-            client_id: "test-client-id",
-          });
+        const res = await request(app).post("/oauth2/token").type("form").send({
+          grant_type: "refresh_token",
+          refresh_token: "bad-token",
+          client_id: "test-client-id",
+        });
 
         expect(res.status).toBe(400);
         expect(res.body.error).toBe("invalid_grant");
@@ -590,7 +574,7 @@ describe("OAuth2 routes", () => {
 
     it("returns 400 for unsupported grant_type", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .type("form")
         .send({ grant_type: "password" });
@@ -710,7 +694,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
   describe("GET /oauth2/authorize", () => {
     it("accepts upper-case response_type=CODE without PKCE", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query(confidentialClientQuery);
       expect(res.status).toBe(200);
@@ -720,7 +704,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("shows the built-in login for identity_provider=COGNITO", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query({ ...confidentialClientQuery, identity_provider: "COGNITO" });
       expect(res.status).toBe(200);
@@ -729,7 +713,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("redirects a configured federated identity provider to the mock IdP", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query({ ...confidentialClientQuery, identity_provider: "Google" });
       expect(res.status).toBe(302);
@@ -741,7 +725,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("redirects invalid_request for an identity provider not enabled for the client", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query({
           ...confidentialClientQuery,
@@ -758,7 +742,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("redirects invalid_request for an unknown identity provider", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query({ ...confidentialClientQuery, identity_provider: "Nope" });
       expect(res.status).toBe(302);
@@ -769,7 +753,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("redirects invalid_scope for a scope the client does not allow", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query({ ...confidentialClientQuery, scope: "openid admin:all" });
       expect(res.status).toBe(302);
@@ -780,7 +764,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("redirects unsupported_response_type for an unknown response_type", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .get("/oauth2/authorize")
         .query({ ...confidentialClientQuery, response_type: "id_token" });
       expect(res.status).toBe(302);
@@ -793,7 +777,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
   describe("POST /oauth2/authorize", () => {
     it("issues a code without PKCE and keeps the granted scopes", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send({
@@ -812,7 +796,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("returns tokens in the fragment for response_type=token", async () => {
       const { app } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/authorize")
         .type("form")
         .send({
@@ -866,7 +850,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("accepts the client secret in HTTP Basic auth, without PKCE", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
@@ -886,7 +870,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("accepts client_id and client_secret in the body", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .type("form")
         .send({
@@ -898,7 +882,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("returns invalid_client for a wrong secret", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "wrong"))
         .type("form")
@@ -909,7 +893,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("returns invalid_client when a confidential client sends no secret", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .type("form")
         .send(confidentialTokenBody(codeFor(codeStore)));
@@ -919,7 +903,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
 
     it("returns invalid_client when the body client_id differs from the Basic one", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
@@ -934,7 +918,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
     it("requires code_verifier when the code was issued with a code_challenge", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
       const code = codeFor(codeStore, { codeChallenge: CHALLENGE });
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
@@ -946,7 +930,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
     it("accepts the matching code_verifier for a PKCE code", async () => {
       const { app, codeStore } = buildApp(mockCognito, mockTokenGenerator);
       const code = codeFor(codeStore, { codeChallenge: CHALLENGE });
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
@@ -959,7 +943,7 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
       const code = codeFor(codeStore, {
         scope: "aws.cognito.signin.user.admin",
       });
-      const res = await supertest(app)
+      const res = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")
@@ -979,12 +963,12 @@ describe("OAuth2 routes: Cognito request compatibility", () => {
         client_id: "conf-client",
         refresh_token: "refresh-token",
       };
-      const unauthed = await supertest(app)
+      const unauthed = await request(app)
         .post("/oauth2/token")
         .type("form")
         .send(body);
       expect(unauthed.body.error).toBe("invalid_client");
-      const authed = await supertest(app)
+      const authed = await request(app)
         .post("/oauth2/token")
         .set("Authorization", basic("conf-client", "s3cret"))
         .type("form")

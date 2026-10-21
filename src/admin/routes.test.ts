@@ -1,9 +1,9 @@
 import express from "express";
 import * as jwt from "jsonwebtoken";
-import supertest from "supertest";
 import type { MockedObject } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
+import { localRequest } from "../__tests__/localRequest";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import * as TDB from "../__tests__/testDataBuilder";
@@ -15,6 +15,8 @@ import { InMemoryAuthSessions } from "../services/authSessions";
 import { InMemoryCodeLog, RecordingAuthSessions } from "../services/codeLog";
 import { ADMIN_UI_PATH } from "./html";
 import { createAdminRouter } from "./routes";
+
+const request = localRequest();
 
 const XSS = `<script>alert("x")</script>`;
 const ESCAPED = "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;";
@@ -107,9 +109,9 @@ describe("admin UI routes", () => {
     );
   });
 
-  const get = (path: string) => supertest(app).get(`${ADMIN_UI_PATH}${path}`);
+  const get = (path: string) => request(app).get(`${ADMIN_UI_PATH}${path}`);
   const post = (path: string, form: Record<string, string> = {}) =>
-    supertest(app).post(`${ADMIN_UI_PATH}${path}`).type("form").send(form);
+    request(app).post(`${ADMIN_UI_PATH}${path}`).type("form").send(form);
 
   describe("pages", () => {
     it("lists user pools with their counts and the no-auth notice", async () => {
@@ -142,11 +144,11 @@ describe("admin UI routes", () => {
         ),
       );
 
-      await supertest(protectedApp)
+      await request(protectedApp)
         .get(ADMIN_UI_PATH)
         .expect(303)
         .expect("Location", "/_admin/login?next=%2F_admin");
-      const res = await supertest(protectedApp)
+      const res = await request(protectedApp)
         .get(ADMIN_UI_PATH)
         .set("Authorization", "Bearer t0ken")
         .expect(200);
@@ -340,16 +342,16 @@ describe("admin UI routes", () => {
         /^InvalidPasswordException/,
       );
 
-      const page = await supertest(app).get(res.header.location);
+      const page = await request(app).get(res.header.location);
       expect(page.text).toContain(`class="flash error"`);
     });
 
     it("refuses cross-site form posts", async () => {
-      await supertest(app)
+      await request(app)
         .post(`${ADMIN_UI_PATH}/pools/local_pool/users/jane/delete`)
         .set("Origin", "http://evil.example")
         .expect(403);
-      await supertest(app)
+      await request(app)
         .post(`${ADMIN_UI_PATH}/pools/local_pool/users/jane/delete`)
         .set("Sec-Fetch-Site", "cross-site")
         .expect(403);

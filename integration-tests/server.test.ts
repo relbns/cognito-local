@@ -1,6 +1,6 @@
-import supertest from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createServer } from "../src";
+import { localRequest } from "../src/__tests__/localRequest";
 import { MockLogger } from "../src/__tests__/mockLogger";
 import {
   CodeMismatchError,
@@ -13,13 +13,15 @@ import {
 import { Router } from "../src/server/Router";
 import type { Services } from "../src/services";
 
+const request = localRequest();
+
 describe("HTTP server", () => {
   describe("/", () => {
     it("errors with missing x-azm-target header", async () => {
       const router = vi.fn();
       const server = createServer(router, MockLogger as any, {});
 
-      const response = await supertest(server.application).post("/");
+      const response = await request(server.application).post("/");
 
       expect(response.status).toEqual(400);
       expect(response.body).toEqual({ message: "Missing x-amz-target header" });
@@ -29,7 +31,7 @@ describe("HTTP server", () => {
       const router = vi.fn();
       const server = createServer(router, MockLogger as any, {});
 
-      const response = await supertest(server.application)
+      const response = await request(server.application)
         .post("/")
         .set("x-amz-target", "bad-format");
 
@@ -48,7 +50,7 @@ describe("HTTP server", () => {
           target === "valid" ? route : () => Promise.reject();
         const server = createServer(router, MockLogger as any, {});
 
-        const response = await supertest(server.application)
+        const response = await request(server.application)
           .post("/")
           .set("x-amz-target", "prefix.valid");
 
@@ -64,7 +66,7 @@ describe("HTTP server", () => {
           {},
         );
 
-        const response = await supertest(server.application)
+        const response = await request(server.application)
           .post("/")
           .set(
             "x-amz-target",
@@ -98,7 +100,7 @@ describe("HTTP server", () => {
             {},
           );
 
-          const response = await supertest(server.application)
+          const response = await request(server.application)
             .post("/")
             .set(
               "x-amz-target",
@@ -120,7 +122,7 @@ describe("HTTP server", () => {
           target === "valid" ? route : () => Promise.reject();
         const server = createServer(router, MockLogger as any, {});
 
-        const response = await supertest(server.application)
+        const response = await request(server.application)
           .post("/")
           .set("x-amz-target", "prefix.valid");
 
@@ -146,7 +148,7 @@ describe("HTTP server", () => {
             target === "valid" ? route : () => Promise.reject();
           const server = createServer(router, MockLogger as any, {});
 
-          const response = await supertest(server.application)
+          const response = await request(server.application)
             .post("/")
             .set("x-amz-target", "prefix.valid");
 
@@ -164,7 +166,7 @@ describe("HTTP server", () => {
     it("responds with our public key", async () => {
       const server = createServer(vi.fn(), MockLogger as any, {});
 
-      const response = await supertest(server.application).get(
+      const response = await request(server.application).get(
         "/any-user-pool/.well-known/jwks.json",
       );
 
@@ -188,7 +190,7 @@ describe("HTTP server", () => {
     it("responds with open id configuration", async () => {
       const server = createServer(vi.fn(), MockLogger as any, {});
 
-      const response = await supertest(server.application).get(
+      const response = await request(server.application).get(
         "/any-user-pool/.well-known/openid-configuration",
       );
       expect(response.status).toEqual(200);
