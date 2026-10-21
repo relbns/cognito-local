@@ -10,9 +10,7 @@
 [![Tested with](https://img.shields.io/badge/tested%20with-AWS%20SDK%20v3%20%7C%20boto3%20%7C%20AWS%20CLI%20v2-informational)](docs/sdk-compatibility.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](#install)
 [![License](https://img.shields.io/github/license/relbns/cognito-local)](LICENSE)
-<!-- Add once the package is on the npm registry:
 [![npm](https://img.shields.io/npm/v/cognito-emulator)](https://www.npmjs.com/package/cognito-emulator)
--->
 
 [Install](#install) · [Quick start](#quick-start) · [Recipes](#recipes) · [Configuration](#configuration-reference) · [Compatibility](#compatibility-and-differences-from-aws) · [Troubleshooting](#troubleshooting)
 
@@ -58,62 +56,63 @@ and tests, and [the differences](#compatibility-and-differences-from-aws) are li
 Requires **Node.js 20 or later** (`engines: >=20`). Node.js 22 is recommended: the Docker image uses
 it, and the AWS SDK v3 that the emulator runs on requires 22 for releases from January 2027.
 
-> [!NOTE]
-> The npm package is `cognito-emulator`. Its npm release is coming: once it is published,
-> `npx cognito-emulator start` and `npm install -g cognito-emulator` install it from the registry.
-> Until then, install it from GitHub: the GitHub and Docker commands below work today.
-
 The package installs the `cognito-emulator` command, and `cognito-local` as an alias that runs the
 same program, so scripts written for upstream keep working. This README uses `cognito-emulator`.
 
-| Way                           | Command                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------ |
-| npx, nothing installed        | `npx github:relbns/cognito-local start`                                              |
-| Global command                | see [Global install](#global-install)                                                |
-| Dev dependency of a project   | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-emulator start` |
-| Docker                        | `docker run --rm -p 127.0.0.1:9229:9229 ghcr.io/relbns/cognito-local:edge`           |
-| From source                   | `git clone`, `npm install`, `npm start`                                              |
-| npm registry (once published) | `npx cognito-emulator start`, or `npm install -g cognito-emulator`                   |
+| Way                         | Command                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| npx, nothing installed      | `npx cognito-emulator start`                                                 |
+| Global command              | `npm install -g cognito-emulator`, then `cognito-emulator start`             |
+| Dev dependency of a project | `npm install --save-dev cognito-emulator`, then `npx cognito-emulator start` |
+| Docker                      | `docker run --rm -p 127.0.0.1:9229:9229 ghcr.io/relbns/cognito-local:latest` |
+| Unreleased `main`           | see [From GitHub](#from-github)                                              |
+| From source                 | `git clone`, `npm install`, `npm start`                                      |
 
 Every way starts the server on `http://localhost:9229` with the admin UI at `/_admin` and its data in
 `./.cognito` (`/app/.cognito` in the image).
 
-### npx
+### npm
+
+```bash
+npx cognito-emulator start                 # run once, nothing installed
+npm install -g cognito-emulator            # or a global command
+npm install --save-dev cognito-emulator    # or a dev dependency of a project
+```
+
+Pin a version with `cognito-emulator@1.0.0`. Remove a global install with
+`npm uninstall -g cognito-emulator`.
+
+### From GitHub
+
+`main` between releases runs straight from the repository:
 
 ```bash
 npx github:relbns/cognito-local start
 ```
 
 The first run clones the repository, installs its dev dependencies and builds it (about 30 seconds).
-Later runs start at once from the npx cache. Pin a version with `#<tag, branch or sha>`:
-`npx github:relbns/cognito-local#1c078ef start`. If npx keeps running an older build after `main`
-moved, clear its cache with `rm -rf ~/.npm/_npx`.
+Later runs start at once from the npx cache. Pin a commit with `#<tag, branch or sha>`. If npx keeps
+running an older build after `main` moved, clear its cache with `rm -rf ~/.npm/_npx`.
 
-### Global install
-
-`npm install -g github:relbns/cognito-local` does not work with npm 10: npm runs the package's build
-step in global mode, the dev dependencies are not installed, and it fails with
-`sh: tsc: command not found`. Build a tarball first and install that:
+`npm install -g github:relbns/cognito-local` fails with npm 10 (`sh: tsc: command not found`: npm
+builds a git dependency in global mode without its dev dependencies). Build a tarball first and
+install that:
 
 ```bash
 cd "$(mktemp -d)"
 npm install -g "$(npm pack github:relbns/cognito-local | tail -1)"
-cognito-emulator start
 ```
-
-Remove it with `npm uninstall -g cognito-emulator`.
 
 ### Docker
 
-Multi-arch images (`linux/amd64`, `linux/arm64`) are on GitHub Container Registry. `edge` follows
-`main`. `latest` and `X.Y.Z` / `X.Y` / `X` are published when a `v*` tag is pushed; no release of the
-fork has been tagged yet, so use `edge`.
+Multi-arch images (`linux/amd64`, `linux/arm64`) are on GitHub Container Registry. `latest` and
+`X.Y.Z` / `X.Y` / `X` follow the releases, and `edge` follows `main`.
 
 ```bash
 docker run --rm -p 127.0.0.1:9229:9229 \
   -v cognito-data:/app/.cognito \
   -v "$PWD/seed.basic.json:/seed.json:ro" \
-  ghcr.io/relbns/cognito-local:edge --seed /seed.json
+  ghcr.io/relbns/cognito-local:latest --seed /seed.json
 ```
 
 - The image runs `cognito-emulator start`, so arguments after the image name are `start` flags
@@ -132,7 +131,7 @@ docker run --rm -p 127.0.0.1:9229:9229 \
 ```yaml
 services:
   cognito:
-    image: ghcr.io/relbns/cognito-local:edge
+    image: ghcr.io/relbns/cognito-local:latest
     command: ["--seed", "/seed/seed.json"]
     ports:
       - "127.0.0.1:9229:9229"
@@ -191,7 +190,7 @@ The commands below use npx. With a global install write `cognito-emulator`; from
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/relbns/cognito-local/main/examples/seed.basic.json
-npx github:relbns/cognito-local start --seed seed.basic.json
+npx cognito-emulator start --seed seed.basic.json
 ```
 
 [`seed.basic.json`](examples/seed.basic.json) creates the pool `local_Example1` (email as username,
@@ -388,7 +387,7 @@ file. Format and rules: [docs/seed-files.md](docs/seed-files.md).
 Start in the background, wait until `status` succeeds, seed, run the tests, stop:
 
 ```bash
-npm install --save-dev github:relbns/cognito-local   # once, in your project
+npm install --save-dev cognito-emulator   # once, in your project
 
 npx cognito-emulator start --data .cognito-ci > cognito-emulator.log 2>&1 &
 for i in $(seq 1 30); do npx cognito-emulator status --data .cognito-ci --json > /dev/null && break; sleep 1; done
@@ -402,7 +401,7 @@ kill "$(jq -r .pid .cognito-ci/server.json)"
 
 - Tests can read codes from `GET /_admin/api/codes` (filters `pool`, `type`, `q`, `limit`), or set
   `CODE=123456` to make every confirmation, forgot-password and MFA code fixed.
-- With Docker: `docker run -d --name cognito -p 9229:9229 ghcr.io/relbns/cognito-local:edge`, then
+- With Docker: `docker run -d --name cognito -p 9229:9229 ghcr.io/relbns/cognito-local:latest`, then
   `until curl -sf http://localhost:9229/health; do sleep 1; done`, then seed through `--url` or the
   admin API. Mount a `config.json` with `IssuerDomain` if the tests reach it under another name than `localhost`.
 - `status`, `seed`, `export` and `reset` print JSON with `--json`, and the exit codes are fixed:
@@ -575,7 +574,7 @@ Pools default to email as the username
 | boto3: `NoRegionError: You must specify a region`                                | boto3 ignores `AWS_REGION`. Set `AWS_DEFAULT_REGION` or pass `region_name`.                                                                                                                                                                                                               |
 | AWS SDK v2: `LambdaConfig` value rejected as too short                           | SDK v2 checks a 20-character minimum on `LambdaConfig` values. Use an absolute path: `file:/abs/path/triggers/define.js`.                                                                                                                                                                 |
 | `NodeVersionSupportWarning: ... will require node >=22`                          | Printed by the AWS SDK on Node 20. Harmless; Node 22 removes it. Node below 20 is not supported.                                                                                                                                                                                          |
-| `npm install -g github:relbns/cognito-local` fails with `tsc: command not found` | npm builds git dependencies in global mode without dev dependencies. Use the [tarball install](#global-install).                                                                                                                                                                          |
+| `npm install -g github:relbns/cognito-local` fails with `tsc: command not found` | npm builds git dependencies in global mode without dev dependencies. Install `cognito-emulator` from npm, or use the [tarball install](#from-github).                                                                                                                                     |
 | `EROFS: read-only file system, open '.cognito/config.json'`                      | `config.json` is mounted read-only; the emulator rewrites it at startup. Mount it read-write.                                                                                                                                                                                             |
 | `InvalidParameterException: Username should be an email.`                        | Pools default to email as the username. Set `UsernameAttributes: []` on the pool or in `UserPoolDefaults`.                                                                                                                                                                                |
 | The admin UI is reachable from other machines                                    | Without a token it is open and shows codes and client secrets. Set an [admin token](#admin-token), bind to `localhost` (the CLI default), publish Docker ports as `127.0.0.1:9229:9229`, or turn it off with `--no-admin`.                                                                |

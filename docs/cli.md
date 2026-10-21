@@ -5,22 +5,21 @@ behaves the same. This page uses `cognito-emulator`. Every option has a flag, no
 is not a terminal, and `status`, `seed`, `export` and `reset` print JSON with `--json`.
 
 ```bash
-npx github:relbns/cognito-local start --seed ./cognito-emulator.seed.json
+npx cognito-emulator start --seed ./cognito-emulator.seed.json
 ```
 
 ## Running it
 
 | How | Command |
 |-----|---------|
-| From the npm registry (once published) | `npx cognito-emulator start`, or `npm install -g cognito-emulator` |
-| From GitHub, no clone | `npx github:relbns/cognito-local start` (npm clones the repo, installs its dev dependencies and builds it once; add `#<branch or sha>` to pin a version) |
-| Global command | `npm install -g "$(npm pack github:relbns/cognito-local \| tail -1)"` in an empty directory, then `cognito-emulator start`. A plain `npm install -g github:relbns/cognito-local` fails with npm 10 (`tsc: command not found`: npm builds the git dependency in global mode without its dev dependencies) |
-| Project dev dependency | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-emulator start` |
+| From the npm registry | `npx cognito-emulator start` |
+| Global command | `npm install -g cognito-emulator`, then `cognito-emulator start` |
+| Project dev dependency | `npm install --save-dev cognito-emulator`, then `npx cognito-emulator start` |
+| Unreleased `main` from GitHub | `npx github:relbns/cognito-local start` (npm clones the repo, installs its dev dependencies and builds it once; add `#<branch or sha>` to pin a commit). For a global command, `npm install -g "$(npm pack github:relbns/cognito-local \| tail -1)"` in an empty directory: a plain `npm install -g github:relbns/cognito-local` fails with npm 10 (`tsc: command not found`) |
 | From a clone | `npm install` (builds `lib/`), then `node lib/bin/cli.js start`, or `npm run cli -- start` to run the TypeScript source |
 | Old entry point | `node lib/bin/start.js` still works and is the same as `cognito-emulator start` |
 
-The npm package is `cognito-emulator`, so it does not clash with upstream's `cognito-local`. It is not
-on the npm registry yet; the GitHub commands above work today.
+The npm package is `cognito-emulator`, so it does not clash with upstream's `cognito-local`.
 
 ## Commands
 
