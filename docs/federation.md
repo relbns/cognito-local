@@ -66,7 +66,7 @@ All are redirects to `redirect_uri` with `error`, `error_description` and the ap
 ## Limits
 
 - No real IdP protocol: no OIDC token exchange, no SAML assertion parsing or signature checks.
-- The PreAuthentication trigger is not supported by cognito-local, so it is not run.
+- The PreAuthentication trigger does not run for a federated sign-in.
 - AWS may show the provider prefix in lower case (`google_1234`) in some places, for example the
   PreSignUp event of case-insensitive pools. The emulator always uses the configured provider name.
 - `AttributeMapping` is used as given; Cognito's automatic `username` mapping

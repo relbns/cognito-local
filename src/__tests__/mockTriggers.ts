@@ -9,6 +9,7 @@ export const newMockTriggers = (): MockedObject<Triggers> => ({
   enabled: vi.fn(),
   postAuthentication: vi.fn(),
   postConfirmation: vi.fn(),
+  preAuthentication: vi.fn(),
   preSignUp: vi.fn(),
   preTokenGeneration: vi.fn(),
   userMigration: vi.fn(),

@@ -1,4 +1,8 @@
-import { InvalidPasswordError, NotAuthorizedError } from "../errors";
+import {
+  CognitoError,
+  InvalidPasswordError,
+  NotAuthorizedError,
+} from "../errors";
 import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
@@ -10,6 +14,7 @@ import {
 } from "../services/mfa";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verify as verifyTotp } from "../services/totp";
+import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import type { User } from "../services/userPoolService";
 import type {
   HostedLoginStep,
@@ -205,6 +210,18 @@ export async function signInWithPassword(
     username,
     password,
   );
+  try {
+    await runPreAuthentication(ctx, services.triggers, {
+      client: login.appClient,
+      user,
+      username,
+      userPoolId: login.userPool.options.Id,
+      validationData: undefined,
+    });
+  } catch (e) {
+    if (e instanceof CognitoError) return loginError(e.message);
+    throw e;
+  }
   if (!user) return loginError(HOSTED_LOGIN_MESSAGES.incorrectCredentials);
   if (user.UserStatus === "RESET_REQUIRED") {
     return loginError(HOSTED_LOGIN_MESSAGES.passwordResetRequired);

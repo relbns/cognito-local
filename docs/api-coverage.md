@@ -217,7 +217,8 @@ A successful sign-in runs PostAuthentication (`PostAuthentication_Authentication
 or tokens from the user as the trigger left it. The steps after the password are kept on the server
 under a random id that expires after 3 minutes, so the username, client, redirect URI, PKCE challenge,
 scope and state come from the server, not from the page. The form has no sign-up or forgot-password
-pages and does not run PreAuthentication.
+pages. PreAuthentication runs before the password is checked, and an error it throws is shown on the
+form.
 
 The emulator also serves `/mock-idp/{providerName}/authorize` (the [mock IdP](federation.md) form),
 `/health`, and the admin UI and its API under `/_admin` (see [oauth-callback.md](oauth-callback.md)
@@ -232,6 +233,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | --- | --- |
 | PreSignUp | SignUp (with its `ValidationData` as `validationData`), AdminCreateUser (`PreSignUp_AdminCreateUser`, with `ValidationData` and `ClientMetadata`; a thrown error stops the user from being created, and `autoConfirmUser`, `autoVerifyEmail` and `autoVerifyPhone` are ignored, as in Cognito), and the first federated sign-in (`PreSignUp_ExternalProvider`). Seed files create users without it. |
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
+| PreAuthentication | Every sign-in attempt before the password or challenge is checked: InitiateAuth and AdminInitiateAuth with a password, SRP or `CUSTOM_AUTH`, and the built-in login form (`PreAuthentication_Authentication`). `validationData` is the request's `ClientMetadata`. An unknown user triggers it only when the app client has `PreventUserExistenceErrors: ENABLED`, with `userNotFound: true`. A thrown error fails the sign-in with `UserLambdaValidationException` ("PreAuthentication failed with error ..."). Refresh-token and federated sign-ins do not run it. |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
 | PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
 | UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. The forgot-password flow does not run it. |
@@ -239,4 +241,4 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA |
 | CustomEmailSender | Replaces message delivery for the same events except SMS MFA. The code is encrypted with the configured KMS key. |
 
-PreAuthentication and CustomSMSSender can be configured on a pool but never run.
+CustomSMSSender can be configured on a pool but never runs.

@@ -11,7 +11,7 @@ import { newMockTokenVerifier } from "../__tests__/mockTokenVerifier";
 import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import * as TDB from "../__tests__/testDataBuilder";
-import { NotAuthorizedError } from "../errors";
+import { NotAuthorizedError, UserLambdaValidationError } from "../errors";
 import type { Messages, Triggers, UserPoolService } from "../services";
 import { generate as generateTotp } from "../services/totp";
 import type { User } from "../services/userPoolService";
@@ -493,6 +493,50 @@ describe("hosted login form", () => {
       expect(triggers.postAuthentication).not.toHaveBeenCalled();
       await submitStep({ login_session: session, code: "246810" });
       expect(triggers.postAuthentication).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("PreAuthentication", () => {
+    beforeEach(() => {
+      triggers.enabled.mockImplementation(
+        (name) => name === "PreAuthentication",
+      );
+    });
+
+    it("runs before the password is checked", async () => {
+      expectCodeRedirect(await login());
+      expect(triggers.preAuthentication).toHaveBeenCalledWith(
+        expect.anything(),
+        {
+          clientId: "client-1",
+          source: "PreAuthentication_Authentication",
+          userAttributes: stored.Attributes,
+          userNotFound: undefined,
+          username: "user@example.test",
+          userPoolId: "local_Pool1",
+          validationData: undefined,
+        },
+      );
+    });
+
+    it("shows the trigger's error and issues nothing when it throws", async () => {
+      triggers.preAuthentication.mockRejectedValue(
+        new UserLambdaValidationError(
+          "PreAuthentication failed with error blocked.",
+        ),
+      );
+      const res = await login({ password: "wrong" });
+      expect(res.text).toContain(
+        "PreAuthentication failed with error blocked.",
+      );
+      expect(res.header.location).toBeUndefined();
+      expect(tokenGenerator.generate).not.toHaveBeenCalled();
+    });
+
+    it("does not run for an unknown user", async () => {
+      const res = await login({ username: "unknown@example.test" });
+      expect(res.text).toContain("Incorrect username or password.");
+      expect(triggers.preAuthentication).not.toHaveBeenCalled();
     });
   });
 

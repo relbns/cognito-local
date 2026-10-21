@@ -18,6 +18,7 @@ import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
 import { startPasswordVerifier } from "../services/srp";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
+import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import type { Target } from "./Target";
 
 export type AdminInitiateAuthTarget = Target<
@@ -80,6 +81,14 @@ const adminUserPasswordAuthFlow = async (
       userAttributes: [],
     });
   }
+
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
 
   if (!user || !userPoolClient) {
     throw new NotAuthorizedError();
@@ -235,6 +244,13 @@ const userSrpAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user || !userPoolClient) {
     throw new NotAuthorizedError();
   }
@@ -278,13 +294,20 @@ const customAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user) {
     throw new NotAuthorizedError();
   }
   if (!user.Enabled) {
     throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
-  const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
   if (!userPoolClient) throw new NotAuthorizedError();
 
   return startCustomAuth(ctx, services, {

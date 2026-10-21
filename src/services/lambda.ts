@@ -130,6 +130,12 @@ interface PreTokenGenerationEvent extends EventCommonParameters {
   };
 }
 
+interface PreAuthenticationEvent extends EventCommonParameters {
+  triggerSource: "PreAuthentication_Authentication";
+  userNotFound: boolean | undefined;
+  validationData: Record<string, string> | undefined;
+}
+
 interface PostAuthenticationEvent extends EventCommonParameters {
   clientMetadata: Record<string, string> | undefined;
   triggerSource: "PostAuthentication_Authentication";
@@ -151,6 +157,7 @@ export interface FunctionConfig {
   DefineAuthChallenge?: string;
   PostAuthentication?: string;
   PostConfirmation?: string;
+  PreAuthentication?: string;
   PreSignUp?: string;
   PreTokenGeneration?: string;
   UserMigration?: string;
@@ -170,6 +177,8 @@ export type UserMigrationTriggerResponse =
 export type PreSignUpTriggerResponse = PreSignUpTriggerEvent["response"];
 export type PreTokenGenerationTriggerResponse =
   PreTokenGenerationTriggerEvent["response"];
+export type PreAuthenticationTriggerResponse =
+  PreAuthenticationTriggerEvent["response"];
 export type PostAuthenticationTriggerResponse =
   PostAuthenticationTriggerEvent["response"];
 export type PostConfirmationTriggerResponse =
@@ -282,6 +291,11 @@ export interface Lambda {
   ): Promise<PreTokenGenerationTriggerResponse>;
   invoke(
     ctx: Context,
+    lambda: "PreAuthentication",
+    event: PreAuthenticationEvent,
+  ): Promise<PreAuthenticationTriggerResponse>;
+  invoke(
+    ctx: Context,
     lambda: "PostAuthentication",
     event: PostAuthenticationEvent,
   ): Promise<PostAuthenticationTriggerResponse>;
@@ -338,6 +352,7 @@ export class LambdaService implements Lambda {
       | DefineAuthChallengeEvent
       | PostAuthenticationEvent
       | PostConfirmationEvent
+      | PreAuthenticationEvent
       | PreSignUpEvent
       | PreTokenGenerationEvent
       | UserMigrationEvent
@@ -462,6 +477,7 @@ export class LambdaService implements Lambda {
       | DefineAuthChallengeEvent
       | PostAuthenticationEvent
       | PostConfirmationEvent
+      | PreAuthenticationEvent
       | PreSignUpEvent
       | PreTokenGenerationEvent
       | UserMigrationEvent
@@ -489,6 +505,25 @@ export class LambdaService implements Lambda {
             userAttributes: event.userAttributes,
             clientMetadata: event.clientMetadata,
             newDeviceUsed: false,
+          },
+          response: {},
+        };
+      }
+
+      case "PreAuthentication_Authentication": {
+        return {
+          version,
+          callerContext,
+          region,
+          userPoolId: event.userPoolId,
+          triggerSource: event.triggerSource,
+          userName: event.username,
+          request: {
+            userAttributes: event.userAttributes,
+            validationData: event.validationData,
+            ...(event.userNotFound === undefined
+              ? {}
+              : { userNotFound: event.userNotFound }),
           },
           response: {},
         };

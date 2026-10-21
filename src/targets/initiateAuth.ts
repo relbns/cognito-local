@@ -21,6 +21,7 @@ import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
 import { startPasswordVerifier } from "../services/srp";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
+import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import {
   attributesToRecord,
   attributeValue,
@@ -227,6 +228,14 @@ const userPasswordAuthFlow = async (
     });
   }
 
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
+
   if (!user) {
     throw new NotAuthorizedError();
   }
@@ -346,6 +355,13 @@ const userSrpAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user) {
     throw new NotAuthorizedError();
   }
@@ -388,6 +404,13 @@ const customAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user) {
     throw new NotAuthorizedError();
   }

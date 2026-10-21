@@ -396,6 +396,55 @@ describe("Lambda function invoker", () => {
       });
     });
 
+    describe("PreAuthentication_Authentication", () => {
+      it.each([
+        [undefined, {}],
+        [true, { userNotFound: true }],
+      ])(
+        "sends the event with userNotFound=%s",
+        async (userNotFound, extra) => {
+          mockLambdaClient.invoke.mockReturnValue(
+            Promise.resolve({
+              StatusCode: 200,
+              Payload: encode('{ "response": {} }'),
+            }) as any,
+          );
+          const lambda = new LambdaService(
+            { PreAuthentication: "MyLambdaName" },
+            mockLambdaClient,
+          );
+
+          await lambda.invoke(TestContext, "PreAuthentication", {
+            clientId: "clientId",
+            triggerSource: "PreAuthentication_Authentication",
+            username: "username",
+            userPoolId: "userPoolId",
+            userAttributes: { user: "attributes" },
+            userNotFound,
+            validationData: { client: "metadata" },
+          });
+
+          expect(invokedWith(mockLambdaClient).Payload).toEqual({
+            version: "0",
+            callerContext: {
+              awsSdkVersion: "aws-sdk-unknown-unknown",
+              clientId: "clientId",
+            },
+            region: "local",
+            userPoolId: "userPoolId",
+            triggerSource: "PreAuthentication_Authentication",
+            request: {
+              userAttributes: { user: "attributes" },
+              validationData: { client: "metadata" },
+              ...extra,
+            },
+            response: {},
+            userName: "username",
+          });
+        },
+      );
+    });
+
     describe.each`
       trigger               | source
       ${"PostConfirmation"} | ${"PostConfirmation_ConfirmSignUp"}

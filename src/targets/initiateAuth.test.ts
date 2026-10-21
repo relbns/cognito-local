@@ -22,6 +22,7 @@ import {
   InvalidParameterError,
   NotAuthorizedError,
   PasswordResetRequiredError,
+  UserLambdaValidationError,
   UserNotConfirmedException,
 } from "../errors";
 import {
@@ -738,6 +739,97 @@ describe("InitiateAuth target", () => {
       ).rejects.toEqual(
         new NotAuthorizedError("Incorrect username or password."),
       );
+    });
+  });
+
+  describe("when PreAuthentication trigger is enabled", () => {
+    const user = TDB.user();
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "PreAuthentication",
+      );
+    });
+
+    it.each([
+      [
+        "USER_PASSWORD_AUTH",
+        { USERNAME: user.Username, PASSWORD: user.Password },
+      ],
+      ["USER_SRP_AUTH", { USERNAME: user.Username, SRP_A: "abc123" }],
+      ["CUSTOM_AUTH", { USERNAME: user.Username }],
+    ])(
+      "runs it for %s with ClientMetadata as validationData",
+      async (authFlow, params) => {
+        mockTriggers.preAuthentication.mockRejectedValue(
+          new UserLambdaValidationError(
+            "PreAuthentication failed with error blocked.",
+          ),
+        );
+
+        await expect(
+          initiateAuth(TestContext, {
+            ClientId: userPoolClient.ClientId,
+            AuthFlow: authFlow as "USER_PASSWORD_AUTH",
+            AuthParameters: params,
+            ClientMetadata: { client: "metadata" },
+          }),
+        ).rejects.toEqual(
+          new UserLambdaValidationError(
+            "PreAuthentication failed with error blocked.",
+          ),
+        );
+        expect(mockTriggers.preAuthentication).toHaveBeenCalledWith(
+          TestContext,
+          {
+            clientId: userPoolClient.ClientId,
+            source: "PreAuthentication_Authentication",
+            userAttributes: user.Attributes,
+            userNotFound: undefined,
+            username: user.Username,
+            userPoolId: userPoolClient.UserPoolId,
+            validationData: { client: "metadata" },
+          },
+        );
+        expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
+      },
+    );
+
+    it("runs before the password is checked", async () => {
+      mockTriggers.preAuthentication.mockRejectedValue(
+        new UserLambdaValidationError(
+          "PreAuthentication failed with error blocked.",
+        ),
+      );
+
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: "USER_PASSWORD_AUTH",
+          AuthParameters: { USERNAME: user.Username, PASSWORD: "bad-password" },
+        }),
+      ).rejects.toBeInstanceOf(UserLambdaValidationError);
+    });
+
+    it("does not run for the refresh token flow", async () => {
+      mockTokenVerifier.verifyRefreshToken.mockResolvedValue({
+        user,
+        userPool: mockUserPoolService,
+      } as never);
+      mockTokenGenerator.generate.mockResolvedValue({
+        AccessToken: "access",
+        IdToken: "id",
+        RefreshToken: "refresh",
+      } as never);
+
+      await initiateAuth(TestContext, {
+        ClientId: userPoolClient.ClientId,
+        AuthFlow: "REFRESH_TOKEN_AUTH",
+        AuthParameters: { REFRESH_TOKEN: "refresh" },
+      }).catch(() => undefined);
+
+      expect(mockTriggers.preAuthentication).not.toHaveBeenCalled();
     });
   });
 

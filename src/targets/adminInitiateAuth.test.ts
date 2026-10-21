@@ -8,7 +8,11 @@ import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { srpClient } from "../__tests__/srpClient";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { NotAuthorizedError, UserNotConfirmedException } from "../errors";
+import {
+  NotAuthorizedError,
+  UserLambdaValidationError,
+  UserNotConfirmedException,
+} from "../errors";
 import {
   type CognitoService,
   DateClock,
@@ -57,6 +61,61 @@ describe("AdminInitiateAuth target", () => {
       tokenVerifier: mockTokenVerifier,
       clock: new ClockFake(new Date()),
     });
+  });
+
+  describe("when PreAuthentication trigger is enabled", () => {
+    const user = TDB.user();
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "PreAuthentication",
+      );
+      mockTriggers.preAuthentication.mockRejectedValue(
+        new UserLambdaValidationError(
+          "PreAuthentication failed with error blocked.",
+        ),
+      );
+    });
+
+    it.each([
+      [
+        "ADMIN_USER_PASSWORD_AUTH",
+        { USERNAME: user.Username, PASSWORD: user.Password },
+      ],
+      ["USER_SRP_AUTH", { USERNAME: user.Username, SRP_A: "abc123" }],
+      ["CUSTOM_AUTH", { USERNAME: user.Username }],
+    ])(
+      "runs it for %s with ClientMetadata as validationData and fails the sign-in when it throws",
+      async (authFlow, params) => {
+        await expect(
+          adminInitiateAuth(TestContext, {
+            AuthFlow: authFlow as "ADMIN_USER_PASSWORD_AUTH",
+            ClientId: userPoolClient.ClientId,
+            UserPoolId: userPoolClient.UserPoolId,
+            AuthParameters: params,
+            ClientMetadata: { client: "metadata" },
+          }),
+        ).rejects.toEqual(
+          new UserLambdaValidationError(
+            "PreAuthentication failed with error blocked.",
+          ),
+        );
+        expect(mockTriggers.preAuthentication).toHaveBeenCalledWith(
+          TestContext,
+          {
+            clientId: userPoolClient.ClientId,
+            source: "PreAuthentication_Authentication",
+            userAttributes: user.Attributes,
+            userNotFound: undefined,
+            username: user.Username,
+            userPoolId: userPoolClient.UserPoolId,
+            validationData: { client: "metadata" },
+          },
+        );
+        expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it("invokes PostAuthentication without ClientMetadata before issuing tokens", async () => {

@@ -22,6 +22,7 @@ const lambdaService = new LambdaService(
     [
       "CustomEmailSender",
       "PostAuthentication",
+      "PreAuthentication",
       "PreSignUp",
       "UserMigration",
     ].map((name) => [name, name]),
@@ -157,6 +158,116 @@ describe(
               .adminGetUser({ UserPoolId: userPoolId, Username: "jane" })
               .promise(),
           ).rejects.toMatchObject({ code: "UserNotFoundException" });
+        });
+      });
+
+      describe("PreAuthentication", () => {
+        const createUser = (
+          client: CognitoIdentityServiceProvider,
+          userPoolId: string,
+        ) =>
+          client
+            .adminCreateUser({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              TemporaryPassword: PASSWORD,
+              MessageAction: "SUPPRESS",
+              UserAttributes: [{ Name: "email", Value: "jane@example.test" }],
+            })
+            .promise()
+            .then(() =>
+              client
+                .adminSetUserPassword({
+                  UserPoolId: userPoolId,
+                  Username: "jane",
+                  Password: PASSWORD,
+                  Permanent: true,
+                })
+                .promise(),
+            );
+
+        it("runs before a password sign-in with ClientMetadata as validationData", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client);
+          await createUser(client, userPoolId);
+          handlers.PreAuthentication = () => {};
+          handlers.PostAuthentication = () => {};
+
+          await client
+            .initiateAuth({
+              AuthFlow: "USER_PASSWORD_AUTH",
+              ClientId: clientId,
+              AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+              ClientMetadata: { source: "web" },
+            })
+            .promise();
+
+          expect(invocations.map((x) => x.name)).toEqual([
+            "PreAuthentication",
+            "PostAuthentication",
+          ]);
+          const [event] = eventsFor("PreAuthentication");
+          expect(event.triggerSource).toEqual(
+            "PreAuthentication_Authentication",
+          );
+          expect(event.userName).toEqual("jane");
+          expect(event.request.userAttributes.email).toEqual(
+            "jane@example.test",
+          );
+          expect(event.request.validationData).toEqual({ source: "web" });
+          expect(event.request).not.toHaveProperty("userNotFound");
+        });
+
+        it("rejects the sign-in with UserLambdaValidationException when it throws", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client);
+          await createUser(client, userPoolId);
+          handlers.PreAuthentication = () => {
+            throw new Error("blocked");
+          };
+
+          await expect(
+            client
+              .adminInitiateAuth({
+                AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+                ClientId: clientId,
+                UserPoolId: userPoolId,
+                AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+              })
+              .promise(),
+          ).rejects.toMatchObject({
+            code: "UserLambdaValidationException",
+            message: "PreAuthentication failed with error blocked.",
+          });
+        });
+
+        it("runs for an unknown user with userNotFound when the client prevents user existence errors", async () => {
+          const client = Cognito();
+          const { userPoolId } = await createPool(client);
+          const appClient = await client
+            .createUserPoolClient({
+              UserPoolId: userPoolId,
+              ClientName: "strict",
+              ExplicitAuthFlows: ["ALLOW_USER_PASSWORD_AUTH"],
+              PreventUserExistenceErrors: "ENABLED",
+            })
+            .promise();
+          handlers.PreAuthentication = () => {};
+
+          await expect(
+            client
+              .initiateAuth({
+                AuthFlow: "USER_PASSWORD_AUTH",
+                ClientId: appClient.UserPoolClient?.ClientId as string,
+                AuthParameters: { USERNAME: "nobody", PASSWORD: PASSWORD },
+              })
+              .promise(),
+          ).rejects.toMatchObject({ code: "NotAuthorizedException" });
+
+          const [event] = eventsFor("PreAuthentication");
+          expect(event.userName).toEqual("nobody");
+          expect(event.request.userNotFound).toBe(true);
+          expect(event.request.userAttributes).toEqual({});
         });
       });
 
