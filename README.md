@@ -600,6 +600,13 @@ Tokens: a decoded ID token, verified against the pool JWKS:
 
 </details>
 
+## Disclaimer
+
+cognito-emulator is for local development and tests, not for production. It is not affiliated with
+or endorsed by Amazon Web Services. Amazon Cognito and AWS are trademarks of Amazon.com, Inc. or its
+affiliates. The software is provided as is, without warranty of any kind, under the
+[MIT License](LICENSE).
+
 ## Credits
 
 Upstream: [jagregory/cognito-local](https://github.com/jagregory/cognito-local) by James Gregory and
