@@ -26,6 +26,8 @@ export interface SignInState {
   webAuthnChallenge?: string;
   webAuthnRequireUserVerification?: boolean;
   tokenSource?: "Authentication" | "NewPasswordChallenge";
+  /** A simulated challenge for a user who does not exist (PreventUserExistenceErrors ENABLED). */
+  phantom?: boolean;
 }
 
 export interface AuthSession {
@@ -37,6 +39,8 @@ export interface AuthSession {
   srpA?: string;
   pendingChallenge: PendingChallenge;
   signIn?: SignInState;
+  /** A custom authentication session for a user who does not exist. */
+  userNotFound?: boolean;
 }
 
 export interface ActiveAuthSession {

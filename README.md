@@ -511,6 +511,16 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - Hosted login sessions (the `cognito` cookie) live in memory: a restart signs browsers out, and one
   cookie covers every pool, where Cognito sets one per user pool domain.
 
+### Responses that follow Cognito
+
+- **User existence errors.** The app client's `PreventUserExistenceErrors` decides what an unknown
+  username gets. Under `LEGACY` (the default) sign-in returns `UserNotFoundException` ("User does
+  not exist.") and the code operations "Username/client id combination not found.", where upstream
+  returned `NotAuthorizedException`. Under `ENABLED` sign-in fails with "Incorrect username or
+  password.", SRP and `USER_AUTH` return simulated challenges, and ForgotPassword and
+  ResendConfirmationCode return a simulated `CodeDeliveryDetails`: see
+  [docs/api-coverage.md](docs/api-coverage.md#user-existence-errors).
+
 ### Stricter than upstream cognito-local
 
 Each row below has a switch that restores upstream's lenient behaviour:

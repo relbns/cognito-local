@@ -8,7 +8,15 @@ import {
   isCustomAuthSession,
   respondToCustomAuthChallenge,
 } from "../services/customAuth";
-import { respondToSignInChallenge } from "../services/signIn";
+import {
+  respondToPhantomChallenge,
+  respondToSignInChallenge,
+} from "../services/signIn";
+import {
+  phantomUser,
+  preventsUserExistenceErrors,
+  unknownUserSignInError,
+} from "../services/userExistence";
 import type { Target } from "./Target";
 
 export type AdminRespondToAuthChallengeTarget = Target<
@@ -62,9 +70,13 @@ export const AdminRespondToAuthChallenge =
         req.ChallengeResponses.SECRET_HASH,
       );
     }
-    if (!user || !userPoolClient) {
+    if (!userPoolClient) {
       throw new NotAuthorizedError();
     }
+    if (!user && !preventsUserExistenceErrors(userPoolClient)) {
+      throw unknownUserSignInError(userPoolClient);
+    }
+    const signInUser = user ?? phantomUser(req.ChallengeResponses.USERNAME);
 
     if (
       req.ChallengeName === "CUSTOM_CHALLENGE" ||
@@ -74,7 +86,8 @@ export const AdminRespondToAuthChallenge =
     ) {
       return respondToCustomAuthChallenge(ctx, services, {
         userPool,
-        user,
+        user: signInUser,
+        userNotFound: !user,
         client: userPoolClient,
         sessionId: req.Session as string,
         challengeName: req.ChallengeName,
@@ -83,14 +96,17 @@ export const AdminRespondToAuthChallenge =
       });
     }
 
-    return respondToSignInChallenge(ctx, services, {
+    const answer = {
       userPool,
       client: userPoolClient,
-      user,
+      user: signInUser,
       sessionId: req.Session,
       challengeName: req.ChallengeName,
       challengeResponses: req.ChallengeResponses,
       clientMetadata: req.ClientMetadata,
       operation: "adminRespondToAuthChallenge",
-    });
+    };
+    return user
+      ? respondToSignInChallenge(ctx, services, answer)
+      : respondToPhantomChallenge(services, answer);
   };

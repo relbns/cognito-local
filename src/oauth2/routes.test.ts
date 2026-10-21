@@ -250,7 +250,7 @@ describe("OAuth2 routes", () => {
         .type("form")
         .send(validFormData);
       expect(res.status).toBe(200);
-      expect(res.text).toContain("Incorrect username or password");
+      expect(res.text).toContain("User does not exist.");
     });
 
     it("shows login form with error for unconfirmed user", async () => {

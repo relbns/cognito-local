@@ -24,6 +24,7 @@ import {
   PasswordResetRequiredError,
   UserLambdaValidationError,
   UserNotConfirmedException,
+  UserNotFoundError,
 } from "../errors";
 import {
   InMemoryAuthSessions,
@@ -192,7 +193,7 @@ describe("InitiateAuth target", () => {
                 PASSWORD: "password",
               },
             }),
-          ).rejects.toBeInstanceOf(NotAuthorizedError);
+          ).rejects.toEqual(new UserNotFoundError("User does not exist."));
         });
       });
     });
@@ -1129,6 +1130,80 @@ describe("InitiateAuth target", () => {
       });
     });
 
+    it("runs the triggers with userNotFound for an unknown user when existence errors are prevented", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "CUSTOM_CHALLENGE",
+        issueTokens: false,
+        failAuthentication: false,
+      });
+      const cognito = newMockCognitoService(mockUserPoolService);
+      const preventing = {
+        ...userPoolClient,
+        PreventUserExistenceErrors: "ENABLED" as const,
+      };
+      cognito.getAppClient.mockResolvedValue(preventing);
+      const target = InitiateAuth({
+        authSessions,
+        cognito,
+        messages: mockMessages,
+        otp: mockOtp,
+        srpSessions,
+        triggers: mockTriggers,
+        tokenGenerator: mockTokenGenerator,
+        tokenVerifier: newMockTokenVerifier(),
+        clock,
+      });
+
+      const output = await target(TestContext, {
+        ClientId: preventing.ClientId,
+        AuthFlow: "CUSTOM_AUTH",
+        AuthParameters: { USERNAME: "ghost" },
+      });
+
+      expect(mockTriggers.defineAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          username: "ghost",
+          userAttributes: [],
+          userNotFound: true,
+        }),
+      );
+      expect(mockTriggers.createAuthChallenge).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({ userNotFound: true }),
+      );
+      expect(output.ChallengeName).toEqual("CUSTOM_CHALLENGE");
+
+      mockTriggers.defineAuthChallenge.mockResolvedValue({
+        challengeName: "",
+        issueTokens: true,
+        failAuthentication: false,
+      });
+      await expect(
+        target(TestContext, {
+          ClientId: preventing.ClientId,
+          AuthFlow: "CUSTOM_AUTH",
+          AuthParameters: { USERNAME: "ghost" },
+        }),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
+      expect(mockTokenGenerator.generate).not.toHaveBeenCalled();
+    });
+
+    it("reports an unknown user without calling the triggers under LEGACY", async () => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: "CUSTOM_AUTH",
+          AuthParameters: { USERNAME: "ghost" },
+        }),
+      ).rejects.toEqual(new UserNotFoundError("User does not exist."));
+      expect(mockTriggers.defineAuthChallenge).not.toHaveBeenCalled();
+    });
+
     it("keeps the session for the client's AuthSessionValidity", async () => {
       mockTriggers.defineAuthChallenge.mockResolvedValue({
         challengeName: "CUSTOM_CHALLENGE",
@@ -1297,7 +1372,7 @@ describe("InitiateAuth target", () => {
 
       mockUserPoolService.getUserByUsername.mockResolvedValue(null);
       await expect(userAuth({ USERNAME: "nobody" })).rejects.toBeInstanceOf(
-        NotAuthorizedError,
+        UserNotFoundError,
       );
 
       mockUserPoolService.getUserByUsername.mockResolvedValue(

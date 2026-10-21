@@ -10,6 +10,7 @@ import {
   AliasExistsError,
   CodeMismatchError,
   NotAuthorizedError,
+  UserNotFoundError,
 } from "../errors";
 import type { CognitoService, Triggers, UserPoolService } from "../services";
 import type { TokenVerifier } from "../services/tokenVerifier";
@@ -73,7 +74,7 @@ describe("ConfirmSignUp target", () => {
         ConfirmationCode: "123456",
         ForceAliasCreation: false,
       }),
-    ).rejects.toBeInstanceOf(NotAuthorizedError);
+    ).rejects.toBeInstanceOf(UserNotFoundError);
   });
 
   it("throws if confirmation code doesn't match stored value", async () => {

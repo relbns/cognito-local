@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
   NotAuthorizedError,
+  TokenErrorMessages,
   UnsupportedError,
   UserNotFoundError,
 } from "../errors";
@@ -11,6 +12,11 @@ import type { Services, UserPoolService } from "../services";
 import type { Context } from "../services/context";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
+import {
+  preventsUserExistenceErrors,
+  simulatedDelivery,
+  USERNAME_CLIENT_NOT_FOUND,
+} from "../services/userExistence";
 import { attributeValue, type User } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -66,7 +72,7 @@ export const ForgotPassword =
   }: ForgotPasswordServices): ForgotPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
-    await verifyRequestSecretHash(
+    const client = await verifyRequestSecretHash(
       ctx,
       { cognito, tokenVerifier },
       req.ClientId,
@@ -74,8 +80,15 @@ export const ForgotPassword =
       req.SecretHash,
     );
     const user = await findOrMigrateUser(ctx, triggers, userPool, req);
-    if (!user) {
-      throw new UserNotFoundError("Username/client id combination not found.");
+    if (!user || !user.Enabled) {
+      if (preventsUserExistenceErrors(client)) {
+        return {
+          CodeDeliveryDetails: simulatedDelivery(req.Username, ["email"]),
+        };
+      }
+      throw user
+        ? new NotAuthorizedError(TokenErrorMessages.userDisabled)
+        : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
     const userEmail = attributeValue("email", user.Attributes);

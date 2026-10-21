@@ -22,6 +22,7 @@ import {
   NotAuthorizedError,
   UserLambdaValidationError,
   UserNotConfirmedException,
+  UserNotFoundError,
 } from "../errors";
 import {
   type CognitoService,
@@ -536,7 +537,7 @@ describe("AdminInitiateAuth target", () => {
       ).not.toThrow();
     });
 
-    it("throws NotAuthorized for an unknown user", async () => {
+    it("throws UserNotFound for an unknown user", async () => {
       mockUserPoolService.getUserByUsername.mockResolvedValue(null);
 
       await expect(
@@ -549,7 +550,7 @@ describe("AdminInitiateAuth target", () => {
             SRP_A: srpClient(userPoolClient.UserPoolId).srpA,
           },
         }),
-      ).rejects.toBeInstanceOf(NotAuthorizedError);
+      ).rejects.toBeInstanceOf(UserNotFoundError);
     });
 
     it("throws UserNotConfirmed for an unconfirmed user", async () => {

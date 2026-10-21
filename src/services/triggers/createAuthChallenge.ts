@@ -20,6 +20,7 @@ export type CreateAuthChallengeTrigger = Trigger<
       challengeMetadata?: string;
     }>;
     clientMetadata?: Record<string, string>;
+    userNotFound?: boolean;
   },
   CreateAuthChallengeTriggerResponse
 >;
@@ -40,6 +41,7 @@ export const CreateAuthChallenge =
       challengeName,
       session,
       clientMetadata,
+      userNotFound,
     },
   ) =>
     lambda.invoke(ctx, "CreateAuthChallenge", {
@@ -51,4 +53,5 @@ export const CreateAuthChallenge =
       userPoolId,
       challengeName,
       session,
+      userNotFound,
     });

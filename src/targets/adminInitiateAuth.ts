@@ -23,11 +23,19 @@ import {
   afterPassword,
   assertUserAuthAllowed,
   passwordVerifierChallenge,
+  phantomPasswordVerifierChallenge,
   type SignInRound,
+  startPhantomUserAuth,
   startUserAuth,
 } from "../services/signIn";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
+import {
+  INCORRECT_CREDENTIALS,
+  phantomUser,
+  preventsUserExistenceErrors,
+  unknownUserSignInError,
+} from "../services/userExistence";
 import type { User } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -48,6 +56,12 @@ type AdminInitiateAuthServices = Pick<
   | "tokenGenerator"
   | "tokenVerifier"
 >;
+
+// With PreventUserExistenceErrors ENABLED an imported user gets the generic failure (import tool docs).
+const resetRequiredError = (client: AppClient): Error =>
+  preventsUserExistenceErrors(client)
+    ? new NotAuthorizedError(INCORRECT_CREDENTIALS)
+    : new PasswordResetRequiredError();
 
 // AdminInitiateAuth passes ClientMetadata to pre token generation but not to PostAuthentication.
 const signInRound = (
@@ -116,11 +130,14 @@ const adminUserPasswordAuthFlow = async (
     validationData: req.ClientMetadata,
   });
 
-  if (!user || !userPoolClient) {
+  if (!userPoolClient) {
     throw new NotAuthorizedError();
   }
+  if (!user) {
+    throw unknownUserSignInError(userPoolClient);
+  }
   if (user.UserStatus === "RESET_REQUIRED") {
-    throw new PasswordResetRequiredError();
+    throw resetRequiredError(userPoolClient);
   }
 
   if (user.Password !== req.AuthParameters.PASSWORD) {
@@ -226,14 +243,29 @@ const userSrpAuthFlow = async (
     userPoolId: userPool.options.Id,
     validationData: req.ClientMetadata,
   });
-  if (!user || !userPoolClient) {
+  if (!userPoolClient) {
     throw new NotAuthorizedError();
+  }
+  if (!user) {
+    if (!preventsUserExistenceErrors(userPoolClient)) {
+      throw unknownUserSignInError(userPoolClient);
+    }
+    return phantomPasswordVerifierChallenge(
+      services,
+      signInRound(
+        req,
+        userPool,
+        userPoolClient,
+        phantomUser(req.AuthParameters.USERNAME),
+      ),
+      req.AuthParameters.SRP_A,
+    );
   }
   if (!user.Enabled) {
     throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
   if (user.UserStatus === "RESET_REQUIRED") {
-    throw new PasswordResetRequiredError();
+    throw resetRequiredError(userPoolClient);
   }
   if (user.UserStatus === "UNCONFIRMED") {
     throw new UserNotConfirmedException();
@@ -277,13 +309,25 @@ const userAuthFlow = async (
     validationData: req.ClientMetadata,
   });
   if (!user) {
-    throw new NotAuthorizedError();
+    if (!preventsUserExistenceErrors(userPoolClient)) {
+      throw unknownUserSignInError(userPoolClient);
+    }
+    return startPhantomUserAuth(
+      services,
+      signInRound(
+        req,
+        userPool,
+        userPoolClient,
+        phantomUser(req.AuthParameters.USERNAME),
+      ),
+      req.AuthParameters,
+    );
   }
   if (!user.Enabled) {
     throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
   if (user.UserStatus === "RESET_REQUIRED") {
-    throw new PasswordResetRequiredError();
+    throw resetRequiredError(userPoolClient);
   }
   if (user.UserStatus === "UNCONFIRMED") {
     throw new UserNotConfirmedException();
@@ -325,17 +369,18 @@ const customAuthFlow = async (
     userPoolId: userPool.options.Id,
     validationData: req.ClientMetadata,
   });
-  if (!user) {
-    throw new NotAuthorizedError();
+  if (!userPoolClient) throw new NotAuthorizedError();
+  if (!user && !preventsUserExistenceErrors(userPoolClient)) {
+    throw unknownUserSignInError(userPoolClient);
   }
-  if (!user.Enabled) {
+  if (user && !user.Enabled) {
     throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
-  if (!userPoolClient) throw new NotAuthorizedError();
 
   return startCustomAuth(ctx, services, {
     userPool,
-    user,
+    user: user ?? phantomUser(req.AuthParameters.USERNAME),
+    userNotFound: !user,
     client: userPoolClient,
     authParameters: req.AuthParameters,
     clientMetadata: req.ClientMetadata,

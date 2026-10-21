@@ -16,6 +16,7 @@ export type VerifyAuthChallengeResponseTrigger = Trigger<
     challengeAnswer: string;
     privateChallengeParameters?: Record<string, string>;
     clientMetadata?: Record<string, string>;
+    userNotFound?: boolean;
   },
   VerifyAuthChallengeResponseTriggerResponse
 >;
@@ -38,6 +39,7 @@ export const VerifyAuthChallengeResponse =
       challengeAnswer,
       privateChallengeParameters,
       clientMetadata,
+      userNotFound,
     },
   ) =>
     lambda.invoke(ctx, "VerifyAuthChallengeResponse", {
@@ -49,4 +51,5 @@ export const VerifyAuthChallengeResponse =
       userPoolId,
       challengeAnswer,
       privateChallengeParameters,
+      userNotFound,
     });

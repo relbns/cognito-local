@@ -54,6 +54,7 @@ describe("hosted login form", () => {
   let config: Record<string, unknown>;
   let tokenGenerator: ReturnType<typeof newMockTokenGenerator>;
   let app: express.Express;
+  let cognitoService: ReturnType<typeof newMockCognitoService>;
 
   const setUser = (partial: Partial<User>) => {
     stored = TDB.user({
@@ -107,6 +108,7 @@ describe("hosted login form", () => {
     userPool.listUserGroupMembership.mockResolvedValue([]);
 
     const cognito = newMockCognitoService(userPool);
+    cognitoService = cognito;
     cognito.getAppClient.mockResolvedValue(
       TDB.appClient({
         ClientId: "client-1",
@@ -816,8 +818,35 @@ describe("hosted login form", () => {
 
     it("does not run for an unknown user", async () => {
       const res = await login({ username: "unknown@example.test" });
-      expect(res.text).toContain("Incorrect username or password.");
+      expect(res.text).toContain("User does not exist.");
       expect(triggers.preAuthentication).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("PreventUserExistenceErrors ENABLED", () => {
+    beforeEach(() => {
+      cognitoService.getAppClient.mockResolvedValue(
+        TDB.appClient({
+          ClientId: "client-1",
+          UserPoolId: "local_Pool1",
+          CallbackURLs: [CALLBACK],
+          AllowedOAuthFlows: ["code", "implicit"],
+          AllowedOAuthScopes: ["openid", "email"],
+          PreventUserExistenceErrors: "ENABLED",
+        }),
+      );
+    });
+
+    it("shows the generic failure for an unknown user", async () => {
+      const res = await login({ username: "unknown@example.test" });
+      expect(res.text).toContain("Incorrect username or password.");
+      expect(res.text).not.toContain("User does not exist.");
+    });
+
+    it("shows the generic failure for a user who must reset their password", async () => {
+      setUser({ UserStatus: "RESET_REQUIRED" });
+      const res = await login();
+      expect(res.text).toContain("Incorrect username or password.");
     });
   });
 
@@ -850,10 +879,10 @@ describe("hosted login form", () => {
       );
     });
 
-    it("shows incorrect credentials when the trigger refuses", async () => {
+    it("shows that the user does not exist when the trigger refuses", async () => {
       triggers.userMigration.mockRejectedValue(new NotAuthorizedError());
       const res = await login({ username: "unknown@example.test" });
-      expect(res.text).toContain("Incorrect username or password.");
+      expect(res.text).toContain("User does not exist.");
     });
   });
 });

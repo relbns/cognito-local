@@ -37,10 +37,17 @@ import { assertPasswordConformsToPolicy } from "./passwordPolicy";
 import {
   startDeviceVerifier,
   startPasswordVerifier,
+  startPhantomPasswordVerifier,
   verifyDeviceClaim,
   verifyPasswordClaim,
 } from "./srp";
 import { verify as verifyTotp } from "./totp";
+import {
+  INCORRECT_CREDENTIALS,
+  phantomSalt,
+  phantomUserId,
+  simulatedDelivery,
+} from "./userExistence";
 import {
   attribute,
   attributesAppend,
@@ -483,6 +490,168 @@ export const startUserAuth = async (
       availableChallenges: available,
     }),
   };
+};
+
+/** The first factors a user who does not exist is offered: every one the pool allows. */
+const phantomFirstFactors = (userPool: UserPoolService): FirstFactor[] => {
+  const allowed =
+    userPool.options.Policies?.SignInPolicy?.AllowedFirstAuthFactors ?? [];
+  return [
+    ...(["WEB_AUTHN", "EMAIL_OTP", "SMS_OTP"] as const).filter((f) =>
+      allowed.includes(f),
+    ),
+    "PASSWORD",
+    "PASSWORD_SRP",
+  ];
+};
+
+/** The PASSWORD_VERIFIER challenge for a user who does not exist, as RFC 5054 section 2.5.1.3 describes. */
+export const phantomPasswordVerifierChallenge = (
+  services: SignInServices,
+  round: SignInRound,
+  srpA: string | undefined,
+): SignInResponse => {
+  const poolId = round.userPool.options.Id;
+  const parameters = startPhantomPasswordVerifier(services.srpSessions, {
+    userPoolId: poolId,
+    clientId: round.client.ClientId,
+    userIdForSrp: phantomUserId(poolId, round.user.Username),
+    salt: phantomSalt(poolId, round.user.Username),
+    srpA,
+    validityMinutes: round.client.AuthSessionValidity,
+  });
+  return {
+    ChallengeName: "PASSWORD_VERIFIER",
+    ChallengeParameters: parameters,
+    Session: createSession(services, round, "PASSWORD_VERIFIER", {
+      phantom: true,
+    }),
+  };
+};
+
+const startPhantomFactor = (
+  services: SignInServices,
+  round: SignInRound,
+  factor: FirstFactor,
+  parameters: Record<string, string>,
+): SignInResponse => {
+  if (factor === "PASSWORD") {
+    if (!parameters.PASSWORD) {
+      throw new InvalidParameterError("Missing required parameter PASSWORD");
+    }
+    throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
+  }
+  if (factor === "PASSWORD_SRP") {
+    if (!parameters.SRP_A) {
+      throw new InvalidParameterError("Missing required parameter SRP_A");
+    }
+    return phantomPasswordVerifierChallenge(services, round, parameters.SRP_A);
+  }
+  if (factor === "WEB_AUTHN") {
+    const passkey = newPasskeyChallenge(round.userPool.options, round.user);
+    return {
+      ChallengeName: "WEB_AUTHN",
+      ChallengeParameters: {
+        CREDENTIAL_REQUEST_OPTIONS: JSON.stringify(passkey.options),
+      },
+      Session: createSession(services, round, "WEB_AUTHN", { phantom: true }),
+    };
+  }
+  const delivery = simulatedDelivery(
+    round.user.Username,
+    factor === "SMS_OTP" ? ["phone_number"] : ["email"],
+  );
+  return {
+    ChallengeName: factor,
+    ChallengeParameters: {
+      CODE_DELIVERY_DELIVERY_MEDIUM: factor === "SMS_OTP" ? "SMS" : "EMAIL",
+      CODE_DELIVERY_DESTINATION: delivery.Destination,
+    },
+    Session: createSession(services, round, factor, { phantom: true }),
+  };
+};
+
+/** USER_AUTH for a user who does not exist: challenges that look real and never succeed. */
+export const startPhantomUserAuth = (
+  services: SignInServices,
+  round: SignInRound,
+  authParameters: Record<string, string>,
+): SignInResponse => {
+  const available = phantomFirstFactors(round.userPool);
+  const preferred = authParameters.PREFERRED_CHALLENGE as FirstFactor;
+  if (preferred && available.includes(preferred)) {
+    return startPhantomFactor(services, round, preferred, authParameters);
+  }
+  return {
+    ChallengeName: "SELECT_CHALLENGE",
+    ChallengeParameters: {},
+    AvailableChallenges: available,
+    Session: createSession(services, round, "SELECT_CHALLENGE", {
+      availableChallenges: available,
+      phantom: true,
+    }),
+  };
+};
+
+/** RespondToAuthChallenge for a user who does not exist: a generic failure at the step that proves identity. */
+export const respondToPhantomChallenge = (
+  services: SignInServices,
+  answer: ChallengeAnswer,
+): SignInResponse => {
+  const responses = answer.challengeResponses;
+  if (answer.challengeName === "PASSWORD_VERIFIER") {
+    if (responses.PASSWORD_CLAIM_SECRET_BLOCK) {
+      try {
+        services.srpSessions.take(responses.PASSWORD_CLAIM_SECRET_BLOCK);
+      } catch {}
+    }
+    throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
+  }
+  const session = answer.sessionId
+    ? services.authSessions.peek(answer.sessionId)
+    : undefined;
+  if (
+    !session?.signIn?.phantom ||
+    session.clientId !== answer.client.ClientId ||
+    session.userPoolId !== answer.userPool.options.Id ||
+    session.username !== answer.user.Username
+  ) {
+    throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
+  }
+  const round: SignInRound = {
+    userPool: answer.userPool,
+    client: answer.client,
+    user: answer.user,
+  };
+  switch (answer.challengeName) {
+    case "SELECT_CHALLENGE":
+    case "PASSWORD":
+    case "PASSWORD_SRP": {
+      const factor =
+        answer.challengeName === "SELECT_CHALLENGE"
+          ? responses.ANSWER
+          : answer.challengeName;
+      const available = session.signIn.availableChallenges ?? [];
+      if (!FIRST_FACTORS.includes(factor) || !available.includes(factor)) {
+        throw new InvalidParameterError(
+          `ANSWER must be one of ${JSON.stringify(available)}`,
+        );
+      }
+      const response = startPhantomFactor(
+        services,
+        round,
+        factor as FirstFactor,
+        responses,
+      );
+      services.authSessions.take(answer.sessionId as string);
+      return response;
+    }
+    case "EMAIL_OTP":
+    case "SMS_OTP":
+      throw new CodeMismatchError();
+    default:
+      throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
+  }
 };
 
 export interface ChallengeAnswer {

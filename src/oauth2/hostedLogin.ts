@@ -23,6 +23,7 @@ import {
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verify as verifyTotp } from "../services/totp";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
+import { preventsUserExistenceErrors } from "../services/userExistence";
 import type { User } from "../services/userPoolService";
 import type {
   HostedLoginStep,
@@ -33,6 +34,7 @@ import type { AuthorizeFlow } from "./oauthRequest";
 
 export const HOSTED_LOGIN_MESSAGES = {
   incorrectCredentials: "Incorrect username or password.",
+  userDoesNotExist: "User does not exist.",
   userDisabled: "User is disabled.",
   passwordResetRequired: "Password reset required for the user.",
   newPasswordRequired: "Enter a new password.",
@@ -250,9 +252,20 @@ export async function signInWithPassword(
     if (e instanceof CognitoError) return loginError(e.message);
     throw e;
   }
-  if (!user) return loginError(HOSTED_LOGIN_MESSAGES.incorrectCredentials);
+  const prevents = preventsUserExistenceErrors(login.appClient);
+  if (!user) {
+    return loginError(
+      prevents
+        ? HOSTED_LOGIN_MESSAGES.incorrectCredentials
+        : HOSTED_LOGIN_MESSAGES.userDoesNotExist,
+    );
+  }
   if (user.UserStatus === "RESET_REQUIRED") {
-    return loginError(HOSTED_LOGIN_MESSAGES.passwordResetRequired);
+    return loginError(
+      prevents
+        ? HOSTED_LOGIN_MESSAGES.incorrectCredentials
+        : HOSTED_LOGIN_MESSAGES.passwordResetRequired,
+    );
   }
   if (user.Password !== password) {
     return loginError(HOSTED_LOGIN_MESSAGES.incorrectCredentials);

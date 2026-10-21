@@ -2,10 +2,20 @@ import type {
   ResendConfirmationCodeRequest,
   ResendConfirmationCodeResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { InvalidParameterError, UserNotFoundError } from "../errors";
+import {
+  InvalidParameterError,
+  NotAuthorizedError,
+  TokenErrorMessages,
+  UserNotFoundError,
+} from "../errors";
 import type { Services } from "../services";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
+import {
+  preventsUserExistenceErrors,
+  simulatedDelivery,
+  USERNAME_CLIENT_NOT_FOUND,
+} from "../services/userExistence";
 import type { Target } from "./Target";
 
 export type ResendConfirmationCodeTarget = Target<
@@ -28,7 +38,7 @@ export const ResendConfirmationCode =
   }: ResendConfirmationCodeServices): ResendConfirmationCodeTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
-    await verifyRequestSecretHash(
+    const client = await verifyRequestSecretHash(
       ctx,
       { cognito, tokenVerifier },
       req.ClientId,
@@ -36,8 +46,19 @@ export const ResendConfirmationCode =
       req.SecretHash,
     );
     const user = await userPool.getUserByUsername(ctx, req.Username);
-    if (!user) {
-      throw new UserNotFoundError();
+    if (!user || !user.Enabled) {
+      if (preventsUserExistenceErrors(client)) {
+        const verified = userPool.options.AutoVerifiedAttributes ?? [];
+        return {
+          CodeDeliveryDetails: simulatedDelivery(
+            req.Username,
+            verified.includes("phone_number") ? ["phone_number"] : ["email"],
+          ),
+        };
+      }
+      throw user
+        ? new NotAuthorizedError(TokenErrorMessages.userDisabled)
+        : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
     const deliveryDetails = selectAppropriateDeliveryMethod(

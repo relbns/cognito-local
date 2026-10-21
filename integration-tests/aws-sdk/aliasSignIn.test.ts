@@ -105,7 +105,7 @@ describe(
             AuthParameters: { USERNAME: "jane@example.test", PASSWORD },
           })
           .promise(),
-      ).rejects.toMatchObject({ code: "NotAuthorizedException" });
+      ).rejects.toMatchObject({ code: "UserNotFoundException" });
     });
 
     it("matches an email alias in any case when the pool is not case sensitive", async () => {

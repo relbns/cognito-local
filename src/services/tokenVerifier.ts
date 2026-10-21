@@ -373,9 +373,10 @@ export const verifyRequestSecretHash = async (
   clientId: string,
   username: string | undefined,
   secretHash: string | undefined,
-): Promise<void> => {
+): Promise<AppClient | null> => {
   const client = await services.cognito.getAppClient(ctx, clientId);
   if (client) {
     services.tokenVerifier.verifySecretHash(client, [username], secretHash);
   }
+  return client;
 };

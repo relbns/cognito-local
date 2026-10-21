@@ -57,7 +57,33 @@ Every flow refuses a disabled user with `NotAuthorizedException` ("User is disab
 flows check the password first, so a wrong password still returns "Incorrect username or password.".
 A `FORCE_CHANGE_PASSWORD` user gets the `NEW_PASSWORD_REQUIRED` challenge only after the temporary
 password matches, before MFA. In the password, SRP and `USER_AUTH` flows a `RESET_REQUIRED` user
-(migrated or imported) gets `PasswordResetRequiredException` before any password is checked.
+(migrated or imported) gets `PasswordResetRequiredException` before any password is checked, or
+`NotAuthorizedException` ("Incorrect username or password.") when the client prevents user
+existence errors.
+
+### User existence errors
+
+The app client's `PreventUserExistenceErrors` decides what a request for an unknown username returns,
+as described in
+[Managing user existence error responses](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-managing-errors.html).
+Unset means `LEGACY`, the CreateUserPoolClient default.
+
+| Operation | `LEGACY` | `ENABLED` |
+| --- | --- | --- |
+| `USER_PASSWORD_AUTH`, `ADMIN_USER_PASSWORD_AUTH`, `USER_AUTH` with `PASSWORD` | `UserNotFoundException` ("User does not exist.") | `NotAuthorizedException` ("Incorrect username or password.") |
+| `USER_SRP_AUTH`, `USER_AUTH` with `PASSWORD_SRP` | `UserNotFoundException` | A normal `PASSWORD_VERIFIER` challenge with the same `SALT` and a UUID `USER_ID_FOR_SRP` every time for that username in that pool (RFC 5054 section 2.5.1.3). The `PASSWORD_VERIFIER` answer returns `NotAuthorizedException` ("Incorrect username or password."). |
+| `USER_AUTH` | `UserNotFoundException` | `SELECT_CHALLENGE` listing every factor the pool allows (`WEB_AUTHN`, `EMAIL_OTP`, `SMS_OTP` from `AllowedFirstAuthFactors`, then `PASSWORD` and `PASSWORD_SRP`), or the preferred one. A one-time code challenge names a simulated destination and sends nothing; its answer returns `CodeMismatchException`. A `WEB_AUTHN` challenge lists no credentials and its answer returns `NotAuthorizedException`. |
+| `CUSTOM_AUTH` | `UserNotFoundException` | DefineAuthChallenge, CreateAuthChallenge and VerifyAuthChallengeResponse run with `userNotFound: true`, empty `userAttributes` and the username as sent. When DefineAuthChallenge issues tokens, the sign-in fails with `NotAuthorizedException` ("Incorrect username or password."). |
+| RespondToAuthChallenge, AdminRespondToAuthChallenge | `UserNotFoundException` | `NotAuthorizedException` ("Incorrect username or password."), except as described above |
+| ForgotPassword | `UserNotFoundException` ("Username/client id combination not found."); a disabled user gets `NotAuthorizedException` ("User is disabled.") | `CodeDeliveryDetails` with a simulated destination, also for a disabled user or a user with no verified email or phone number; nothing is sent |
+| ConfirmForgotPassword | `UserNotFoundException` ("Username/client id combination not found.") | `CodeMismatchException`, also for a disabled user |
+| ResendConfirmationCode | `UserNotFoundException` ("Username/client id combination not found.") | `CodeDeliveryDetails` with a simulated destination, also for a disabled user; nothing is sent |
+| ConfirmSignUp | `UserNotFoundException` ("Username/client id combination not found.") | `CodeMismatchException` |
+| Built-in login form | "User does not exist." | "Incorrect username or password." |
+
+A simulated destination is the username itself when it is an email address or a phone number, and
+otherwise a masked placeholder (`u***@e***`, or `+*******0000` when the pool verifies phone numbers
+first). PreAuthentication runs for an unknown user only under `ENABLED`, with `userNotFound: true`.
 
 RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`,
 `SELECT_CHALLENGE`, `PASSWORD`, `PASSWORD_SRP`, `EMAIL_OTP`, `SMS_OTP`, `WEB_AUTHN`, `SMS_MFA`,
@@ -94,7 +120,7 @@ RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`
   pool's `AdminCreateUserConfig.AllowAdminCreateUserOnly` is `true`.
 - ForgotPassword for an unknown user runs UserMigration (`UserMigration_ForgotPassword`) when the
   pool has it, and sends the code to the migrated user. Without it, or when the trigger rejects the
-  user, it returns `UserNotFoundException` ("Username/client id combination not found.").
+  user, the user is unknown, as described in [User existence errors](#user-existence-errors).
 
 ## MFA
 
@@ -276,8 +302,8 @@ sign-up is not shown.
 The import follows Cognito's CSV rules. The header names known columns in any order and must have
 `cognito:username` and `cognito:mfa_enabled`; an unknown or repeated column, a missing upload or an
 empty file fails the whole job. Each record becomes a user in `RESET_REQUIRED` with no password, so
-sign-in returns `PasswordResetRequiredException` until ForgotPassword and ConfirmForgotPassword
-set one. `cognito:mfa_enabled` `TRUE` turns on SMS MFA and needs `phone_number`. When the pool signs
+sign-in returns `PasswordResetRequiredException` (`NotAuthorizedException` when the client prevents
+user existence errors) until ForgotPassword and ConfirmForgotPassword set one. `cognito:mfa_enabled` `TRUE` turns on SMS MFA and needs `phone_number`. When the pool signs
 in with email, the username is a generated `sub` and the email comes from `email` (or from
 `cognito:username` when it is an address). No trigger runs.
 

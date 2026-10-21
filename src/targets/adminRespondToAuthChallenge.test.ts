@@ -21,6 +21,7 @@ import {
   InvalidParameterError,
   InvalidPasswordError,
   NotAuthorizedError,
+  UserNotFoundError,
 } from "../errors";
 import {
   InMemoryAuthSessions,
@@ -88,7 +89,7 @@ describe("AdminRespondToAuthChallenge target", () => {
         },
         Session: "Session",
       }),
-    ).rejects.toBeInstanceOf(NotAuthorizedError);
+    ).rejects.toBeInstanceOf(UserNotFoundError);
   });
 
   it("throws if ChallengeResponses missing", async () => {

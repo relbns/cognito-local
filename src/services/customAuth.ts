@@ -8,7 +8,16 @@ import type { AppClient } from "./appClient";
 import type { AuthSessions, ChallengeResult } from "./authSessions";
 import type { Context } from "./context";
 import type { Services } from "./index";
-import { startPasswordVerifier, verifyPasswordClaim } from "./srp";
+import {
+  startPasswordVerifier,
+  startPhantomPasswordVerifier,
+  verifyPasswordClaim,
+} from "./srp";
+import {
+  INCORRECT_CREDENTIALS,
+  phantomSalt,
+  phantomUserId,
+} from "./userExistence";
 import type { User, UserPoolService } from "./userPoolService";
 
 export type CustomAuthServices = Pick<
@@ -29,6 +38,8 @@ interface CustomAuthRound {
   srpA?: string;
   clientMetadata?: Record<string, string>;
   postAuthenticationClientMetadata?: Record<string, string>;
+  /** The username matches no user; the triggers run with userNotFound and tokens are refused. */
+  userNotFound?: boolean;
 }
 
 const triggerBase = (round: CustomAuthRound) => ({
@@ -38,6 +49,7 @@ const triggerBase = (round: CustomAuthRound) => ({
   userPoolId: round.userPool.options.Id,
   session: round.history,
   clientMetadata: round.clientMetadata,
+  ...(round.userNotFound ? { userNotFound: true } : {}),
 });
 
 const issueTokens = async (
@@ -83,6 +95,9 @@ const runCustomAuthRound = async (
     throw new NotAuthorizedError("Incorrect username or password.");
   }
   if (define.issueTokens) {
+    if (round.userNotFound) {
+      throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
+    }
     return issueTokens(ctx, services, round);
   }
 
@@ -99,20 +114,31 @@ const runCustomAuthRound = async (
         history: round.history,
         srpA: round.srpA,
         pendingChallenge,
+        ...(round.userNotFound ? { userNotFound: true } : {}),
       },
       round.client.AuthSessionValidity,
     );
 
   if (challengeName === "PASSWORD_VERIFIER") {
+    const poolId = round.userPool.options.Id;
     return {
       ChallengeName: "PASSWORD_VERIFIER",
-      ChallengeParameters: startPasswordVerifier(services.srpSessions, {
-        userPoolId: round.userPool.options.Id,
-        clientId: round.client.ClientId,
-        user: round.user,
-        srpA: round.srpA,
-        validityMinutes: round.client.AuthSessionValidity,
-      }),
+      ChallengeParameters: round.userNotFound
+        ? startPhantomPasswordVerifier(services.srpSessions, {
+            userPoolId: poolId,
+            clientId: round.client.ClientId,
+            userIdForSrp: phantomUserId(poolId, round.user.Username),
+            salt: phantomSalt(poolId, round.user.Username),
+            srpA: round.srpA,
+            validityMinutes: round.client.AuthSessionValidity,
+          })
+        : startPasswordVerifier(services.srpSessions, {
+            userPoolId: poolId,
+            clientId: round.client.ClientId,
+            user: round.user,
+            srpA: round.srpA,
+            validityMinutes: round.client.AuthSessionValidity,
+          }),
       Session: newSession({ challengeName, privateChallengeParameters: {} }),
     };
   }
@@ -156,12 +182,14 @@ export const startCustomAuth = async (
   {
     userPool,
     user,
+    userNotFound,
     client,
     authParameters,
     clientMetadata,
   }: {
     userPool: UserPoolService;
     user: User;
+    userNotFound?: boolean;
     client: AppClient;
     authParameters?: Record<string, string>;
     clientMetadata?: Record<string, string>;
@@ -182,6 +210,7 @@ export const startCustomAuth = async (
       : [],
     srpA: authParameters?.SRP_A,
     clientMetadata,
+    userNotFound,
   });
 };
 
@@ -204,9 +233,11 @@ export const respondToCustomAuthChallenge = async (
     challengeName,
     challengeResponses,
     clientMetadata,
+    userNotFound,
   }: {
     userPool: UserPoolService;
     user: User;
+    userNotFound?: boolean;
     client: AppClient;
     sessionId: string;
     challengeName: string;
@@ -218,7 +249,8 @@ export const respondToCustomAuthChallenge = async (
   if (
     session.clientId !== client.ClientId ||
     session.userPoolId !== userPool.options.Id ||
-    session.username !== user.Username
+    session.username !== user.Username ||
+    !!session.userNotFound !== !!userNotFound
   ) {
     throw new NotAuthorizedError("Invalid session for the user.");
   }
@@ -236,9 +268,13 @@ export const respondToCustomAuthChallenge = async (
     srpA: session.srpA,
     clientMetadata: clientMetadata ?? session.clientMetadata,
     postAuthenticationClientMetadata: clientMetadata,
+    userNotFound,
   };
 
   if (challengeName === "PASSWORD_VERIFIER") {
+    if (userNotFound) {
+      throw new NotAuthorizedError(INCORRECT_CREDENTIALS);
+    }
     verifyPasswordClaim(services.srpSessions, {
       userPoolId: userPool.options.Id,
       clientId: client.ClientId,
@@ -269,6 +305,7 @@ export const respondToCustomAuthChallenge = async (
     privateChallengeParameters:
       session.pendingChallenge.privateChallengeParameters,
     clientMetadata: round.clientMetadata,
+    ...(userNotFound ? { userNotFound: true } : {}),
   });
 
   round.history.push({

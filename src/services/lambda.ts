@@ -249,6 +249,7 @@ interface CreateAuthChallengeEvent extends EventCommonParameters {
     challengeResult: boolean;
     challengeMetadata?: string;
   }>;
+  userNotFound?: boolean;
 }
 
 interface VerifyAuthChallengeResponseEvent extends EventCommonParameters {
@@ -256,6 +257,7 @@ interface VerifyAuthChallengeResponseEvent extends EventCommonParameters {
   triggerSource: "VerifyAuthChallengeResponse_Authentication";
   challengeAnswer: string;
   privateChallengeParameters?: Record<string, string>;
+  userNotFound?: boolean;
 }
 
 export type LambdaClient = Pick<LambdaSdkClient, "invoke">;
@@ -803,6 +805,7 @@ export class LambdaService implements Lambda {
             session:
               event.session as CreateAuthChallengeTriggerEvent["request"]["session"],
             clientMetadata: event.clientMetadata,
+            ...(event.userNotFound ? { userNotFound: true } : {}),
           },
           response: {
             publicChallengeParameters: {},
@@ -825,6 +828,7 @@ export class LambdaService implements Lambda {
             challengeAnswer: event.challengeAnswer,
             privateChallengeParameters: event.privateChallengeParameters ?? {},
             clientMetadata: event.clientMetadata,
+            ...(event.userNotFound ? { userNotFound: true } : {}),
           },
           response: {
             answerCorrect: false,

@@ -210,7 +210,7 @@ describe(
             ClientId: upc.UserPoolClient?.ClientId as string,
           })
           .promise(),
-      ).rejects.toThrow("User not authorized");
+      ).rejects.toThrow("User does not exist.");
 
       // now verify the attribute with the confirmation code
       const lastMessage = messageDelivery().collectedMessages.at(-1);
@@ -275,7 +275,7 @@ describe(
             ClientId: upc.UserPoolClient?.ClientId as string,
           })
           .promise(),
-      ).rejects.toThrow("User not authorized");
+      ).rejects.toThrow("User does not exist.");
     });
   }),
 );

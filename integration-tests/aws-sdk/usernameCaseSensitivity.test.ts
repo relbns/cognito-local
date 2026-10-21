@@ -172,7 +172,7 @@ describe(
             AuthParameters: { USERNAME: "JANE", PASSWORD },
           })
           .promise(),
-      ).rejects.toMatchObject({ code: "NotAuthorizedException" });
+      ).rejects.toMatchObject({ code: "UserNotFoundException" });
     });
   }),
 );

@@ -37,7 +37,8 @@ describe(
           })
           .promise(),
       ).rejects.toMatchObject({
-        message: "User not authorized",
+        code: "UserNotFoundException",
+        message: "User does not exist.",
       });
     });
 

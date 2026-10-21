@@ -2,10 +2,20 @@ import type {
   ConfirmForgotPasswordRequest,
   ConfirmForgotPasswordResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { CodeMismatchError, UserNotFoundError } from "../errors";
+import {
+  CodeMismatchError,
+  ExpiredCodeError,
+  NotAuthorizedError,
+  TokenErrorMessages,
+  UserNotFoundError,
+} from "../errors";
 import type { Services } from "../services";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
+import {
+  preventsUserExistenceErrors,
+  USERNAME_CLIENT_NOT_FOUND,
+} from "../services/userExistence";
 import type { User } from "../services/userPoolService";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -31,7 +41,7 @@ export const ConfirmForgotPassword =
   }: ConfirmForgotPasswordServices): ConfirmForgotPasswordTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPoolForClientId(ctx, req.ClientId);
-    await verifyRequestSecretHash(
+    const client = await verifyRequestSecretHash(
       ctx,
       { cognito, tokenVerifier },
       req.ClientId,
@@ -39,10 +49,18 @@ export const ConfirmForgotPassword =
       req.SecretHash,
     );
     const user = await userPool.getUserByUsername(ctx, req.Username);
-    if (!user) {
-      throw new UserNotFoundError();
+    if (!user || !user.Enabled) {
+      if (preventsUserExistenceErrors(client)) {
+        throw new CodeMismatchError();
+      }
+      throw user
+        ? new NotAuthorizedError(TokenErrorMessages.userDisabled)
+        : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
     }
 
+    if (!user.ConfirmationCode) {
+      throw new ExpiredCodeError();
+    }
     if (user.ConfirmationCode !== req.ConfirmationCode) {
       throw new CodeMismatchError();
     }

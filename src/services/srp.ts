@@ -193,9 +193,18 @@ export class InMemorySrpSessions implements SrpSessions {
   }
 }
 
-const randomSalt = (): string => {
-  let bytes = crypto.randomBytes(16);
-  while (bytes[0] === 0) bytes = crypto.randomBytes(16);
+// Cognito keeps one salt per password, so the same password gives the same SALT on every sign-in.
+const passwordSalt = (
+  userPoolId: string,
+  username: string,
+  password: string,
+): string => {
+  const bytes = crypto
+    .createHash("sha256")
+    .update(["password-salt", userPoolId, username, password].join("\u0000"))
+    .digest()
+    .subarray(0, 16);
+  if (bytes[0] === 0) bytes[0] = 1;
   return bytes.toString("hex");
 };
 
@@ -242,12 +251,13 @@ export const startPasswordVerifier = (
   },
 ): Record<string, string> => {
   const A = parseSrpA(srpA);
-  const salt = randomSalt();
+  // A user without a password, such as a federated one, gets a verifier no password matches.
+  const password = user.Password || crypto.randomBytes(32).toString("base64");
+  const salt = passwordSalt(userPoolId, user.Username, password);
   const verifier = passwordVerifier({
     poolName: poolNameOf(userPoolId),
     userIdForSrp: user.Username,
-    // A user without a password, such as a federated one, gets a verifier no password matches.
-    password: user.Password || crypto.randomBytes(32).toString("base64"),
+    password,
     salt,
   });
   const { b, B } = newServerSecret(verifier);
@@ -272,6 +282,46 @@ export const startPasswordVerifier = (
     SECRET_BLOCK: secretBlock,
     USER_ID_FOR_SRP: user.Username,
     USERNAME: user.Username,
+  };
+};
+
+/** A PASSWORD_VERIFIER challenge for a user who does not exist: a stable salt and user id, no usable verifier. */
+export const startPhantomPasswordVerifier = (
+  srpSessions: SrpSessions,
+  {
+    userPoolId,
+    clientId,
+    userIdForSrp,
+    salt,
+    srpA,
+    validityMinutes,
+  }: {
+    userPoolId: string;
+    clientId: string;
+    userIdForSrp: string;
+    salt: string;
+    srpA: string | undefined;
+    validityMinutes?: number;
+  },
+): Record<string, string> => {
+  const A = parseSrpA(srpA);
+  const verifier = passwordVerifier({
+    poolName: poolNameOf(userPoolId),
+    userIdForSrp,
+    password: crypto.randomBytes(32).toString("base64"),
+    salt,
+  });
+  const { b, B } = newServerSecret(verifier);
+  const secretBlock = srpSessions.create(
+    { userPoolId, clientId, username: userIdForSrp, A, b, B, verifier },
+    validityMinutes,
+  );
+  return {
+    SALT: salt,
+    SRP_B: B.toString(16),
+    SECRET_BLOCK: secretBlock,
+    USER_ID_FOR_SRP: userIdForSrp,
+    USERNAME: userIdForSrp,
   };
 };
 
