@@ -100,13 +100,18 @@ export interface AppClient {
   RefreshTokenRotation?: RefreshTokenRotationType;
 }
 
-/** The attributes a client can read: every one when ReadAttributes is unset, else those listed and sub. */
+/**
+ * The attributes a client can read: those listed and sub, or, when ReadAttributes is unset, the
+ * standard attributes and their verified flags but no custom attributes (CreateUserPoolClient).
+ */
 export const readableAttributes = <T extends { Name?: string }>(
   client: Pick<AppClient, "ReadAttributes"> | null | undefined,
   attributes: readonly T[],
 ): T[] => {
   const allowed = client?.ReadAttributes;
-  if (!allowed?.length) return [...attributes];
+  if (!allowed?.length) {
+    return attributes.filter((a) => !/^(dev:)?custom:/.test(a.Name ?? ""));
+  }
   return attributes.filter(
     (a) =>
       a.Name === "sub" || (a.Name !== undefined && allowed.includes(a.Name)),

@@ -204,6 +204,7 @@ describe(
         sub: userSub,
         token_use: "access",
         username: "abc",
+        version: 2,
       });
 
       expect(
@@ -316,6 +317,7 @@ describe(
         sub: userSub,
         token_use: "access",
         username: "abc",
+        version: 2,
       });
 
       expect(

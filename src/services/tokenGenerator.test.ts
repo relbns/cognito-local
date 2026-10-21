@@ -360,15 +360,16 @@ describe("JwtTokenGenerator", () => {
       return jwt.decode(tokens.IdToken) as Record<string, unknown>;
     };
 
-    it("puts every attribute in the ID token when ReadAttributes is unset", async () => {
-      expect(await idClaims()).toMatchObject({
+    it("puts the standard attributes but no custom ones in the ID token when ReadAttributes is unset", async () => {
+      const claims = await idClaims();
+      expect(claims).toMatchObject({
         email: "jane@example.test",
         email_verified: true,
         phone_number: "+15555550100",
         given_name: "Jane",
-        "custom:tier": "gold",
-        "custom:secret": "s",
       });
+      expect(claims).not.toHaveProperty("custom:tier");
+      expect(claims).not.toHaveProperty("custom:secret");
     });
 
     it("keeps only the attributes the client can read", async () => {
@@ -515,6 +516,7 @@ describe("JwtTokenGenerator", () => {
         sub: attributeValue("sub", user.Attributes),
         token_use: "access",
         username: user.Username,
+        version: 2,
       });
 
       expect(jwt.decode(tokens.IdToken)).toEqual({

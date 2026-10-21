@@ -45,6 +45,7 @@
           "AllowedOAuthFlowsUserPoolClient": true,
           "AllowedOAuthFlows": ["code"],
           "AllowedOAuthScopes": ["openid", "email", "profile"],
+          "ReadAttributes": ["email", "email_verified", "name", "custom:tenant_id"],
           "SupportedIdentityProviders": ["COGNITO"],
           "CallbackURLs": [
             "http://localhost:3000/callback",

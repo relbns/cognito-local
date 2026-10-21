@@ -32,6 +32,7 @@ describe(
           UserPoolId: userPoolId,
           ClientName: "app",
           ExplicitAuthFlows: ["ALLOW_ADMIN_USER_PASSWORD_AUTH"],
+          ReadAttributes: ["email", "dev:custom:tier"],
         })
         .promise();
       const clientId = appClient.UserPoolClient?.ClientId as string;

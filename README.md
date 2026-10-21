@@ -527,6 +527,11 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
   code provided, please try again." and "Invalid code or auth state for the user.": see
   [docs/api-coverage.md](docs/api-coverage.md#error-messages).
 
+- **Tokens.** User access tokens carry `version: 2`, and `device_key` when the pool tracks devices.
+  An app client without `ReadAttributes` reads the standard attributes only, so `custom:` attributes
+  reach ID tokens, `GetUser` and `/oauth2/userInfo` only when `ReadAttributes` lists them: see
+  [docs/tokens.md](docs/tokens.md#readattributes).
+
 ### Stricter than upstream cognito-local
 
 Each row below has a switch that restores upstream's lenient behaviour:
@@ -544,9 +549,6 @@ Each row below has a switch that restores upstream's lenient behaviour:
 
 Pools default to email as the username
 (`UserPoolDefaults.UsernameAttributes: ["email"]`), where Cognito defaults to free-form usernames.
-
-An app client without `ReadAttributes` reads every attribute, `custom:` ones included, in ID tokens,
-`GetUser` and `/oauth2/userInfo`; Cognito then exposes the standard attributes only.
 
 ## Troubleshooting
 

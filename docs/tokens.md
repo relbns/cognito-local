@@ -64,6 +64,16 @@ grace period it fails with `Refresh Token has been revoked` (`invalid_grant` on 
 `InvalidParameterException`: `REFRESH_TOKEN_AUTH flow not enabled for this client`. Without rotation,
 refreshes return access and ID tokens only and the refresh token stays valid.
 
+## Access token claims
+
+A user's access token carries `sub`, `cognito:groups` (when the user is in a group), `iss`,
+`client_id`, `origin_jti`, `event_id`, `token_use` (`access`), `scope`, `auth_time`, `exp`, `iat`,
+`jti`, `username` and `version: 2`, as in the payload the
+[access token guide](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-the-access-token.html)
+shows. When the pool tracks devices, `device_key` names the device of the sign-in: the `DEVICE_KEY`
+the request sent or the device that authenticated with `DEVICE_SRP_AUTH`, else the key the same
+response returns in `NewDeviceMetadata`. Tokens from a refresh keep the `device_key` of the sign-in.
+
 ## Revocation
 
 Each sign-in starts a session. Its id is the `origin_jti` claim of the access and ID tokens and the
@@ -86,8 +96,12 @@ revoked, and their refresh tokens still work and start a tracked session.
 When an app client sets `ReadAttributes`, the attributes it does not list are left out of the ID
 tokens issued to it (standard claims, `email_verified`, `phone_number_verified`, `address` and
 `custom:` attributes), of `GetUser` with its access tokens, and of `/oauth2/userInfo`. `sub`,
-`cognito:username` and `identities` always stay. A client without `ReadAttributes` reads every
-attribute. The pre token generation trigger still receives all of the user's attributes.
+`cognito:username` and `identities` always stay. A client without `ReadAttributes` reads the
+standard attributes, `email_verified` and `phone_number_verified`, and no `custom:` or `dev:custom:`
+attribute, as
+[CreateUserPoolClient](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateUserPoolClient.html#CognitoUserPools-CreateUserPoolClient-request-ReadAttributes)
+describes: list them in `ReadAttributes` to put them in ID tokens. The pre token generation trigger
+still receives all of the user's attributes.
 
 ## Client credentials
 

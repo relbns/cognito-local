@@ -39,6 +39,10 @@ import { generate as totpCode } from "../../src/services/totp";
 import { withCognitoSdk } from "../aws-sdk/setup";
 
 const PASSWORD = "Example-Passw0rd!";
+const claimsOf = (token: string | undefined): Record<string, unknown> =>
+  JSON.parse(
+    Buffer.from((token ?? "").split(".")[1] ?? "", "base64url").toString(),
+  );
 const EMAIL = "flow-user@example.test";
 const credentials = { accessKeyId: "local", secretAccessKey: "local" };
 
@@ -454,6 +458,12 @@ describe(
         const metadata = first.AuthenticationResult?.NewDeviceMetadata;
         const DeviceKey = metadata?.DeviceKey as string;
         const DeviceGroupKey = metadata?.DeviceGroupKey as string;
+        expect(claimsOf(first.AuthenticationResult?.AccessToken)).toMatchObject(
+          {
+            device_key: DeviceKey,
+            version: 2,
+          },
+        );
         const secret = deviceSecret(DeviceGroupKey, DeviceKey);
         await cognito.send(
           new ConfirmDeviceCommand({
@@ -517,6 +527,23 @@ describe(
         expect(
           signedIn.AuthenticationResult?.NewDeviceMetadata,
         ).toBeUndefined();
+        expect(
+          claimsOf(signedIn.AuthenticationResult?.AccessToken).device_key,
+        ).toEqual(DeviceKey);
+        const refreshed = await cognito.send(
+          new InitiateAuthCommand({
+            AuthFlow: "REFRESH_TOKEN_AUTH",
+            ClientId: clientId,
+            AuthParameters: {
+              REFRESH_TOKEN: signedIn.AuthenticationResult
+                ?.RefreshToken as string,
+              DEVICE_KEY: DeviceKey,
+            },
+          }),
+        );
+        expect(
+          claimsOf(refreshed.AuthenticationResult?.AccessToken).device_key,
+        ).toEqual(DeviceKey);
 
         const unknown = await cognito
           .send(

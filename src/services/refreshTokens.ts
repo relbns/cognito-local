@@ -59,6 +59,9 @@ export const refreshTokens = async (
     scopes,
     {
       originJti,
+      ...(typeof claims.device_key === "string"
+        ? { deviceKey: claims.device_key }
+        : {}),
       ...(rotate && typeof claims.exp === "number"
         ? { refreshTokenExpiresAt: claims.exp }
         : {}),

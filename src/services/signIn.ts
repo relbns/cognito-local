@@ -248,19 +248,9 @@ export const finishSignIn = async (
     });
   }
 
-  const userGroups = await userPool.listUserGroupMembership(ctx, user);
-  const tokens = await services.tokenGenerator.generate(
-    ctx,
-    user,
-    userGroups,
-    client,
-    round.tokenClientMetadata,
-    source,
-  );
-  await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
-
+  const tracking = deviceTrackingEnabled(userPool.options);
   let newDevice: NewDeviceMetadata | undefined;
-  if (deviceTrackingEnabled(userPool.options) && !round.deviceKey) {
+  if (tracking && !round.deviceKey) {
     await userPool.updateUser(ctx, user, (latest) => {
       const issued = issueDevice(
         userPool.options.Id,
@@ -271,6 +261,31 @@ export const finishSignIn = async (
       return issued.user;
     });
   }
+  const deviceKey = tracking
+    ? (round.deviceKey ?? newDevice?.DeviceKey)
+    : undefined;
+
+  const userGroups = await userPool.listUserGroupMembership(ctx, user);
+  const tokens = deviceKey
+    ? await services.tokenGenerator.generate(
+        ctx,
+        user,
+        userGroups,
+        client,
+        round.tokenClientMetadata,
+        source,
+        undefined,
+        { deviceKey },
+      )
+    : await services.tokenGenerator.generate(
+        ctx,
+        user,
+        userGroups,
+        client,
+        round.tokenClientMetadata,
+        source,
+      );
+  await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
 
   return {
     ChallengeParameters: {},

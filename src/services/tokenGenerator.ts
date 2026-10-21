@@ -106,6 +106,8 @@ export interface GenerateOptions {
   originJti?: string;
   /** A rotated refresh token keeps the expiry (epoch seconds) of the one it replaces. */
   refreshTokenExpiresAt?: number;
+  /** The device the user signed in on, as the access token's device_key claim. */
+  deviceKey?: string;
 }
 
 export interface TokenGenerator {
@@ -281,6 +283,8 @@ export class JwtTokenGenerator implements TokenGenerator {
       sub,
       token_use: "access",
       username: user.Username,
+      version: 2,
+      ...(options.deviceKey ? { device_key: options.deviceKey } : {}),
     };
     const readable = readableAttributes(userPoolClient, user.Attributes);
     const email = attributeValue("email", readable);
@@ -374,6 +378,7 @@ export class JwtTokenGenerator implements TokenGenerator {
           iat: authTime,
           jti: originJti,
           ...(scopes?.length ? { scope: scopes.join(" ") } : {}),
+          ...(options.deviceKey ? { device_key: options.deviceKey } : {}),
           ...(options.refreshTokenExpiresAt === undefined
             ? {}
             : { event_id: eventId, exp: options.refreshTokenExpiresAt }),

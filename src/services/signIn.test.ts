@@ -768,6 +768,8 @@ describe("sign-in pipeline", () => {
         client,
         undefined,
         "AuthenticateDevice",
+        undefined,
+        { deviceKey: device.DeviceKey },
       );
       expect(stored.Devices?.[0].DeviceLastAuthenticatedDate).toEqual(
         clock.get(),
