@@ -186,4 +186,42 @@ describe("DefaultConfig", () => {
 
     expect(config.ValidationConfig.Enabled).toBe(false);
   });
+  it("keeps federation on the mock IdP by default and reads per-provider modes", async () => {
+    expect(DefaultConfig.FederationConfig).toEqual({
+      Mode: "mock",
+      Providers: {},
+    });
+    const ds = newMockDataStore();
+    ds.getRoot.mockResolvedValue({
+      FederationConfig: {
+        Mode: "real",
+        Providers: { CorpIdP: { Mode: "mock" } },
+      },
+    });
+    const config = await loadConfig(TestContext, newMockDataStoreFactory(ds));
+    expect(config.FederationConfig).toEqual({
+      Mode: "real",
+      Providers: { CorpIdP: { Mode: "mock" } },
+    });
+  });
+
+  it.each([
+    [
+      { Mode: "live" },
+      'FederationConfig.Mode must be "mock" or "real", got "live"',
+    ],
+    [
+      { Providers: { CorpIdP: { Mode: "REAL" } } },
+      'FederationConfig.Providers.CorpIdP.Mode must be "mock" or "real", got "REAL"',
+    ],
+  ])(
+    "rejects an unknown federation mode %j",
+    async (FederationConfig, message) => {
+      const ds = newMockDataStore();
+      ds.getRoot.mockResolvedValue({ FederationConfig });
+      await expect(
+        loadConfig(TestContext, newMockDataStoreFactory(ds)),
+      ).rejects.toThrow(message);
+    },
+  );
 });

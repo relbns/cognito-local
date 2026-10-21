@@ -43,6 +43,19 @@ export interface FileTriggerConfig {
   HotReload: boolean;
 }
 
+export type FederationMode = "mock" | "real";
+
+export interface FederationProviderConfig {
+  Mode?: FederationMode;
+}
+
+export interface FederationConfig {
+  /** "real" sends OIDC and social sign-ins to the provider itself; "mock" shows the mock IdP page. */
+  Mode: FederationMode;
+  /** Per-provider override, keyed by ProviderName. */
+  Providers: Record<string, FederationProviderConfig>;
+}
+
 export interface ConfigOverrides {
   port?: number;
   hostname?: string;
@@ -62,6 +75,7 @@ export interface Config {
   PasswordPolicyConfig: PasswordPolicyConfig;
   ValidationConfig: ValidationConfig;
   FileTriggerConfig: FileTriggerConfig;
+  FederationConfig: FederationConfig;
 }
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
@@ -107,6 +121,10 @@ export const DefaultConfig: Config = {
     TimeoutMs: DEFAULT_FILE_TRIGGER_TIMEOUT_MS,
     HotReload: true,
   },
+  FederationConfig: {
+    Mode: "mock",
+    Providers: {},
+  },
   KMSConfig: {
     credentials: {
       accessKeyId: "local",
@@ -121,6 +139,26 @@ export const DefaultConfig: Config = {
     https: false,
   },
 };
+
+const FEDERATION_MODES: readonly unknown[] = ["mock", "real"];
+
+function assertFederationConfig(federation: FederationConfig): void {
+  if (!FEDERATION_MODES.includes(federation.Mode)) {
+    throw new Error(
+      `FederationConfig.Mode must be "mock" or "real", got ${JSON.stringify(federation.Mode)}`,
+    );
+  }
+  for (const [name, provider] of Object.entries(federation.Providers ?? {})) {
+    if (
+      provider?.Mode !== undefined &&
+      !FEDERATION_MODES.includes(provider.Mode)
+    ) {
+      throw new Error(
+        `FederationConfig.Providers.${name}.Mode must be "mock" or "real", got ${JSON.stringify(provider.Mode)}`,
+      );
+    }
+  }
+}
 
 export const loadConfig = async (
   ctx: Context,
@@ -153,6 +191,7 @@ export const loadConfig = async (
   if (overrides.adminToken !== undefined) {
     merged.AdminUIConfig.Token = overrides.adminToken;
   }
+  assertFederationConfig(merged.FederationConfig);
   if (!config?.TokenConfig?.IssuerDomain) {
     const proto = merged.ServerConfig.https ? "https" : "http";
     merged.TokenConfig.IssuerDomain = `${proto}://${issuerHostFor(merged.ServerConfig.hostname)}:${merged.ServerConfig.port}`;

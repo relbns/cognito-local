@@ -53,6 +53,7 @@ import {
   type ResourceServerScopes,
 } from "./oauthRequest";
 import { verifyS256 } from "./pkce";
+import { RealIdp } from "./realIdp";
 
 function badRequest(res: Response, message: string) {
   res
@@ -113,6 +114,7 @@ export function attachOAuth2Routes(
     services.clock,
   ),
 ): void {
+  const realIdp = new RealIdp(services.clock);
   attachFederationRoutes(
     app,
     services,
@@ -120,6 +122,7 @@ export function attachOAuth2Routes(
     federationStore,
     (req, res, userPoolId, username) =>
       startBrowserSession(req, res, browserSessions, userPoolId, username),
+    realIdp,
   );
 
   const sendHtml = (res: Response, status: number, html: string) =>
@@ -312,14 +315,20 @@ export function attachOAuth2Routes(
         (p) => p.ProviderName === decision.providerName,
       );
       if (!provider) return badRequest(res, "Invalid identity provider");
-      return beginFederation(req, res, federationStore, {
-        clientId: appClient.ClientId,
-        userPoolId: appClient.UserPoolId,
-        redirectUri: params.redirect_uri ?? "",
-        state: params.state,
-        provider,
-        flow: decision,
-      });
+      return beginFederation(
+        req,
+        res,
+        federationStore,
+        {
+          clientId: appClient.ClientId,
+          userPoolId: appClient.UserPoolId,
+          redirectUri: params.redirect_uri ?? "",
+          state: params.state,
+          provider,
+          flow: decision,
+        },
+        { idp: realIdp, config: services.config?.FederationConfig },
+      );
     }
     return sendHtml(
       res,

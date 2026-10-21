@@ -1,5 +1,6 @@
 import type { Application, Request, Response } from "express";
 import { CognitoError } from "../errors";
+import type { FederationConfig } from "../server/config";
 import type { Services } from "../services";
 import { type Context, requestContext } from "../services/context";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
@@ -14,6 +15,12 @@ import {
 import type { FederationStore, PendingFederation } from "./federationStore";
 import { escapeHtml, hiddenInput } from "./html";
 import { type AuthorizeFlow, buildErrorRedirect } from "./oauthRequest";
+import {
+  federationModeFor,
+  RealIdp,
+  RealIdpError,
+  supportsRealFederation,
+} from "./realIdp";
 
 const REAL_AUTHORIZE_URLS: Record<string, string> = {
   Google: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -117,7 +124,7 @@ const errorPage = (message: string) =>
     `<h1>Sign-in error</h1><p class="note">${escapeHtml(message)}</p>`,
   );
 
-export function beginFederation(
+export async function beginFederation(
   req: Request,
   res: Response,
   store: FederationStore,
@@ -129,7 +136,8 @@ export function beginFederation(
     provider: IdentityProviderConfig;
     flow: AuthorizeFlow;
   },
-): void {
+  real?: { idp: RealIdp; config: FederationConfig | undefined },
+): Promise<void> {
   const { provider, flow } = input;
   const pending: PendingFederation = {
     clientId: input.clientId,
@@ -139,11 +147,36 @@ export function beginFederation(
     state: input.state || undefined,
     ...flow,
   };
-  const stateId = store.create(pending);
   const base = `${req.protocol}://${req.get("host")}`;
+  const idpRedirectUri = `${base}/oauth2/idpresponse`;
+
+  if (real && federationModeFor(real.config, provider) === "real") {
+    if (supportsRealFederation(provider)) {
+      try {
+        const signIn = await real.idp.begin(provider, idpRedirectUri);
+        const stateId = store.create({ ...pending, real: signIn });
+        return res.redirect(real.idp.authorizeUrl(provider, signIn, stateId));
+      } catch (err) {
+        const error = err instanceof RealIdpError ? err : undefined;
+        return res.redirect(
+          buildErrorRedirect(
+            pending.redirectUri,
+            error?.error ?? "server_error",
+            error?.description ?? "Internal server error",
+            pending.state,
+          ),
+        );
+      }
+    }
+    req.log?.warn?.(
+      `${provider.ProviderName} is a ${provider.ProviderType} provider, which has no real mode: using the mock IdP`,
+    );
+  }
+
+  const stateId = store.create(pending);
   const query = new URLSearchParams({
     client_id: provider.ProviderDetails?.client_id ?? "",
-    redirect_uri: `${base}/oauth2/idpresponse`,
+    redirect_uri: idpRedirectUri,
     response_type: "code",
     scope: provider.ProviderDetails?.authorize_scopes ?? "",
     state: stateId,
@@ -166,6 +199,7 @@ export function attachFederationRoutes(
   codeStore: AuthorizationCodeStore,
   store: FederationStore,
   onSignIn?: OnFederatedSignIn,
+  realIdp: RealIdp = new RealIdp(services.clock),
 ): void {
   const loadProvider = async (
     ctx: Context,
@@ -185,7 +219,11 @@ export function attachFederationRoutes(
     async (req: Request, res: Response) => {
       const ctx = requestContext(req, services.config?.TokenConfig);
       const pending = store.peek(req.query.state as string | undefined);
-      if (!pending || pending.providerName !== req.params.providerName) {
+      if (
+        !pending ||
+        pending.real ||
+        pending.providerName !== req.params.providerName
+      ) {
         return res
           .status(400)
           .type("text/html")
@@ -245,7 +283,14 @@ export function attachFederationRoutes(
           : `${pending.providerName} returned ${input.error}`;
       return redirectError(input.error, description);
     }
-    if (req.method !== "POST") {
+    const code = typeof input.code === "string" ? input.code : "";
+    if (pending.real && !code) {
+      return redirectError(
+        "invalid_request",
+        `${pending.providerName} did not return an authorization code`,
+      );
+    }
+    if (!pending.real && req.method !== "POST") {
       return redirectError(
         "invalid_request",
         "The identity provider response is missing",
@@ -281,7 +326,14 @@ export function attachFederationRoutes(
         );
       }
 
-      const claims = claimsFromForm(provider, input);
+      const claims = pending.real
+        ? await realIdp.complete(
+            provider,
+            pending.real,
+            code,
+            typeof input.user === "string" ? input.user : undefined,
+          )
+        : claimsFromForm(provider, input);
       const { user } = await federatedSignIn(
         ctx,
         services,
@@ -300,6 +352,10 @@ export function attachFederationRoutes(
         flow: pending,
       });
     } catch (err) {
+      if (err instanceof RealIdpError) {
+        ctx.logger.warn(err.description);
+        return redirectError(err.error, err.description);
+      }
       if (err instanceof CognitoError) {
         return redirectError("invalid_request", err.message);
       }

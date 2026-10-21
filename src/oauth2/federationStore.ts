@@ -1,5 +1,6 @@
 import * as uuid from "uuid";
 import type { ResponseType } from "./oauthRequest";
+import type { RealSignIn } from "./realIdp";
 
 const TTL_MS = 10 * 60 * 1000;
 
@@ -13,6 +14,7 @@ export interface PendingFederation {
   scopes: string[];
   codeChallenge: string | undefined;
   codeChallengeMethod: string | undefined;
+  real?: RealSignIn;
 }
 
 interface Entry extends PendingFederation {
