@@ -1,15 +1,11 @@
+import type {
+  CreateTermsRequest,
+  CreateTermsResponse,
+  TermsType,
+} from "@aws-sdk/client-cognito-identity-provider";
 import * as uuid from "uuid";
 import type { Services } from "../services";
 import type { Target } from "./Target";
-
-interface CreateTermsRequest {
-  UserPoolId: string;
-  TermsText?: string;
-  Version?: string;
-}
-interface CreateTermsResponse {
-  Terms?: any;
-}
 
 export type CreateTermsTarget = Target<CreateTermsRequest, CreateTermsResponse>;
 
@@ -22,16 +18,19 @@ export const CreateTerms =
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const now = clock.get();
 
-    const terms = {
+    const terms: TermsType = {
       TermsId: uuid.v4(),
       UserPoolId: req.UserPoolId,
-      TermsText: req.TermsText,
-      Version: req.Version,
+      ClientId: req.ClientId,
+      TermsName: req.TermsName,
+      TermsSource: req.TermsSource,
+      Enforcement: req.Enforcement,
+      Links: req.Links ?? {},
       CreationDate: now,
       LastModifiedDate: now,
     };
 
-    const existing = ((userPool.options as any)._terms as any[]) ?? [];
+    const existing = ((userPool.options as any)._terms as TermsType[]) ?? [];
     existing.push(terms);
 
     await userPool.updateOptions(ctx, {

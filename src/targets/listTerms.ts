@@ -1,16 +1,11 @@
+import type {
+  ListTermsRequest,
+  ListTermsResponse,
+  TermsType,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
 import { paginate } from "../services/pagination";
 import type { Target } from "./Target";
-
-interface ListTermsRequest {
-  UserPoolId: string;
-  NextToken?: string;
-  MaxResults?: number;
-}
-interface ListTermsResponse {
-  Terms?: any[];
-  NextToken?: string;
-}
 
 export type ListTermsTarget = Target<ListTermsRequest, ListTermsResponse>;
 
@@ -18,7 +13,7 @@ export const ListTerms =
   ({ cognito }: Pick<Services, "cognito">): ListTermsTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const items = ((userPool.options as any)._terms as any[]) ?? [];
+    const items = ((userPool.options as any)._terms as TermsType[]) ?? [];
 
     const { items: page, nextToken } = paginate(
       items,
@@ -27,7 +22,13 @@ export const ListTerms =
     );
 
     return {
-      Terms: page,
+      Terms: page.map((t) => ({
+        TermsId: t.TermsId,
+        TermsName: t.TermsName,
+        Enforcement: t.Enforcement,
+        CreationDate: t.CreationDate,
+        LastModifiedDate: t.LastModifiedDate,
+      })),
       NextToken: nextToken,
     };
   };

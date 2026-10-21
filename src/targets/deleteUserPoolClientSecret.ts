@@ -1,13 +1,11 @@
+import type {
+  DeleteUserPoolClientSecretRequest,
+  DeleteUserPoolClientSecretResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { clientSecretId } from "../services/appClient";
 import type { Target } from "./Target";
-
-interface DeleteUserPoolClientSecretRequest {
-  UserPoolId: string;
-  ClientId: string;
-  SecretId?: string;
-}
-type DeleteUserPoolClientSecretResponse = {};
 
 export type DeleteUserPoolClientSecretTarget = Target<
   DeleteUserPoolClientSecretRequest,
@@ -15,17 +13,28 @@ export type DeleteUserPoolClientSecretTarget = Target<
 >;
 
 export const DeleteUserPoolClientSecret =
-  ({ cognito }: Pick<Services, "cognito">): DeleteUserPoolClientSecretTarget =>
+  ({
+    cognito,
+    clock,
+  }: Pick<Services, "cognito" | "clock">): DeleteUserPoolClientSecretTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const appClient = await cognito.getAppClient(ctx, req.ClientId);
-    if (!appClient) {
+    if (!appClient || appClient.UserPoolId !== req.UserPoolId) {
       throw new ResourceNotFoundError("App client not found");
     }
+    if (
+      !appClient.ClientSecret ||
+      clientSecretId(appClient) !== req.ClientSecretId
+    ) {
+      throw new ResourceNotFoundError("Client secret not found");
+    }
 
+    const { ClientSecretCreateDate: _, ...withoutSecretDate } = appClient;
     await userPool.saveAppClient(ctx, {
-      ...appClient,
+      ...withoutSecretDate,
       ClientSecret: undefined,
+      LastModifiedDate: clock.get(),
     });
 
     return {};

@@ -1,14 +1,11 @@
+import type {
+  ListUserPoolClientSecretsRequest,
+  ListUserPoolClientSecretsResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { clientSecretCreateDate, clientSecretId } from "../services/appClient";
 import type { Target } from "./Target";
-
-interface ListUserPoolClientSecretsRequest {
-  UserPoolId: string;
-  ClientId: string;
-}
-interface ListUserPoolClientSecretsResponse {
-  ClientSecrets?: Array<{ ClientSecret?: string; CreatedDate?: Date }>;
-}
 
 export type ListUserPoolClientSecretsTarget = Target<
   ListUserPoolClientSecretsRequest,
@@ -20,17 +17,18 @@ export const ListUserPoolClientSecrets =
   async (ctx, req) => {
     await cognito.getUserPool(ctx, req.UserPoolId);
     const appClient = await cognito.getAppClient(ctx, req.ClientId);
-    if (!appClient) {
+    if (!appClient || appClient.UserPoolId !== req.UserPoolId) {
       throw new ResourceNotFoundError("App client not found");
     }
 
-    const secrets: Array<{ ClientSecret?: string; CreatedDate?: Date }> = [];
-    if (appClient.ClientSecret) {
-      secrets.push({
-        ClientSecret: appClient.ClientSecret,
-        CreatedDate: appClient.CreationDate,
-      });
-    }
-
-    return { ClientSecrets: secrets };
+    return {
+      ClientSecrets: appClient.ClientSecret
+        ? [
+            {
+              ClientSecretId: clientSecretId(appClient),
+              ClientSecretCreateDate: clientSecretCreateDate(appClient),
+            },
+          ]
+        : [],
+    };
   };

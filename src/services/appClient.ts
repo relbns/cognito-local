@@ -18,6 +18,8 @@ export interface AppClient {
    * The client secret from the user pool request of the client type.
    */
   ClientSecret?: string;
+  /** When the current secret was added; CreationDate for the secret made with the client. */
+  ClientSecretCreateDate?: Date;
   /**
    * The date the user pool client was last modified.
    */
@@ -180,3 +182,9 @@ export const refreshTokenRotationEnabled = (
 const generator = createTranslator("0123456789abcdefghijklmnopqrstuvwxyz");
 
 export const newId = generator.generate;
+
+export const clientSecretCreateDate = (client: AppClient): Date =>
+  client.ClientSecretCreateDate ?? client.CreationDate;
+
+export const clientSecretId = (client: AppClient): string =>
+  `${client.ClientId}--${Math.floor(clientSecretCreateDate(client).getTime() / 1000)}`;

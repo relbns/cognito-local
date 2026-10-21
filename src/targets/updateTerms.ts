@@ -1,15 +1,11 @@
+import type {
+  TermsType,
+  UpdateTermsRequest,
+  UpdateTermsResponse,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { ResourceNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { Target } from "./Target";
-
-interface UpdateTermsRequest {
-  UserPoolId: string;
-  TermsId: string;
-  TermsText?: string;
-}
-interface UpdateTermsResponse {
-  Terms?: any;
-}
 
 export type UpdateTermsTarget = Target<UpdateTermsRequest, UpdateTermsResponse>;
 
@@ -20,15 +16,19 @@ export const UpdateTerms =
   }: Pick<Services, "cognito" | "clock">): UpdateTermsTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const items = ((userPool.options as any)._terms as any[]) ?? [];
-    const idx = items.findIndex((t: any) => t.TermsId === req.TermsId);
+    const items = ((userPool.options as any)._terms as TermsType[]) ?? [];
+    const idx = items.findIndex((t) => t.TermsId === req.TermsId);
     if (idx < 0) {
       throw new ResourceNotFoundError("Terms not found");
     }
 
+    const current = items[idx];
     items[idx] = {
-      ...items[idx],
-      TermsText: req.TermsText ?? items[idx].TermsText,
+      ...current,
+      TermsName: req.TermsName ?? current.TermsName,
+      TermsSource: req.TermsSource ?? current.TermsSource,
+      Enforcement: req.Enforcement ?? current.Enforcement,
+      Links: req.Links ?? current.Links,
       LastModifiedDate: clock.get(),
     };
 

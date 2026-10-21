@@ -5,6 +5,7 @@ import type { Target } from "./Target";
 interface CreateManagedLoginBrandingRequest {
   UserPoolId: string;
   ClientId?: string;
+  UseCognitoProvidedValues?: boolean;
   Settings?: any;
   Assets?: any[];
 }
@@ -30,6 +31,7 @@ export const CreateManagedLoginBranding =
       ManagedLoginBrandingId: uuid.v4(),
       UserPoolId: req.UserPoolId,
       ClientId: req.ClientId,
+      UseCognitoProvidedValues: req.UseCognitoProvidedValues ?? false,
       Settings: req.Settings,
       Assets: req.Assets,
       CreationDate: now,

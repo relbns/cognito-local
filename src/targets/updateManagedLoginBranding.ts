@@ -5,6 +5,7 @@ import type { Target } from "./Target";
 interface UpdateManagedLoginBrandingRequest {
   UserPoolId: string;
   ManagedLoginBrandingId: string;
+  UseCognitoProvidedValues?: boolean;
   Settings?: any;
   Assets?: any[];
 }
@@ -35,6 +36,8 @@ export const UpdateManagedLoginBranding =
 
     items[idx] = {
       ...items[idx],
+      UseCognitoProvidedValues:
+        req.UseCognitoProvidedValues ?? items[idx].UseCognitoProvidedValues,
       Settings: req.Settings ?? items[idx].Settings,
       Assets: req.Assets ?? items[idx].Assets,
       LastModifiedDate: clock.get(),

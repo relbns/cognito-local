@@ -222,8 +222,10 @@ ListUserPoolClientSecrets.
 
 - Clients store `RefreshTokenRotation`; `RetryGracePeriodSeconds` above 60, below 0 or a `Feature`
   other than `ENABLED` or `DISABLED` returns `InvalidParameterException`.
-- A client has at most one secret. AddUserPoolClientSecret replaces it, and ListUserPoolClientSecrets
-  returns that one secret.
+- A client has at most one secret, with the id `<ClientId>--<creation time in epoch seconds>`.
+  AddUserPoolClientSecret replaces it (with the `ClientSecret` given, or a generated one) and returns
+  its value once. ListUserPoolClientSecrets returns its id and creation date without the value, and
+  DeleteUserPoolClientSecret with that id leaves the client without a secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the
   username by default).
 - In a pool with `AliasAttributes`, sign-in and every operation that takes a `Username` also find the
