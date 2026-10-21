@@ -4,7 +4,11 @@ import type {
   UserStatusType,
 } from "@aws-sdk/client-cognito-identity-provider";
 import * as uuid from "uuid";
-import { InvalidParameterError, UsernameExistsError } from "../errors";
+import {
+  InvalidParameterError,
+  NotAuthorizedError,
+  UsernameExistsError,
+} from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
 import { enforceAliasUniqueness } from "../services/aliases";
 import type { Context } from "../services/context";
@@ -95,6 +99,11 @@ export const SignUp =
       req.Username,
       req.SecretHash,
     );
+    if (userPool.options.AdminCreateUserConfig?.AllowAdminCreateUserOnly) {
+      throw new NotAuthorizedError(
+        "SignUp is not permitted for this user pool",
+      );
+    }
     const existingUser = await userPool.getUserByUsername(ctx, req.Username);
     if (existingUser) {
       throw new UsernameExistsError(

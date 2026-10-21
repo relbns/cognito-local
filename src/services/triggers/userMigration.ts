@@ -22,8 +22,10 @@ export type UserMigrationTrigger = Trigger<
     userPoolId: string;
     clientId: string;
     username: string;
-    password: string;
+    /** Absent in the forgot-password flow. */
+    password: string | undefined;
     userAttributes: Attribute[];
+    source?: "UserMigration_Authentication" | "UserMigration_ForgotPassword";
 
     /**
      * One or more key-value pairs that you can provide as custom input to the Lambda function that you specify for the
@@ -67,8 +69,10 @@ export const UserMigration =
       username,
       userPoolId,
       validationData,
+      source = "UserMigration_Authentication",
     },
   ) => {
+    const forgotPassword = source === "UserMigration_ForgotPassword";
     const userPool = await cognitoClient.getUserPoolForClientId(ctx, clientId);
     if (!userPool) {
       throw new ResourceNotFoundError();
@@ -80,12 +84,12 @@ export const UserMigration =
       result = await lambda.invoke(ctx, "UserMigration", {
         clientId,
         clientMetadata,
-        password,
-        triggerSource: "UserMigration_Authentication",
+        password: forgotPassword ? undefined : password,
+        triggerSource: source,
         userAttributes: attributesToRecord(userAttributes),
         username,
         userPoolId,
-        validationData,
+        validationData: forgotPassword ? undefined : validationData,
       });
     } catch (_ex) {
       throw new NotAuthorizedError();
@@ -121,13 +125,16 @@ export const UserMigration =
     const user: User = {
       Attributes: attributesFromRecord(attributes),
       Enabled: true,
-      Password: password,
+      Password: password ?? "",
       UserCreateDate: now,
       UserLastModifiedDate: now,
       // Pools with email or phone as the username identify users by sub, as SignUp does.
       Username: usernameAttributes.length ? sub : requestedUsername || username,
+      // A user migrated by the forgot-password flow has no password until ConfirmForgotPassword.
       UserStatus:
-        result.finalUserStatus === "CONFIRMED" ? "CONFIRMED" : "RESET_REQUIRED",
+        !forgotPassword && result.finalUserStatus === "CONFIRMED"
+          ? "CONFIRMED"
+          : "RESET_REQUIRED",
       RefreshTokens: [],
       ...(result.enableSMSMFA
         ? {

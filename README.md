@@ -33,7 +33,8 @@ and tests, and [the differences](#compatibility-and-differences-from-aws) are li
 - **Passwordless CUSTOM_AUTH.** Define, Create and Verify challenge triggers run from local JavaScript
   files with the event Lambda would get, and the session keeps its state between challenges.
 - **Hosted login and OAuth2.** `/oauth2/authorize`, `/oauth2/token`, `/oauth2/userInfo`,
-  `/oauth2/revoke`, `/logout` and OIDC discovery, with PKCE and a callback page to try them.
+  `/oauth2/revoke`, `/logout` and OIDC discovery, with PKCE and a callback page to try them. The
+  login page has sign-up, confirm, forgot-password and MFA setup pages.
 - **Federated sign-in without a provider.** A mock IdP page stands in for social, OIDC and SAML
   providers, with attribute mapping and linked users.
 - **Tokens checked as Cognito checks them.** Signature, issuer, expiry, user and revocation of access
@@ -484,9 +485,10 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no
   effect.
-- The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
-  for a new password and for SMS or TOTP MFA codes, and runs PreAuthentication and
-  PostAuthentication, but has no sign-up, forgot-password or MFA setup pages.
+- The built-in login page and its sign-up, confirm, forgot-password and MFA setup pages are plain
+  forms without Cognito's styling, branding or terms. They run the same operations and triggers as
+  the API. MFA setup offers an authenticator app (secret key and `otpauth://` link, no QR code) and
+  does not collect a phone number for SMS.
 - Hosted login sessions (the `cognito` cookie) live in memory: a restart signs browsers out, and one
   cookie covers every pool, where Cognito sets one per user pool domain.
 

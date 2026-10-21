@@ -26,8 +26,18 @@ import {
   type HostedLoginOutcome,
   signInWithPassword,
 } from "./hostedLogin";
-import { loginForm, noticePage, stepPage } from "./hostedLoginPages";
+import {
+  loginForm,
+  noticePage,
+  oauthParamsOf,
+  stepPage,
+} from "./hostedLoginPages";
 import { HostedLoginStore } from "./hostedLoginStore";
+import { signUpAllowed } from "./hostedPages";
+import {
+  attachHostedPageRoutes,
+  restoreHostedLogin,
+} from "./hostedPagesRoutes";
 import {
   type AuthorizeParams,
   buildErrorRedirect,
@@ -115,6 +125,18 @@ export function attachOAuth2Routes(
   const sendHtml = (res: Response, status: number, html: string) =>
     res.status(status).type("text/html").send(html);
 
+  const findClient = (ctx: Context, clientId: string | undefined) =>
+    findAppClient(services, ctx, clientId);
+
+  const poolAllowsSignUp = async (ctx: Context, userPoolId: string) => {
+    try {
+      const userPool = await services.cognito.getUserPool(ctx, userPoolId);
+      return signUpAllowed(userPool.options);
+    } catch {
+      return true;
+    }
+  };
+
   const renderOutcome = (
     ctx: Context,
     req: Request,
@@ -124,18 +146,16 @@ export function attachOAuth2Routes(
   ) => {
     switch (outcome.kind) {
       case "loginError":
+      case "loginNotice":
         return sendHtml(
           res,
           200,
           loginForm({
-            clientId: login.appClient.ClientId,
-            redirectUri: login.redirectUri,
-            responseType: login.flow.responseType,
-            codeChallenge: login.flow.codeChallenge,
-            codeChallengeMethod: login.flow.codeChallengeMethod,
-            scope: login.scope,
-            state: login.state ?? "",
-            error: outcome.error,
+            ...oauthParamsOf(login),
+            signUpAllowed: signUpAllowed(login.userPool.options),
+            ...(outcome.kind === "loginError"
+              ? { error: outcome.error }
+              : { notice: outcome.notice }),
           }),
         );
       case "step":
@@ -181,30 +201,21 @@ export function attachOAuth2Routes(
     sessionId: string,
     body: Record<string, unknown>,
   ) => {
-    const expired = () =>
-      sendHtml(res, 400, noticePage(HOSTED_LOGIN_MESSAGES.sessionExpired));
-    const pending = hostedLoginStore.peek(sessionId);
-    if (!pending) return expired();
-    const appClient = await findAppClient(services, ctx, pending.clientId);
-    let userPool: Awaited<ReturnType<typeof services.cognito.getUserPool>>;
-    try {
-      userPool = await services.cognito.getUserPool(ctx, pending.userPoolId);
-    } catch {
-      hostedLoginStore.delete(sessionId);
-      return expired();
+    const restored = await restoreHostedLogin(
+      services,
+      { store: hostedLoginStore, findAppClient: findClient },
+      ctx,
+      sessionId,
+      ["newPassword", "selectMfa", "smsMfa", "totpMfa", "mfaSetup"],
+    );
+    if (!restored) {
+      return sendHtml(
+        res,
+        400,
+        noticePage(HOSTED_LOGIN_MESSAGES.sessionExpired),
+      );
     }
-    if (!appClient) {
-      hostedLoginStore.delete(sessionId);
-      return expired();
-    }
-    const login: HostedLoginContext = {
-      userPool,
-      appClient,
-      redirectUri: pending.redirectUri,
-      state: pending.state,
-      scope: pending.scope,
-      flow: pending.flow,
-    };
+    const { login, pending } = restored;
     const outcome = await continueHostedLogin(
       ctx,
       services,
@@ -321,9 +332,16 @@ export function attachOAuth2Routes(
         codeChallengeMethod: decision.codeChallengeMethod,
         scope: params.scope ?? "",
         state: params.state ?? "",
+        signUpAllowed: await poolAllowsSignUp(ctx, appClient.UserPoolId),
       }),
     );
   };
+
+  attachHostedPageRoutes(app, services, {
+    store: hostedLoginStore,
+    findAppClient: findClient,
+    renderOutcome,
+  });
 
   app.get("/oauth2/authorize", authorize);
   app.get("/login", authorize);

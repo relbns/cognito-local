@@ -1,4 +1,5 @@
 import {
+  CodeMismatchError,
   CognitoError,
   InvalidPasswordError,
   NotAuthorizedError,
@@ -6,12 +7,13 @@ import {
 import type { Services, UserPoolService } from "../services";
 import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
+import { type MfaMethod, smsMfaDelivery } from "../services/mfa";
 import {
-  enabledMfaMethods,
-  isMfaRequired,
-  type MfaMethod,
-  smsMfaDelivery,
-} from "../services/mfa";
+  completeTotpSetup,
+  newTotpSecret,
+  nextMfaStep,
+  totpUri,
+} from "../services/mfaSetup";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verify as verifyTotp } from "../services/totp";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
@@ -55,7 +57,8 @@ export interface HostedLoginContext {
 export type HostedLoginOutcome =
   | { kind: "loginError"; error: string }
   | { kind: "step"; sessionId: string; step: HostedLoginStep; error?: string }
-  | { kind: "signedIn"; user: User };
+  | { kind: "signedIn"; user: User }
+  | { kind: "loginNotice"; notice: string };
 
 export type HostedLoginForm = Partial<
   Record<"new_password" | "confirm_password" | "mfa_method" | "code", string>
@@ -139,6 +142,18 @@ async function startMfaMethod(
   });
 }
 
+const mfaSetupStep = (
+  login: HostedLoginContext,
+  user: User,
+): HostedLoginStep => {
+  const secret = newTotpSecret();
+  return {
+    kind: "mfaSetup",
+    secret,
+    uri: totpUri(login.userPool.options, user, secret),
+  };
+};
+
 async function afterPassword(
   ctx: Context,
   services: HostedLoginServices,
@@ -146,25 +161,26 @@ async function afterPassword(
   login: HostedLoginContext,
   user: User,
 ): Promise<HostedLoginOutcome> {
-  if (!isMfaRequired(login.userPool.options, user)) {
-    return completeSignIn(ctx, services, login, user);
+  const next = nextMfaStep(login.userPool.options, user);
+  switch (next.kind) {
+    case "none":
+      return completeSignIn(ctx, services, login, user);
+    case "challenge":
+      return startMfaMethod(ctx, services, store, login, user, next.method);
+    case "select":
+      return toStep(store, login, user, {
+        kind: "selectMfa",
+        methods: next.methods,
+      });
+    case "setup":
+      // An SMS factor needs a phone number, which this page does not collect.
+      if (!next.options.includes("SOFTWARE_TOKEN_MFA")) {
+        return loginError(HOSTED_LOGIN_MESSAGES.smsDestinationMissing);
+      }
+      return toStep(store, login, user, mfaSetupStep(login, user));
+    case "unavailable":
+      return loginError(HOSTED_LOGIN_MESSAGES.mfaSetupRequired);
   }
-  const methods = enabledMfaMethods(user);
-  if (methods.length === 0) {
-    return loginError(HOSTED_LOGIN_MESSAGES.mfaSetupRequired);
-  }
-  const preferred = methods.find((m) => m === user.PreferredMfaSetting);
-  if (!preferred && methods.length > 1) {
-    return toStep(store, login, user, { kind: "selectMfa", methods });
-  }
-  return startMfaMethod(
-    ctx,
-    services,
-    store,
-    login,
-    user,
-    preferred ?? methods[0],
-  );
 }
 
 async function findOrMigrateUser(
@@ -236,6 +252,30 @@ export async function signInWithPassword(
   if (user.UserStatus === "FORCE_CHANGE_PASSWORD") {
     return toStep(store, login, user, { kind: "newPassword" });
   }
+  return afterPassword(ctx, services, store, login, user);
+}
+
+/** Signs in a user who has just signed up and confirmed in this browser, as managed login does after sign-up. */
+export async function signInAfterSignUp(
+  ctx: Context,
+  services: HostedLoginServices,
+  store: HostedLoginStore,
+  login: HostedLoginContext,
+  user: User,
+): Promise<HostedLoginOutcome> {
+  try {
+    await runPreAuthentication(ctx, services.triggers, {
+      client: login.appClient,
+      user,
+      username: user.Username,
+      userPoolId: login.userPool.options.Id,
+      validationData: undefined,
+    });
+  } catch (e) {
+    if (e instanceof CognitoError) return loginError(e.message);
+    throw e;
+  }
+  if (!user.Enabled) return loginError(HOSTED_LOGIN_MESSAGES.userDisabled);
   return afterPassword(ctx, services, store, login, user);
 }
 
@@ -316,5 +356,30 @@ export async function continueHostedLogin(
       store.delete(sessionId);
       return completeSignIn(ctx, services, login, user);
     }
+    case "mfaSetup": {
+      const code = form.code?.trim();
+      if (!code) return retry(HOSTED_LOGIN_MESSAGES.codeMismatch);
+      let registered: User;
+      try {
+        registered = await completeTotpSetup(ctx, {
+          userPool: login.userPool,
+          user,
+          secret: step.secret,
+          code,
+          clock: services.clock,
+        });
+      } catch (e) {
+        if (e instanceof CodeMismatchError) {
+          return retry(HOSTED_LOGIN_MESSAGES.codeMismatch);
+        }
+        throw e;
+      }
+      store.delete(sessionId);
+      return completeSignIn(ctx, services, login, registered);
+    }
+    case "confirmSignUp":
+    case "confirmForgotPassword":
+      store.delete(sessionId);
+      return loginError(HOSTED_LOGIN_MESSAGES.sessionExpired);
   }
 }
