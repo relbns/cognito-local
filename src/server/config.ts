@@ -23,6 +23,8 @@ export interface AuthSessionConfig {
 export interface AdminUIConfig {
   Enabled: boolean;
   CodeLogSize: number;
+  /** When set, /_admin and /_admin/api/* require this token. */
+  Token?: string;
 }
 
 export interface PasswordPolicyConfig {
@@ -45,6 +47,7 @@ export interface ConfigOverrides {
   port?: number;
   hostname?: string;
   adminUi?: boolean;
+  adminToken?: string;
 }
 
 export interface Config {
@@ -92,6 +95,7 @@ export const DefaultConfig: Config = {
   AdminUIConfig: {
     Enabled: adminUIEnabled,
     CodeLogSize: DEFAULT_CODE_LOG_SIZE,
+    Token: process.env.COGNITO_LOCAL_ADMIN_TOKEN || undefined,
   },
   PasswordPolicyConfig: {
     Enforce: true,
@@ -145,6 +149,9 @@ export const loadConfig = async (
   }
   if (overrides.adminUi !== undefined) {
     merged.AdminUIConfig.Enabled = overrides.adminUi;
+  }
+  if (overrides.adminToken !== undefined) {
+    merged.AdminUIConfig.Token = overrides.adminToken;
   }
   if (!config?.TokenConfig?.IssuerDomain) {
     const proto = merged.ServerConfig.https ? "https" : "http";

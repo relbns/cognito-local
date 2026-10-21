@@ -200,7 +200,14 @@ export const createCallbackRouter = (services: Services): express.Router => {
       .status(status)
       .type("html")
       .set("Cache-Control", "no-store")
-      .send(layout({ title, active: "callback", body }));
+      .send(
+        layout({
+          title,
+          active: "callback",
+          body,
+          tokenRequired: !!res.locals.adminTokenRequired,
+        }),
+      );
 
   const inspect = (token: unknown, choice: ClientChoice | undefined) =>
     typeof token === "string"

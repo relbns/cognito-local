@@ -116,7 +116,8 @@ docker run --rm -p 127.0.0.1:9229:9229 \
   (`--seed`, `--no-admin`). Environment variables work too (`COGNITO_LOCAL_SEED=/seed.json`).
 - It listens on `0.0.0.0:9229` inside the container as the unprivileged `node` user, keeps data and
   `config.json` in the `/app/.cognito` volume, and has a health check on `/health`.
-- `-p 127.0.0.1:9229:9229` keeps the port, and the unauthenticated admin UI, off your network.
+- `-p 127.0.0.1:9229:9229` keeps the port, and the admin UI, off your network. Inside the container
+  the server listens on `0.0.0.0`, so it prints a warning until `COGNITO_LOCAL_ADMIN_TOKEN` is set.
 - Tokens are issued for `http://localhost:9229`. When clients reach the emulator under another name,
   set `TokenConfig.IssuerDomain` to that URL (see [Docker Compose](#docker-compose)).
 - To apply a seed to a running container, run `cognito-local seed seed.json --url http://localhost:9229`
@@ -197,8 +198,9 @@ groups `admins` and `members`, and three users: `admin@example.test` with passwo
 
 ### 2. Open the admin UI
 
-Open <http://localhost:9229/_admin>: pools, clients, users, groups, codes and a token decoder. It has
-no authentication; keep it on your machine. More pages are under [Screenshots](#screenshots).
+Open <http://localhost:9229/_admin>: pools, clients, users, groups, codes and a token decoder. It is
+open by default; keep it on your machine, or set an [admin token](#admin-token). More pages are under
+[Screenshots](#screenshots).
 
 ### 3. Point your tools at it
 
@@ -387,11 +389,11 @@ kill "$(jq -r .pid .cognito-ci/server.json)"
 ### CLI
 
 ```text
-cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin]
-cognito-local seed <file> [--data <dir>] [--url <url>] [--json]
-cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--json]
+cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin] [--admin-token <t>]
+cognito-local seed <file> [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
 cognito-local reset [--yes] [--all] [--data <dir>] [--json]
-cognito-local status [--data <dir>] [--url <url>] [--json]
+cognito-local status [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
 cognito-local help [command] | --help | --version
 ```
 
@@ -407,6 +409,7 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `COGNITO_LOCAL_DATA_DIR`         | `.cognito`                 | Data directory (`--data`)                                                                |
 | `COGNITO_LOCAL_SEED`             | none                       | Seed file applied at startup (`--seed`)                                                  |
 | `COGNITO_LOCAL_ADMIN_UI`         | on                         | `false`, `0` or `off` disables the admin UI and its API (`--no-admin`)                   |
+| `COGNITO_LOCAL_ADMIN_TOKEN`      | unset                      | Token the admin UI and its API require (`--admin-token`); the CLI sends it too           |
 | `COGNITO_LOCAL_VALIDATION`       | on                         | `false`, `0` or `off` stops checking requests against the API model                      |
 | `CODE`                           | random                     | Fixed code for confirmation, forgot-password, MFA and temporary passwords                |
 | `SMTP_HOST`, `SMTP_PORT`         | unset, `1025`              | Send emails to an SMTP server (for example a local mail catcher) instead of logging them |
@@ -430,11 +433,27 @@ environment, and the environment over the default. Details: [docs/cli.md](docs/c
 | `AuthSessionConfig.AuthSessionValidity`      | `3`                    | Minutes a CUSTOM_AUTH `Session` stays valid when the client sets no `AuthSessionValidity`                                                                                                    |
 | `AdminUIConfig.Enabled`                      | `true`                 | Serve the admin UI at `/_admin` and record codes                                                                                                                                             |
 | `AdminUIConfig.CodeLogSize`                  | `100`                  | How many recent codes the admin UI keeps                                                                                                                                                     |
+| `AdminUIConfig.Token`                        | unset                  | Require this token for `/_admin` and `/_admin/api/*`: see [Admin token](#admin-token)                                                                                                        |
 | `FileTriggerConfig.TimeoutMs`                | `5000`                 | How long a `file:` trigger may run                                                                                                                                                           |
 | `FileTriggerConfig.HotReload`                | `true`                 | Reload a `file:` trigger when the file changes                                                                                                                                               |
 | `TriggerFunctions`                           | `{}`                   | Triggers for every pool: Lambda names, or `file:` paths resolved against the data directory                                                                                                  |
 | `UserPoolDefaults.UsernameAttributes`        | `["email"]`            | Pools created without `UsernameAttributes` use email as the username; `[]` gives free-form usernames as in Cognito                                                                           |
 | `LambdaClient`, `KMSConfig`                  | local credentials      | AWS SDK v3 client options; v2 names are translated with a warning: see [docs/aws-client-config.md](docs/aws-client-config.md)                                                                |
+
+### Admin token
+
+The admin UI and its API are open by default, which suits a server on `localhost`. Set a token with
+`--admin-token`, `COGNITO_LOCAL_ADMIN_TOKEN` or `AdminUIConfig.Token` to require it:
+
+- The API (`/_admin/api/*`) takes it as `Authorization: Bearer <token>` and answers 401 without it.
+- A browser gets a sign-in page, or opens `/_admin?token=<token>` once. Either sets an HttpOnly
+  cookie scoped to `/_admin` (it holds a digest of the token, not the token) and drops the token
+  from the URL.
+- `seed`, `export` and `status` send `--admin-token`, else `COGNITO_LOCAL_ADMIN_TOKEN`, else
+  `AdminUIConfig.Token` from the data directory's `config.json`.
+
+`start` prints a warning when the admin UI listens on a host other than `localhost`, `127.x.x.x` or
+`::1` without a token, which includes the Docker image's `0.0.0.0`.
 
 ### Detailed docs
 
@@ -469,7 +488,6 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
   for a new password and for SMS or TOTP MFA codes, and runs PostAuthentication, but has no sign-up,
   forgot-password or MFA setup pages.
-- The admin UI has no authentication.
 
 ### Stricter than upstream cognito-local
 
@@ -503,7 +521,7 @@ Pools default to email as the username
 | `npm install -g github:relbns/cognito-local` fails with `tsc: command not found` | npm builds git dependencies in global mode without dev dependencies. Use the [tarball install](#global-install).                                                                                                                                                                          |
 | `EROFS: read-only file system, open '.cognito/config.json'`                      | `config.json` is mounted read-only; the emulator rewrites it at startup. Mount it read-write.                                                                                                                                                                                             |
 | `InvalidParameterException: Username should be an email.`                        | Pools default to email as the username. Set `UsernameAttributes: []` on the pool or in `UserPoolDefaults`.                                                                                                                                                                                |
-| The admin UI is reachable from other machines                                    | It has no authentication and shows codes and client secrets. Bind to `localhost` (the CLI default), publish Docker ports as `127.0.0.1:9229:9229`, or turn it off with `--no-admin`.                                                                                                      |
+| The admin UI is reachable from other machines                                    | Without a token it is open and shows codes and client secrets. Set an [admin token](#admin-token), bind to `localhost` (the CLI default), publish Docker ports as `127.0.0.1:9229:9229`, or turn it off with `--no-admin`.                                                                |
 
 ## Screenshots
 

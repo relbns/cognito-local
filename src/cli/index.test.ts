@@ -12,14 +12,16 @@ import {
   expect,
   it,
 } from "vitest";
-import { type CliIO, runCli } from "./index";
+import { type CliIO, resolveAdminToken, runCli } from "./index";
 
 const ROOT = path.resolve(__dirname, "../..");
 const EXAMPLES = path.join(ROOT, "examples");
 const BASIC = path.join(EXAMPLES, "seed.basic.json");
 const OTP = path.join(EXAMPLES, "seed.custom-auth-otp.json");
 
-const fakeIO = (opts: { isTTY?: boolean; answer?: string } = {}) => {
+const fakeIO = (
+  opts: { isTTY?: boolean; answer?: string; env?: NodeJS.ProcessEnv } = {},
+) => {
   const out: string[] = [];
   const err: string[] = [];
   const prompts: string[] = [];
@@ -31,7 +33,7 @@ const fakeIO = (opts: { isTTY?: boolean; answer?: string } = {}) => {
       prompts.push(q);
       return opts.answer ?? "";
     },
-    env: {},
+    env: opts.env ?? {},
   };
   return {
     io,
@@ -335,5 +337,130 @@ describe("cognito-local CLI", () => {
       expect(await runCli(["status", "--data", serverData], run.io)).toBe(3);
       expect(run.stdout()).toContain("not running");
     });
+  });
+
+  describe("with a server that requires an admin token", () => {
+    const TOKEN = "cli-admin-token";
+    let child: ChildProcess;
+    let url: string;
+    let serverData: string;
+    let output = "";
+
+    beforeAll(async () => {
+      serverData = fs.mkdtempSync(
+        path.join(os.tmpdir(), "cognito-local-cli-token-"),
+      );
+      const port = await freePort();
+      url = `http://127.0.0.1:${port}`;
+      child = spawn(
+        path.join(ROOT, "node_modules/.bin/tsx"),
+        [
+          path.join(ROOT, "src/bin/cli.ts"),
+          "start",
+          "--port",
+          String(port),
+          "--host",
+          "127.0.0.1",
+          "--data",
+          serverData,
+          "--admin-token",
+          TOKEN,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      child.stdout?.on("data", (d) => {
+        output += d;
+      });
+      child.stderr?.on("data", (d) => {
+        output += d;
+      });
+      for (let i = 0; i < 100; i++) {
+        if ((await runCli(["status", "--url", url], fakeIO().io)) === 0) return;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error(`server did not start:\n${output}`);
+    }, 20000);
+
+    afterAll(async () => {
+      if (child.exitCode === null) {
+        child.kill("SIGTERM");
+        await new Promise((r) => child.once("exit", r));
+      }
+      fs.rmSync(serverData, { recursive: true, force: true });
+    });
+
+    it("says the token is required when it is missing or wrong", async () => {
+      expect(output).toContain("admin token required");
+
+      const seed = fakeIO();
+      expect(await runCli(["seed", BASIC, "--url", url], seed.io)).toBe(1);
+      expect(seed.stderr()).toContain(
+        "requires an admin token; pass --admin-token or set COGNITO_LOCAL_ADMIN_TOKEN",
+      );
+
+      const wrong = fakeIO();
+      expect(
+        await runCli(
+          ["export", "--url", url, "--admin-token", "nope"],
+          wrong.io,
+        ),
+      ).toBe(1);
+      expect(wrong.stderr()).toContain("refused the admin token");
+
+      const status = fakeIO();
+      expect(await runCli(["status", "--url", url, "--json"], status.io)).toBe(
+        0,
+      );
+      expect(status.json()).toMatchObject({
+        running: true,
+        adminUi: true,
+        adminTokenRefused: true,
+      });
+    });
+
+    it("sends the token from --admin-token or the environment", async () => {
+      const seed = fakeIO();
+      expect(
+        await runCli(
+          ["seed", BASIC, "--url", url, "--admin-token", TOKEN, "--json"],
+          seed.io,
+        ),
+      ).toBe(0);
+      expect(seed.json()).toMatchObject({ mode: "server" });
+
+      const exported = fakeIO({ env: { COGNITO_LOCAL_ADMIN_TOKEN: TOKEN } });
+      expect(await runCli(["export", "--url", url], exported.io)).toBe(0);
+      expect(exported.json().UserPools).toHaveLength(1);
+
+      const status = fakeIO({ env: { COGNITO_LOCAL_ADMIN_TOKEN: TOKEN } });
+      expect(await runCli(["status", "--url", url, "--json"], status.io)).toBe(
+        0,
+      );
+      expect(status.json()).toMatchObject({ pools: 1, adminUi: true });
+      expect(status.json().adminTokenRefused).toBeUndefined();
+    });
+  });
+
+  it("reads the admin token from the flag, the environment, then config.json", () => {
+    fs.writeFileSync(
+      path.join(data, "config.json"),
+      JSON.stringify({ AdminUIConfig: { Token: "from-config" } }),
+    );
+
+    expect(resolveAdminToken(fakeIO().io, {}, data)).toBe("from-config");
+    expect(
+      resolveAdminToken(
+        fakeIO({ env: { COGNITO_LOCAL_ADMIN_TOKEN: "from-env" } }).io,
+        {},
+        data,
+      ),
+    ).toBe("from-env");
+    expect(
+      resolveAdminToken(
+        fakeIO({ env: { COGNITO_LOCAL_ADMIN_TOKEN: "from-env" } }).io,
+        { "admin-token": "from-flag" },
+        data,
+      ),
+    ).toBe("from-flag");
   });
 });

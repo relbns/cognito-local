@@ -6,6 +6,7 @@ import * as readline from "node:readline";
 import { parseArgs } from "node:util";
 import Pino from "pino";
 import PinoPretty from "pino-pretty";
+import { ADMIN_TOKEN_ENV, adminTokenWarning } from "../admin/auth";
 import {
   applySeed,
   exportSeed,
@@ -75,11 +76,11 @@ const USAGE = `cognito-emulator: a local Amazon Cognito User Pools emulator
 Installed as two commands, cognito-emulator and cognito-local, that run the same program.
 
 Usage:
-  cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin]
-  cognito-local seed <file> [--data <dir>] [--url <url>] [--json]
-  cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--json]
+  cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin] [--admin-token <t>]
+  cognito-local seed <file> [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
+  cognito-local export [--out <file>] [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
   cognito-local reset [--yes] [--all] [--data <dir>] [--json]
-  cognito-local status [--data <dir>] [--url <url>] [--json]
+  cognito-local status [--data <dir>] [--url <url>] [--admin-token <t>] [--json]
   cognito-local help [command] | --help | --version
 
 Commands:
@@ -98,6 +99,10 @@ Options:
   --seed <file>  Seed file applied at startup (env COGNITO_LOCAL_SEED)
   --admin        Enable the admin UI at /_admin (default; env COGNITO_LOCAL_ADMIN_UI)
   --no-admin     Disable the admin UI and its API
+  --admin-token <t>
+                 start: require this token for the admin UI and its API. seed, export, status:
+                 send it to the server (env COGNITO_LOCAL_ADMIN_TOKEN, or AdminUIConfig.Token
+                 in the data directory's config.json)
   --url <url>    Talk to a server at this URL instead of looking it up from the data directory
   --json         Machine-readable output
   --yes          Confirm a destructive command without prompting
@@ -112,6 +117,7 @@ const OPTIONS = {
   seed: { type: "string" },
   admin: { type: "boolean" },
   "no-admin": { type: "boolean" },
+  "admin-token": { type: "string" },
   url: { type: "string" },
   out: { type: "string" },
   json: { type: "boolean" },
@@ -130,11 +136,11 @@ type Flags = {
 const COMMANDS = ["start", "seed", "export", "reset", "status", "help"];
 
 const COMMAND_FLAGS: Record<string, (keyof typeof OPTIONS)[]> = {
-  start: ["port", "host", "data", "seed", "admin", "no-admin"],
-  seed: ["data", "url", "json"],
-  export: ["out", "data", "url", "json"],
+  start: ["port", "host", "data", "seed", "admin", "no-admin", "admin-token"],
+  seed: ["data", "url", "admin-token", "json"],
+  export: ["out", "data", "url", "admin-token", "json"],
   reset: ["yes", "all", "data", "json"],
-  status: ["data", "url", "json"],
+  status: ["data", "url", "admin-token", "json"],
   help: [],
 };
 
@@ -230,6 +236,7 @@ export interface RunningServer {
   url: string;
   pid?: number;
   adminUi?: boolean;
+  adminToken?: string;
 }
 
 export const findRunningServer = async (
@@ -268,12 +275,56 @@ const quietLogger = () =>
     Pino.destination(2),
   ) as unknown as Pino.Logger;
 
+const configAdminToken = (dataDirectory: string): string | undefined => {
+  try {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(dataDirectory, "config.json"), "utf8"),
+    );
+    const token = config?.AdminUIConfig?.Token;
+    return typeof token === "string" && token ? token : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const resolveAdminToken = (
+  io: CliIO,
+  flags: Flags,
+  dataDirectory: string,
+): string | undefined =>
+  flags["admin-token"] ||
+  io.env[ADMIN_TOKEN_ENV] ||
+  configAdminToken(dataDirectory);
+
+const adminHeaders = (
+  server: RunningServer,
+  headers?: Record<string, string>,
+): Record<string, string> => ({
+  ...headers,
+  ...(server.adminToken
+    ? { authorization: `Bearer ${server.adminToken}` }
+    : {}),
+});
+
+const tokenRequiredError = (server: RunningServer) =>
+  new Error(
+    server.adminToken
+      ? `the server at ${server.url} refused the admin token`
+      : `the server at ${server.url} requires an admin token; pass --admin-token or set ${ADMIN_TOKEN_ENV}`,
+  );
+
 const adminApi = async (
   server: RunningServer,
   pathname: string,
-  init?: RequestInit,
+  init: Omit<RequestInit, "headers"> & {
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> => {
-  const res = await fetch(`${server.url}/_admin${pathname}`, init);
+  const res = await fetch(`${server.url}/_admin${pathname}`, {
+    ...init,
+    headers: adminHeaders(server, init.headers),
+  });
+  if (res.status === 401) throw tokenRequiredError(server);
   const text = await res.text();
   let body: Record<string, unknown>;
   try {
@@ -288,6 +339,11 @@ const adminApi = async (
   }
   return { status: res.status, body };
 };
+
+const withAdminToken = (
+  server: RunningServer | null,
+  adminToken: string | undefined,
+): RunningServer | null => (server ? { ...server, adminToken } : null);
 
 const json = (io: CliIO, value: unknown) =>
   io.stdout(`${JSON.stringify(value, null, 2)}\n`);
@@ -318,6 +374,7 @@ async function commandStart(io: CliIO, flags: Flags): Promise<number> {
     port: parsePort(flags.port),
     hostname: flags.host,
     adminUi: flags["no-admin"] ? false : flags.admin ? true : undefined,
+    adminToken: flags["admin-token"],
     seedFile: flags.seed,
   });
   const httpServer: http.Server | https.Server = await server.start();
@@ -340,11 +397,18 @@ async function commandStart(io: CliIO, flags: Flags): Promise<number> {
   fs.writeFileSync(runtimeFile(dataDirectory), JSON.stringify(info, null, 2));
 
   logger.info(`Cognito Local running on ${url}`);
+  const adminToken = server.services.config.AdminUIConfig?.Token;
   if (server.adminUiPath) {
     logger.info(
-      `Admin UI on ${url}${server.adminUiPath} (no authentication, local development only)`,
+      `Admin UI on ${url}${server.adminUiPath} (${adminToken ? "admin token required" : "no authentication, local development only"})`,
     );
   }
+  const warning = adminTokenWarning({
+    hostname: server.services.config.ServerConfig.hostname ?? address.address,
+    adminUi: !!server.adminUiPath,
+    token: adminToken,
+  });
+  if (warning) logger.warn(warning);
   logger.info(`Data directory ${info.dataDirectory}`);
 
   return new Promise<number>((resolve) => {
@@ -372,7 +436,10 @@ async function commandSeed(
   const dataDirectory = resolveDataDirectory(flags.data);
   const source = path.resolve(file);
   const seed = loadSeedFile(source);
-  const running = await findRunningServer(dataDirectory, flags.url);
+  const running = withAdminToken(
+    await findRunningServer(dataDirectory, flags.url),
+    resolveAdminToken(io, flags, dataDirectory),
+  );
 
   let changes: SeedChange[];
   let lines: string[];
@@ -429,7 +496,10 @@ async function commandSeed(
 
 async function commandExport(io: CliIO, flags: Flags): Promise<number> {
   const dataDirectory = resolveDataDirectory(flags.data);
-  const running = await findRunningServer(dataDirectory, flags.url);
+  const running = withAdminToken(
+    await findRunningServer(dataDirectory, flags.url),
+    resolveAdminToken(io, flags, dataDirectory),
+  );
   let seed: SeedFile;
   if (running) {
     const { status, body } = await adminApi(running, "/api/export");
@@ -522,17 +592,25 @@ async function commandReset(io: CliIO, flags: Flags): Promise<number> {
 
 async function commandStatus(io: CliIO, flags: Flags): Promise<number> {
   const dataDirectory = resolveDataDirectory(flags.data);
-  const running = await findRunningServer(dataDirectory, flags.url);
+  const running = withAdminToken(
+    await findRunningServer(dataDirectory, flags.url),
+    resolveAdminToken(io, flags, dataDirectory),
+  );
   let pools: number | undefined;
   let adminUi = running?.adminUi;
+  let adminTokenRefused = false;
   if (running) {
     try {
       const res = await fetch(`${running.url}/_admin/api/status`, {
+        headers: adminHeaders(running),
         signal: AbortSignal.timeout(2000),
       });
       if (res.ok) {
         pools = ((await res.json()) as { pools: number }).pools;
         adminUi = true;
+      } else if (res.status === 401) {
+        adminUi = true;
+        adminTokenRefused = true;
       } else if (res.status === 404) {
         adminUi = false;
       }
@@ -548,6 +626,7 @@ async function commandStatus(io: CliIO, flags: Flags): Promise<number> {
     pid: running?.pid,
     adminUi,
     adminUrl: running && adminUi ? `${running.url}/_admin` : undefined,
+    adminTokenRefused: adminTokenRefused || undefined,
     pools,
     dataDirectory: flags.url ? undefined : path.resolve(dataDirectory),
     version: readPackageVersion(),
@@ -558,6 +637,8 @@ async function commandStatus(io: CliIO, flags: Flags): Promise<number> {
     io.stdout(
       `cognito-local is running at ${running.url}${running.pid ? ` (pid ${running.pid})` : ""}${pools === undefined ? "" : `, ${pools} user pool(s)`}${status.adminUrl ? `, admin UI ${status.adminUrl}` : ""}.\n`,
     );
+    if (adminTokenRefused)
+      io.stderr(`${tokenRequiredError(running).message}.\n`);
   } else {
     io.stdout(
       `cognito-local is not running${flags.url ? ` at ${flags.url}` : ` for ${dataDirectory}`}${pools === undefined ? "" : ` (${pools} user pool(s) on disk)`}.\n`,

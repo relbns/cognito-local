@@ -21,6 +21,7 @@ import {
   type User,
   type UserPoolService,
 } from "../services/userPoolService";
+import { adminAuth } from "./auth";
 import { createCallbackRouter } from "./callback";
 import { adminUrl, type Flash, layout, type SafeHtml, withQuery } from "./html";
 import { inspectToken } from "./tokens";
@@ -57,7 +58,15 @@ const send = (
     .status(status)
     .type("html")
     .set("Cache-Control", "no-store")
-    .send(layout({ title, active, body, flash }));
+    .send(
+      layout({
+        title,
+        active,
+        body,
+        flash,
+        tokenRequired: !!res.locals.adminTokenRequired,
+      }),
+    );
 };
 
 const sendError = (res: Response, e: unknown) => {
@@ -160,6 +169,8 @@ export const createAdminRouter = (
     }
     next();
   });
+
+  admin.use(adminAuth(services.config.AdminUIConfig?.Token));
 
   const run = <T = unknown>(req: Request, target: string, body: unknown) =>
     router(target)(ctxOf(req), body) as Promise<T>;

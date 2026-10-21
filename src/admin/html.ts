@@ -65,6 +65,7 @@ header{background:var(--panel);border-bottom:1px solid var(--border)}
 nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{padding:6px 10px;border-radius:6px;color:var(--muted)}
 nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.notice-form{margin-left:auto}
 .notice{margin-left:auto;font-size:12px;color:var(--warn);background:var(--warn-soft);padding:3px 8px;border-radius:999px}
 main{min-width:0;max-width:1200px;margin:0 auto;padding:20px 16px 48px}
 h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 12px}
@@ -124,6 +125,9 @@ export const layout = (opts: {
   active: NavSection;
   flash?: Flash;
   body: SafeHtml;
+  /** Hides the navigation, for the sign-in page. */
+  bare?: boolean;
+  tokenRequired?: boolean;
 }): string =>
   html`<!DOCTYPE html>
 <html lang="en">
@@ -137,13 +141,21 @@ export const layout = (opts: {
 <body>
 <header><div class="bar">
   <a class="brand" href="${ADMIN_UI_PATH}">Cognito Local admin</a>
-  <nav>
+  ${
+    opts.bare
+      ? ""
+      : html`<nav>
     <a href="${ADMIN_UI_PATH}" class="${opts.active === "pools" ? "active" : ""}">User pools</a>
     <a href="${adminUrl("codes")}" class="${opts.active === "codes" ? "active" : ""}">Codes</a>
     <a href="${adminUrl("tokens")}" class="${opts.active === "tokens" ? "active" : ""}">Tokens</a>
     <a href="${adminUrl("callback")}" class="${opts.active === "callback" ? "active" : ""}">OAuth callback</a>
   </nav>
-  <span class="notice" title="Disable with AdminUIConfig.Enabled=false or COGNITO_LOCAL_ADMIN_UI=false">No authentication: local development only</span>
+  ${
+    opts.tokenRequired
+      ? html`<form class="inline notice-form" method="post" action="${adminUrl("logout")}"><button type="submit" class="link">Sign out</button></form>`
+      : html`<span class="notice" title="Protect with AdminUIConfig.Token or COGNITO_LOCAL_ADMIN_TOKEN, disable with AdminUIConfig.Enabled=false">No authentication: local development only</span>`
+  }`
+  }
 </div></header>
 <main>
 ${opts.flash?.ok ? html`<div class="flash ok" role="status">${opts.flash.ok}</div>` : ""}

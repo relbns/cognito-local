@@ -130,4 +130,5 @@ export to an empty data directory and exporting again gives the same file. Links
 
 Relative `file:` paths in a posted seed are resolved against `baseDir` (default: the server's
 working directory). The CLI resolves them before posting. These endpoints exist only while the
-admin UI is enabled, and like the rest of the admin UI they have no authentication.
+admin UI is enabled. When an admin token is set they need `Authorization: Bearer <token>`, which
+the CLI sends from `--admin-token` or `COGNITO_LOCAL_ADMIN_TOKEN`.

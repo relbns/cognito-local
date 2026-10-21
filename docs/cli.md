@@ -42,6 +42,7 @@ on the npm registry yet; the GitHub commands above work today.
 | `--host <h>` | `HOST` | `localhost` | start |
 | `--seed <file>` | `COGNITO_LOCAL_SEED` | none | start |
 | `--admin` / `--no-admin` | `COGNITO_LOCAL_ADMIN_UI` | on | start |
+| `--admin-token <t>` | `COGNITO_LOCAL_ADMIN_TOKEN` | none (open) | start: the token the admin UI and its API require. seed, export, status: the token sent to the server, falling back to `AdminUIConfig.Token` in `<data>/config.json` |
 | `--url <url>` | | from the data directory | seed, export, status |
 | `--out <file>` | | stdout | export |
 | `--json` | | off | seed, export, reset, status |
@@ -49,8 +50,8 @@ on the npm registry yet; the GitHub commands above work today.
 | `--all` | | off | reset |
 
 A flag wins over the environment, the environment over the built-in default. Values in
-`<data>/config.json` (`ServerConfig.port`, `ServerConfig.hostname`, `AdminUIConfig.Enabled`) win
-over the environment but not over a flag. The token issuer (`TokenConfig.IssuerDomain`) follows the
+`<data>/config.json` (`ServerConfig.port`, `ServerConfig.hostname`, `AdminUIConfig.Enabled`,
+`AdminUIConfig.Token`) win over the environment but not over a flag. The token issuer (`TokenConfig.IssuerDomain`) follows the
 final host and port unless `config.json` sets it; a wildcard host (`0.0.0.0`, `::`) becomes
 `localhost` in the issuer.
 

@@ -119,6 +119,42 @@ describe("admin UI routes", () => {
       expect(res.text).toContain("No authentication: local development only");
     });
 
+    it("asks for the admin token and then shows a sign-out button instead of the notice", async () => {
+      const protectedApp = express();
+      protectedApp.use((req, _res, next) => {
+        (req as any).log = { debug() {}, info() {}, warn() {}, error() {} };
+        next();
+      });
+      protectedApp.use(
+        ADMIN_UI_PATH,
+        createAdminRouter(
+          {
+            authSessions,
+            clock,
+            codeLog,
+            cognito,
+            config: {
+              ...DefaultConfig,
+              AdminUIConfig: { ...DefaultConfig.AdminUIConfig, Token: "t0ken" },
+            },
+          } as any,
+          router as any,
+        ),
+      );
+
+      await supertest(protectedApp)
+        .get(ADMIN_UI_PATH)
+        .expect(303)
+        .expect("Location", "/_admin/login?next=%2F_admin");
+      const res = await supertest(protectedApp)
+        .get(ADMIN_UI_PATH)
+        .set("Authorization", "Bearer t0ken")
+        .expect(200);
+      expect(res.text).toContain("Local pool");
+      expect(res.text).toContain(`action="/_admin/logout"`);
+      expect(res.text).not.toContain("No authentication");
+    });
+
     it("shows pool settings and app clients with their OAuth settings", async () => {
       const res = await get("/pools/local_pool").expect(200);
       expect(res.text).toContain("client-1");

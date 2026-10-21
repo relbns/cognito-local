@@ -37,4 +37,5 @@ A login started elsewhere works too: pick the client and paste the PKCE verifier
 - The redirect URI is built from the host and port of the request, so open the page on the same
   host name you registered (`localhost`, not `127.0.0.1`, if that is what `CallbackURLs` has).
 - Pending logins are kept in memory for ten minutes.
-- Like the rest of the admin UI there is no authentication; it is off with `--no-admin`.
+- Like the rest of the admin UI it is open unless an admin token is set (see the README's
+  "Admin token"), and it is off with `--no-admin`.
