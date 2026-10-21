@@ -51,9 +51,42 @@ describe("GetDevice target", () => {
       DeviceKey: "device-key-1",
     });
 
-    expect(result.Device).toMatchObject({
+    expect(result.Device).toEqual({
       DeviceKey: "device-key-1",
+      DeviceAttributes: [{ Name: "device_name", Value: "My Phone" }],
+      DeviceCreateDate: now,
+      DeviceLastModifiedDate: now,
+      DeviceLastAuthenticatedDate: now,
     });
+  });
+
+  it("hides a key that was issued but never confirmed, and the stored verifier", async () => {
+    const existingUser = TDB.user({ Username: "user-sub" });
+    existingUser.Devices = [
+      { DeviceKey: "pending", DeviceGroupKey: "-group", Confirmed: false },
+      {
+        DeviceKey: "confirmed",
+        DeviceGroupKey: "-group",
+        DeviceSecretVerifierConfig: { PasswordVerifier: "AA==", Salt: "AA==" },
+        Confirmed: true,
+      },
+    ];
+    mockUserPoolService.getUserByUsername.mockResolvedValue(existingUser);
+
+    await expect(
+      getDevice(TestContext, { AccessToken: validToken, DeviceKey: "pending" }),
+    ).rejects.toEqual(new ResourceNotFoundError("Device does not exist."));
+    const result = await getDevice(TestContext, {
+      AccessToken: validToken,
+      DeviceKey: "confirmed",
+    });
+    expect(Object.keys(result.Device ?? {}).sort()).toEqual([
+      "DeviceAttributes",
+      "DeviceCreateDate",
+      "DeviceKey",
+      "DeviceLastAuthenticatedDate",
+      "DeviceLastModifiedDate",
+    ]);
   });
 
   it("throws if device not found", async () => {
@@ -66,6 +99,6 @@ describe("GetDevice target", () => {
         AccessToken: validToken,
         DeviceKey: "nonexistent-device",
       }),
-    ).rejects.toEqual(new ResourceNotFoundError("Device not found."));
+    ).rejects.toEqual(new ResourceNotFoundError("Device does not exist."));
   });
 });

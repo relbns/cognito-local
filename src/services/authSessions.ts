@@ -16,6 +16,16 @@ export interface PendingChallenge {
   challengeMetadata?: string;
 }
 
+/** State of a built-in sign-in challenge; custom authentication sessions leave it unset. */
+export interface SignInState {
+  deviceKey?: string;
+  availableChallenges?: string[];
+  code?: string;
+  totpSecret?: string;
+  totpVerified?: boolean;
+  tokenSource?: "Authentication" | "NewPasswordChallenge";
+}
+
 export interface AuthSession {
   userPoolId: string;
   clientId: string;
@@ -24,6 +34,7 @@ export interface AuthSession {
   history: ChallengeResult[];
   srpA?: string;
   pendingChallenge: PendingChallenge;
+  signIn?: SignInState;
 }
 
 export interface ActiveAuthSession {

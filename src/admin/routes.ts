@@ -243,6 +243,7 @@ export const createAdminRouter = (
       .list()
       .filter(
         (s) =>
+          !s.session.signIn &&
           (!filters.pool || s.session.userPoolId === filters.pool) &&
           (!filters.type || filters.type === "CUSTOM_AUTH") &&
           (!q || s.session.username.toLowerCase().includes(q)),

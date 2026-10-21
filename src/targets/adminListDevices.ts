@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { confirmedDevices, toDeviceType } from "../services/devices";
 import { paginate } from "../services/pagination";
 import type { Target } from "./Target";
 
@@ -23,9 +24,8 @@ export const AdminListDevices =
       throw new UserNotFoundError();
     }
 
-    const devices = user.Devices ?? [];
     const { items, nextToken } = paginate(
-      devices,
+      confirmedDevices(user).map(toDeviceType),
       req.Limit,
       req.PaginationToken,
     );

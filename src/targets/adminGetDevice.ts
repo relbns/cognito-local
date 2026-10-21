@@ -2,8 +2,9 @@ import type {
   AdminGetDeviceRequest,
   AdminGetDeviceResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { ResourceNotFoundError, UserNotFoundError } from "../errors";
+import { UserNotFoundError } from "../errors";
 import type { Services } from "../services";
+import { requireConfirmedDevice, toDeviceType } from "../services/devices";
 import type { Target } from "./Target";
 
 export type AdminGetDeviceTarget = Target<
@@ -22,13 +23,7 @@ export const AdminGetDevice =
       throw new UserNotFoundError();
     }
 
-    const devices = user.Devices ?? [];
-    const device = devices.find((d) => d.DeviceKey === req.DeviceKey);
-    if (!device) {
-      throw new ResourceNotFoundError("Device not found.");
-    }
-
     return {
-      Device: device,
+      Device: toDeviceType(requireConfirmedDevice(user, req.DeviceKey)),
     };
   };

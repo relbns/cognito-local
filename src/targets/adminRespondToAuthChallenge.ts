@@ -2,22 +2,13 @@ import type {
   AdminRespondToAuthChallengeRequest,
   AdminRespondToAuthChallengeResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { v4 } from "uuid";
-import {
-  CodeMismatchError,
-  InvalidParameterError,
-  NotAuthorizedError,
-  UnsupportedError,
-} from "../errors";
+import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { Services } from "../services";
 import {
   isCustomAuthSession,
   respondToCustomAuthChallenge,
 } from "../services/customAuth";
-import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
-import { verifyPasswordClaim } from "../services/srp";
-import { verify as verifyTotp } from "../services/totp";
-import { attributesToRecord } from "../services/userPoolService";
+import { respondToSignInChallenge } from "../services/signIn";
 import type { Target } from "./Target";
 
 export type AdminRespondToAuthChallengeTarget = Target<
@@ -30,6 +21,8 @@ type AdminRespondToAuthChallengeServices = Pick<
   | "authSessions"
   | "clock"
   | "cognito"
+  | "messages"
+  | "otp"
   | "srpSessions"
   | "triggers"
   | "tokenGenerator"
@@ -42,7 +35,7 @@ export const AdminRespondToAuthChallenge =
     services: AdminRespondToAuthChallengeServices,
   ): AdminRespondToAuthChallengeTarget =>
   async (ctx, req) => {
-    const { clock, cognito, triggers, tokenGenerator } = services;
+    const { cognito } = services;
     if (!req.ChallengeResponses) {
       throw new InvalidParameterError(
         "Missing required parameter challenge responses",
@@ -90,131 +83,14 @@ export const AdminRespondToAuthChallenge =
       });
     }
 
-    if (req.ChallengeName === "SMS_MFA") {
-      if (user.MFACode !== req.ChallengeResponses.SMS_MFA_CODE) {
-        throw new CodeMismatchError();
-      }
-
-      await userPool.saveUser(ctx, {
-        ...user,
-        MFACode: undefined,
-        UserLastModifiedDate: clock.get(),
-      });
-    } else if (req.ChallengeName === "SOFTWARE_TOKEN_MFA") {
-      const code = req.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE;
-      const secret = user.SoftwareTokenMfaConfiguration?.Secret;
-      if (
-        !code ||
-        !secret ||
-        !user.SoftwareTokenMfaConfiguration?.Verified ||
-        !verifyTotp(secret, code)
-      ) {
-        throw new CodeMismatchError();
-      }
-      await userPool.saveUser(ctx, {
-        ...user,
-        UserLastModifiedDate: clock.get(),
-      });
-    } else if (req.ChallengeName === "NEW_PASSWORD_REQUIRED") {
-      if (!req.ChallengeResponses.NEW_PASSWORD) {
-        throw new InvalidParameterError(
-          "Missing required parameter NEW_PASSWORD",
-        );
-      }
-
-      assertPasswordConformsToPolicy(
-        services.config,
-        userPool.options,
-        req.ChallengeResponses.NEW_PASSWORD,
-      );
-
-      await userPool.saveUser(ctx, {
-        ...user,
-        Password: req.ChallengeResponses.NEW_PASSWORD,
-        UserLastModifiedDate: clock.get(),
-        UserStatus: "CONFIRMED",
-      });
-    } else if (req.ChallengeName === "PASSWORD_VERIFIER") {
-      verifyPasswordClaim(services.srpSessions, {
-        userPoolId: userPool.options.Id,
-        clientId: userPoolClient.ClientId,
-        user,
-        challengeResponses: req.ChallengeResponses,
-      });
-      if (
-        (userPool.options.MfaConfiguration === "OPTIONAL" &&
-          ((user.MFAOptions ?? []).length > 0 ||
-            (user.UserMFASettingList ?? []).length > 0)) ||
-        userPool.options.MfaConfiguration === "ON"
-      ) {
-        return {
-          ChallengeName:
-            user.PreferredMfaSetting === "SOFTWARE_TOKEN_MFA"
-              ? "SOFTWARE_TOKEN_MFA"
-              : "SMS_MFA",
-          ChallengeParameters: {
-            USER_ID_FOR_SRP: user.Username,
-          } as AdminRespondToAuthChallengeResponse["ChallengeParameters"],
-          Session: v4(),
-        };
-      }
-      if (user.UserStatus === "FORCE_CHANGE_PASSWORD") {
-        return {
-          ChallengeName: "NEW_PASSWORD_REQUIRED",
-          ChallengeParameters: {
-            USER_ID_FOR_SRP: user.Username,
-            requiredAttributes: JSON.stringify([]),
-            userAttributes: JSON.stringify(attributesToRecord(user.Attributes)),
-          } as AdminRespondToAuthChallengeResponse["ChallengeParameters"],
-          Session: v4(),
-        };
-      }
-    } else if (req.ChallengeName === "MFA_SETUP") {
-      if (!req.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE) {
-        throw new InvalidParameterError(
-          "Missing required parameter SOFTWARE_TOKEN_MFA_CODE",
-        );
-      }
-      const mfaSettingList = user.UserMFASettingList ?? [];
-      if (!mfaSettingList.includes("SOFTWARE_TOKEN_MFA")) {
-        mfaSettingList.push("SOFTWARE_TOKEN_MFA");
-      }
-      await userPool.saveUser(ctx, {
-        ...user,
-        UserMFASettingList: mfaSettingList,
-        PreferredMfaSetting: "SOFTWARE_TOKEN_MFA",
-        UserLastModifiedDate: clock.get(),
-      });
-    } else {
-      throw new UnsupportedError(
-        `adminRespondToAuthChallenge with ChallengeName=${req.ChallengeName}`,
-      );
-    }
-
-    if (triggers.enabled("PostAuthentication", req.UserPoolId)) {
-      await triggers.postAuthentication(ctx, {
-        clientId: req.ClientId,
-        clientMetadata: req.ClientMetadata,
-        source: "PostAuthentication_Authentication",
-        userAttributes: user.Attributes,
-        username: user.Username,
-        userPoolId: req.UserPoolId,
-      });
-    }
-
-    const userGroups = await userPool.listUserGroupMembership(ctx, user);
-    const tokens = await tokenGenerator.generate(
-      ctx,
+    return respondToSignInChallenge(ctx, services, {
+      userPool,
+      client: userPoolClient,
       user,
-      userGroups,
-      userPoolClient,
-      req.ClientMetadata,
-      "Authentication",
-    );
-    await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
-
-    return {
-      ChallengeParameters: {},
-      AuthenticationResult: tokens,
-    };
+      sessionId: req.Session,
+      challengeName: req.ChallengeName,
+      challengeResponses: req.ChallengeResponses,
+      clientMetadata: req.ClientMetadata,
+      operation: "adminRespondToAuthChallenge",
+    });
   };

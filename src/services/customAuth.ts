@@ -188,7 +188,10 @@ export const startCustomAuth = async (
 export const isCustomAuthSession = (
   services: Pick<Services, "authSessions">,
   sessionId: string,
-): boolean => services.authSessions.peek(sessionId) !== undefined;
+): boolean => {
+  const session = services.authSessions.peek(sessionId);
+  return session !== undefined && !session.signIn;
+};
 
 export const respondToCustomAuthChallenge = async (
   ctx: Context,

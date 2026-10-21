@@ -480,8 +480,9 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
 - The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
-- The `USER_AUTH` (choice-based) flow, and with it passkey sign-in.
-- Device tracking (`NewDeviceMetadata`, device challenges) and the `MFA_SETUP` challenge.
+- Passkey (`WEB_AUTHN`) sign-in in the `USER_AUTH` flow, and its `SESSION` parameter that signs a
+  user in after ConfirmSignUp.
+- Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no
   effect.

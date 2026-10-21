@@ -2,7 +2,6 @@ import type {
   AdminInitiateAuthRequest,
   AdminInitiateAuthResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { v4 } from "uuid";
 import {
   InvalidParameterError,
   NotAuthorizedError,
@@ -11,13 +10,21 @@ import {
   UnsupportedError,
   UserNotConfirmedException,
 } from "../errors";
-import type { Services } from "../services";
+import type { Services, UserPoolService } from "../services";
+import type { AppClient } from "../services/appClient";
 import type { Context } from "../services/context";
 import { startCustomAuth } from "../services/customAuth";
 import { refreshTokens } from "../services/refreshTokens";
 import type { Present } from "../services/sdkTypes";
-import { startPasswordVerifier } from "../services/srp";
+import {
+  afterPassword,
+  assertUserAuthAllowed,
+  passwordVerifierChallenge,
+  type SignInRound,
+  startUserAuth,
+} from "../services/signIn";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
+import type { User } from "../services/userPoolService";
 import type { Target } from "./Target";
 
 export type AdminInitiateAuthTarget = Target<
@@ -30,11 +37,27 @@ type AdminInitiateAuthServices = Pick<
   | "authSessions"
   | "clock"
   | "cognito"
+  | "messages"
+  | "otp"
   | "srpSessions"
   | "triggers"
   | "tokenGenerator"
   | "tokenVerifier"
 >;
+
+// AdminInitiateAuth passes ClientMetadata to pre token generation but not to PostAuthentication.
+const signInRound = (
+  req: Present<AdminInitiateAuthRequest>,
+  userPool: UserPoolService,
+  client: AppClient,
+  user: User,
+): SignInRound => ({
+  userPool,
+  client,
+  user,
+  clientMetadata: req.ClientMetadata,
+  tokenClientMetadata: req.ClientMetadata,
+});
 
 const adminUserPasswordAuthFlow = async (
   ctx: Context,
@@ -95,66 +118,10 @@ const adminUserPasswordAuthFlow = async (
     throw new UserNotConfirmedException();
   }
 
-  const userHasMfa =
-    (user.MFAOptions ?? []).length > 0 ||
-    (user.UserMFASettingList ?? []).length > 0;
-
-  if (
-    userPool.options.MfaConfiguration === "ON" ||
-    (userPool.options.MfaConfiguration !== "OFF" && userHasMfa)
-  ) {
-    if (!userHasMfa) {
-      throw new NotAuthorizedError();
-    }
-    return {
-      ChallengeName:
-        user.PreferredMfaSetting === "SOFTWARE_TOKEN_MFA"
-          ? "SOFTWARE_TOKEN_MFA"
-          : "SMS_MFA",
-      ChallengeParameters: { USER_ID_FOR_SRP: user.Username },
-      Session: v4(),
-      AuthenticationResult: undefined,
-    };
-  }
-
-  if (services.triggers.enabled("PostAuthentication", userPool.options.Id)) {
-    await services.triggers.postAuthentication(ctx, {
-      clientId: req.ClientId,
-      // AdminInitiateAuth does not pass ClientMetadata to PostAuthentication (AdminInitiateAuth API reference).
-      clientMetadata: undefined,
-      source: "PostAuthentication_Authentication",
-      userAttributes: user.Attributes,
-      username: user.Username,
-      userPoolId: userPool.options.Id,
-    });
-  }
-
-  const userGroups = await userPool.listUserGroupMembership(ctx, user);
-
-  const tokens = await services.tokenGenerator.generate(
-    ctx,
-    user,
-    userGroups,
-    userPoolClient,
-    req.ClientMetadata,
-    "Authentication",
-  );
-
-  await userPool.storeRefreshToken(ctx, tokens.RefreshToken, user);
-
-  return {
-    ChallengeName: undefined,
-    Session: undefined,
-    ChallengeParameters: undefined,
-    AuthenticationResult: {
-      AccessToken: tokens.AccessToken,
-      RefreshToken: tokens.RefreshToken,
-      IdToken: tokens.IdToken,
-      NewDeviceMetadata: undefined,
-      TokenType: tokens.TokenType,
-      ExpiresIn: tokens.ExpiresIn,
-    },
-  };
+  return afterPassword(ctx, services, {
+    ...signInRound(req, userPool, userPoolClient, user),
+    deviceKey: req.AuthParameters.DEVICE_KEY,
+  });
 };
 
 const refreshTokenAuthFlow = async (
@@ -244,17 +211,58 @@ const userSrpAuthFlow = async (
     throw new UserNotConfirmedException();
   }
 
-  return {
-    ChallengeName: "PASSWORD_VERIFIER",
-    ChallengeParameters: startPasswordVerifier(services.srpSessions, {
-      userPoolId: userPool.options.Id,
-      clientId: userPoolClient.ClientId,
-      user,
-      srpA: req.AuthParameters.SRP_A,
-      validityMinutes: userPoolClient.AuthSessionValidity,
-    }),
-    Session: v4(),
-  };
+  return passwordVerifierChallenge(
+    services,
+    {
+      ...signInRound(req, userPool, userPoolClient, user),
+      deviceKey: req.AuthParameters.DEVICE_KEY,
+    },
+    req.AuthParameters.SRP_A,
+  );
+};
+
+const userAuthFlow = async (
+  ctx: Context,
+  services: AdminInitiateAuthServices,
+  req: Present<AdminInitiateAuthRequest>,
+): Promise<AdminInitiateAuthResponse> => {
+  const userPool = await services.cognito.getUserPoolForClientId(
+    ctx,
+    req.ClientId,
+  );
+  const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
+  if (!userPoolClient) throw new NotAuthorizedError();
+  assertUserAuthAllowed(userPoolClient);
+  if (!req.AuthParameters?.USERNAME) {
+    throw new InvalidParameterError("Missing required parameter USERNAME");
+  }
+
+  const user = await userPool.getUserByUsername(
+    ctx,
+    req.AuthParameters.USERNAME,
+  );
+  if (!user) {
+    throw new NotAuthorizedError();
+  }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
+  }
+  if (user.UserStatus === "RESET_REQUIRED") {
+    throw new PasswordResetRequiredError();
+  }
+  if (user.UserStatus === "UNCONFIRMED") {
+    throw new UserNotConfirmedException();
+  }
+
+  return startUserAuth(
+    ctx,
+    services,
+    {
+      ...signInRound(req, userPool, userPoolClient, user),
+      deviceKey: req.AuthParameters.DEVICE_KEY,
+    },
+    req.AuthParameters,
+  );
 };
 
 const customAuthFlow = async (
@@ -322,6 +330,8 @@ export const AdminInitiateAuth =
       return refreshTokenAuthFlow(ctx, services, req);
     } else if (req.AuthFlow === "CUSTOM_AUTH") {
       return customAuthFlow(ctx, services, req);
+    } else if (req.AuthFlow === "USER_AUTH") {
+      return userAuthFlow(ctx, services, req);
     } else {
       throw new UnsupportedError(`AdminInitAuth with AuthFlow=${req.AuthFlow}`);
     }
