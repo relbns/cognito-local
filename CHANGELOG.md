@@ -3,6 +3,13 @@
 Each release is also on [GitHub releases](https://github.com/relbns/cognito-local/releases), with
 these notes.
 
+## 1.0.1
+
+- Installing the package no longer pulls in its development dependencies: the published
+  `npm-shrinkwrap.json` now lists only the runtime tree, so an install is about 50 MB.
+- The repository uses `package-lock.json` again; the shrinkwrap is generated from it when the
+  package is packed. npm 12 ignores `npm-shrinkwrap.json`, so pinned installs need npm 10 or 11.
+
 ## 1.0.0
 
 First release of `cognito-emulator`, a local emulator of the Amazon Cognito User Pools API for

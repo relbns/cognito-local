@@ -1,6 +1,6 @@
 {
   "name": "cognito-emulator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A local emulator of Amazon Cognito User Pools, with a seed file, local triggers and a CLI",
   "author": "Ariel Benesh",
   "license": "MIT",
@@ -42,6 +42,8 @@
     "check:vendor-terms": "node scripts/check-no-vendor-terms.mjs",
     "generate:validation-model": "node scripts/generate-validation-model.mjs",
     "prepare": "node scripts/prepare.js",
+    "prepack": "node scripts/production-shrinkwrap.mjs write",
+    "postpack": "node scripts/production-shrinkwrap.mjs remove",
     "cli": "tsx src/bin/cli.ts"
   },
   "devDependencies": {
