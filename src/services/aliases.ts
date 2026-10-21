@@ -8,6 +8,7 @@ import {
   attributeValue,
   type User,
   type UserPoolService,
+  usernameComparer,
 } from "./userPoolService";
 
 const VERIFIED_FLAG: Record<string, string> = {
@@ -67,14 +68,19 @@ export const findAliasConflicts = async (
     (u) => u.Username !== username,
   );
   const conflicts: AliasConflict[] = [];
+  const foldUsername = usernameComparer(userPool.options);
+  const fold = (name: string) =>
+    name === "phone_number"
+      ? (value: string | undefined) => value
+      : foldUsername;
 
   for (const name of aliasAttributes) {
     if (!isActiveAlias(name, attributes)) continue;
-    const value = attributeValue(name, attributes);
+    const value = fold(name)(attributeValue(name, attributes));
     for (const user of otherUsers) {
       if (
         isActiveAlias(name, user.Attributes) &&
-        attributeValue(name, user.Attributes) === value
+        fold(name)(attributeValue(name, user.Attributes)) === value
       ) {
         conflicts.push({ attributeName: name, kind: "alias", user });
       }
@@ -82,10 +88,10 @@ export const findAliasConflicts = async (
   }
 
   for (const name of usernameAttributes) {
-    const value = attributeValue(name, attributes);
+    const value = fold(name)(attributeValue(name, attributes));
     if (!value) continue;
     for (const user of otherUsers) {
-      if (attributeValue(name, user.Attributes) === value) {
+      if (fold(name)(attributeValue(name, user.Attributes)) === value) {
         conflicts.push({ attributeName: name, kind: "username", user });
       }
     }

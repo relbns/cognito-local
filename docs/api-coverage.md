@@ -103,6 +103,11 @@ ListUserPoolClientSecrets.
   returns that one secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the
   username by default).
+- `UsernameConfiguration.CaseSensitive: false` makes every username lookup case-insensitive (sign-in,
+  admin and group operations, sign-up and AdminCreateUser uniqueness), together with email as a
+  username, the `email` and `preferred_username` alias uniqueness checks and the ListUsers
+  `username`, `email` and `preferred_username` filters. The username is stored as given. Without
+  `UsernameConfiguration`, or with `CaseSensitive: true`, lookups are exact, as with the Cognito API.
 - A schema attribute with `DeveloperOnlyAttribute: true` (CreateUserPool, AddCustomAttributes) is
   named `dev:custom:<name>`. Admin operations write it; SignUp, UpdateUserAttributes and
   DeleteUserAttributes refuse it with `NotAuthorizedException` ("A client attempted to write

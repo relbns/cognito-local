@@ -17,6 +17,7 @@ import {
   attributesToRecord,
   type Group,
   type User,
+  type UserPool,
   type UserPoolService,
   UserPoolServiceFactoryImpl,
   UserPoolServiceImpl,
@@ -526,6 +527,85 @@ describe("User Pool Service", () => {
         }
       },
     );
+  });
+
+  describe("UsernameConfiguration.CaseSensitive", () => {
+    const user = TDB.user({
+      Username: "Jane",
+      Attributes: [
+        { Name: "sub", Value: "uuid-1234" },
+        { Name: "email", Value: "Jane@Example.test" },
+        { Name: "preferred_username", Value: "JaneD" },
+        { Name: "phone_number", Value: "+15555550100" },
+      ],
+    });
+
+    const poolWith = (options: UserPool) => {
+      const users: Record<string, User> = { [user.Username]: user };
+      const ds = newMockDataStore();
+      ds.get.mockImplementation((_ctx, key) => {
+        if (key === "Users") return Promise.resolve(users);
+        if (Array.isArray(key) && key[0] === "Users") {
+          return Promise.resolve(users[key[1]] ?? null);
+        }
+        return Promise.resolve(null);
+      });
+      return new UserPoolServiceImpl(mockClientsDataStore, clock, ds, options);
+    };
+
+    describe("false", () => {
+      const options: UserPool = {
+        Id: "local",
+        UsernameAttributes: ["email"],
+        UsernameConfiguration: { CaseSensitive: false },
+      };
+
+      it.each([
+        "Jane",
+        "jane",
+        "JANE",
+        "jane@example.test",
+        "JANE@EXAMPLE.TEST",
+      ])("finds the user by %s", async (username) => {
+        expect(
+          await poolWith(options).getUserByUsername(TestContext, username),
+        ).toEqual(user);
+      });
+
+      it.each([
+        'username = "jane"',
+        'username ^= "JA"',
+        'email = "jane@example.test"',
+        'preferred_username = "janed"',
+      ])("matches ListUsers filter %s in any case", async (filter) => {
+        expect(await poolWith(options).listUsers(TestContext, filter)).toEqual([
+          user,
+        ]);
+      });
+    });
+
+    describe("true or unset", () => {
+      it.each([
+        { Id: "local", UsernameAttributes: ["email"] },
+        {
+          Id: "local",
+          UsernameAttributes: ["email"],
+          UsernameConfiguration: { CaseSensitive: true },
+        },
+      ] as UserPool[])("matches the exact case only", async (options) => {
+        const pool = poolWith(options);
+        expect(await pool.getUserByUsername(TestContext, "jane")).toBeNull();
+        expect(
+          await pool.getUserByUsername(TestContext, "jane@example.test"),
+        ).toBeNull();
+        expect(
+          await pool.getUserByUsername(TestContext, "Jane@Example.test"),
+        ).toEqual(user);
+        expect(await pool.listUsers(TestContext, 'username = "jane"')).toEqual(
+          [],
+        );
+      });
+    });
   });
 
   describe("listUsers", () => {

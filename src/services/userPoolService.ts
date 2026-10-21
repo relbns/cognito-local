@@ -90,6 +90,19 @@ export const customAttributes = (
 ): Attribute[] =>
   (attributes ?? []).filter((attr) => attr.Name.startsWith("custom:"));
 
+// UsernameConfiguration.CaseSensitive defaults to true; false folds usernames and the email and
+// preferred_username aliases to lower case for every comparison (UsernameConfigurationType).
+export const isCaseInsensitivePool = (
+  userPool: Pick<UserPool, "UsernameConfiguration">,
+): boolean => userPool.UsernameConfiguration?.CaseSensitive === false;
+
+export const usernameComparer = (
+  userPool: Pick<UserPool, "UsernameConfiguration">,
+): ((value: string | undefined) => string | undefined) =>
+  isCaseInsensitivePool(userPool)
+    ? (value) => value?.toLowerCase()
+    : (value) => value;
+
 export interface User {
   Attributes: Attribute[];
   Enabled: boolean;
@@ -332,15 +345,20 @@ export class UserPoolServiceImpl implements UserPoolService {
       "Users",
       {},
     );
+    const fold = usernameComparer(this.options);
 
     for (const user of Object.values(users)) {
+      if (fold(user.Username) === fold(username)) {
+        return user;
+      }
+
       if (attributesIncludeMatch("sub", username, user.Attributes)) {
         return user;
       }
 
       if (
         aliasEmailEnabled &&
-        attributesIncludeMatch("email", username, user.Attributes)
+        fold(attributeValue("email", user.Attributes)) === fold(username)
       ) {
         return user;
       }
@@ -380,11 +398,13 @@ export class UserPoolServiceImpl implements UserPoolService {
   ): Promise<readonly User[]> {
     ctx.logger.debug("UserPoolServiceImpl.listUsers");
 
+    // Pools with CaseSensitive=false compare usernames, email and preferred_username in any case.
+    const caseFor = isCaseInsensitivePool(this.options)
+      ? FilterConfig.caseInsensitive
+      : FilterConfig.caseSensitive;
     const filterConfig = new FilterConfig<User>({
-      username: FilterConfig.caseSensitive((x) => x.Username),
-      email: FilterConfig.caseSensitive((x) =>
-        attributeValue("email", x.Attributes),
-      ),
+      username: caseFor((x) => x.Username),
+      email: caseFor((x) => attributeValue("email", x.Attributes)),
       phone_number: FilterConfig.caseSensitive((x) =>
         attributeValue("phone_number", x.Attributes),
       ),
@@ -397,7 +417,7 @@ export class UserPoolServiceImpl implements UserPoolService {
       family_name: FilterConfig.caseSensitive((x) =>
         attributeValue("family_name", x.Attributes),
       ),
-      preferred_username: FilterConfig.caseSensitive((x) =>
+      preferred_username: caseFor((x) =>
         attributeValue("preferred_username", x.Attributes),
       ),
       "cognito:user_status": FilterConfig.caseInsensitive((x) => x.UserStatus),
