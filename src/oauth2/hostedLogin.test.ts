@@ -634,11 +634,95 @@ describe("hosted login form", () => {
     });
   });
 
-  it("refuses when MFA is on but the user has no method set up", async () => {
-    userPool.options.MfaConfiguration = "ON";
-    const res = await login();
-    expect(res.text).toContain("must set up MFA");
-    expect(res.header.location).toBeUndefined();
+  describe("MFA setup", () => {
+    const secretOf = (html: string): string => {
+      const match = html.match(/<code>([A-Z2-7]+)<\/code>/);
+      if (!match) throw new Error(`no secret in ${html}`);
+      return match[1];
+    };
+
+    beforeEach(() => {
+      userPool.options.MfaConfiguration = "ON";
+    });
+
+    it("registers an authenticator app when MFA is on and the user has none", async () => {
+      const res = await login();
+      expect(res.text).toContain("Set up an authenticator app");
+      const secret = secretOf(res.text);
+      expect(res.text).toContain(
+        `otpauth://totp/local_Pool1%3Auser%40example.test?secret=${secret}&amp;issuer=local_Pool1`,
+      );
+      const session = sessionOf(res.text);
+
+      const wrong = await submitStep({
+        login_session: session,
+        code: "000000",
+      });
+      expect(wrong.text).toContain("Invalid code or auth state for the user.");
+      expect(secretOf(wrong.text)).toBe(secret);
+      expect(stored.SoftwareTokenMfaConfiguration).toBeUndefined();
+
+      expectCodeRedirect(
+        await submitStep({
+          login_session: session,
+          code: generateTotp(secret),
+        }),
+      );
+      expect(stored.SoftwareTokenMfaConfiguration).toEqual({
+        Secret: secret,
+        Verified: true,
+        FriendlyDeviceName: undefined,
+      });
+      expect(stored.UserMFASettingList).toEqual(["SOFTWARE_TOKEN_MFA"]);
+      expect(stored.PreferredMfaSetting).toBe("SOFTWARE_TOKEN_MFA");
+    });
+
+    it("keeps the secret on the server, not in the page form", async () => {
+      const res = await login();
+      expect(res.text).not.toMatch(/name="secret"/);
+      const forged = await submitStep({
+        login_session: sessionOf(res.text),
+        secret: TOTP_SECRET,
+        code: generateTotp(TOTP_SECRET),
+      });
+      expect(forged.text).toContain("Invalid code or auth state for the user.");
+    });
+
+    it("runs PostAuthentication after the setup, not before", async () => {
+      triggers.enabled.mockImplementation(
+        (name) => name === "PostAuthentication",
+      );
+      const res = await login();
+      expect(triggers.postAuthentication).not.toHaveBeenCalled();
+      await submitStep({
+        login_session: sessionOf(res.text),
+        code: generateTotp(secretOf(res.text)),
+      });
+      expect(triggers.postAuthentication).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends an SMS code instead when the pool has SMS and the user a phone number", async () => {
+      userPool.options.SmsConfiguration = { SnsCallerArn: "arn:example" };
+      const res = await login();
+      expect(res.text).toContain("We have sent a code by SMS");
+      expect(messages.deliver).toHaveBeenCalledTimes(1);
+    });
+
+    it("explains when only SMS can be set up and the user has no phone number", async () => {
+      userPool.options.SmsConfiguration = { SnsCallerArn: "arn:example" };
+      setUser({ Attributes: [] });
+      const res = await login();
+      expect(res.text).toContain("no phone number");
+      expect(res.header.location).toBeUndefined();
+    });
+
+    it("still refuses an optional-MFA user whose only factor is unverified", async () => {
+      userPool.options.MfaConfiguration = "OPTIONAL";
+      setUser({ UserMFASettingList: ["SOFTWARE_TOKEN_MFA"] });
+      const res = await login();
+      expect(res.text).toContain("must set up MFA");
+      expect(res.header.location).toBeUndefined();
+    });
   });
 
   describe("PostAuthentication", () => {

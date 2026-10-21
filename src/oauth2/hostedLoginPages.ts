@@ -1,7 +1,9 @@
+import type { HostedLoginContext } from "./hostedLogin";
 import type { HostedLoginStep } from "./hostedLoginStore";
+import { type FormField, maskDestination } from "./hostedPages";
 import { escapeHtml, hiddenInput } from "./html";
 
-export interface LoginFormParams {
+export interface OAuthPageParams {
   clientId: string;
   redirectUri: string;
   responseType: string;
@@ -9,51 +11,159 @@ export interface LoginFormParams {
   codeChallengeMethod: string | undefined;
   scope: string;
   state: string;
-  error?: string;
 }
 
-const page = (title: string, error: string | undefined, body: string) =>
+export interface LoginFormParams extends OAuthPageParams {
+  error?: string;
+  notice?: string;
+  signUpAllowed?: boolean;
+}
+
+export const oauthParamsOf = (login: HostedLoginContext): OAuthPageParams => ({
+  clientId: login.appClient.ClientId,
+  redirectUri: login.redirectUri,
+  responseType: login.flow.responseType,
+  codeChallenge: login.flow.codeChallenge,
+  codeChallengeMethod: login.flow.codeChallengeMethod,
+  scope: login.scope,
+  state: login.state ?? "",
+});
+
+const page = (
+  title: string,
+  error: string | undefined,
+  body: string,
+  notice?: string,
+) =>
   `<!DOCTYPE html>
 <html>
 <head><title>${escapeHtml(title)}</title></head>
 <body>
-${error ? `<p style="color:red">${escapeHtml(error)}</p>` : ""}
+${error ? `<p role="alert" style="color:red">${escapeHtml(error)}</p>` : ""}
+${notice ? `<p role="status">${escapeHtml(notice)}</p>` : ""}
 ${body}
 </body>
 </html>`;
+
+const oauthHiddenInputs = (params: OAuthPageParams) =>
+  `${hiddenInput("client_id", params.clientId)}${hiddenInput("redirect_uri", params.redirectUri)}${hiddenInput("response_type", params.responseType)}${hiddenInput("code_challenge", params.codeChallenge)}${hiddenInput("code_challenge_method", params.codeChallengeMethod)}${hiddenInput("scope", params.scope)}${hiddenInput("state", params.state)}`;
+
+/** A hosted page path with the authorize parameters in its query, as managed login links its pages. */
+export const hostedPageUrl = (
+  path: string,
+  params: OAuthPageParams,
+): string => {
+  const query = new URLSearchParams();
+  const entries: [string, string | undefined][] = [
+    ["client_id", params.clientId],
+    ["response_type", params.responseType],
+    ["scope", params.scope],
+    ["redirect_uri", params.redirectUri],
+    ["state", params.state],
+    ["code_challenge", params.codeChallenge],
+    ["code_challenge_method", params.codeChallengeMethod],
+  ];
+  for (const [name, value] of entries) {
+    if (value) query.set(name, value);
+  }
+  return `${path}?${query}`;
+};
+
+const link = (href: string, text: string) =>
+  `<a href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+
+const input = (
+  field: FormField,
+  value?: string,
+  { required = true }: { required?: boolean } = {},
+) =>
+  `  <label>${escapeHtml(field.label)}: <input type="${field.type}" name="${escapeHtml(field.name)}" autocomplete="${field.autocomplete}"${value ? ` value="${escapeHtml(value)}"` : ""}${required ? " required" : ""} /></label><br />`;
+
+const passwordInput = (name: string, label: string, autocomplete: string) =>
+  `  <label>${label}: <input type="password" name="${name}" autocomplete="${autocomplete}" required /></label><br />`;
+
+const codeInput = () =>
+  `  <label>Code: <input type="text" name="code" autocomplete="one-time-code" inputmode="numeric" required /></label><br />`;
 
 export const loginForm = (params: LoginFormParams): string =>
   page(
     "Sign in",
     params.error,
     `<form method="POST" action="/oauth2/authorize">
-${hiddenInput("client_id", params.clientId)}${hiddenInput("redirect_uri", params.redirectUri)}${hiddenInput("response_type", params.responseType)}${hiddenInput("code_challenge", params.codeChallenge)}${hiddenInput("code_challenge_method", params.codeChallengeMethod)}${hiddenInput("scope", params.scope)}${hiddenInput("state", params.state)}  <label>Username: <input type="text" name="username" /></label><br />
-  <label>Password: <input type="password" name="password" /></label><br />
+${oauthHiddenInputs(params)}  <label>Username: <input type="text" name="username" autocomplete="username" /></label><br />
+  <label>Password: <input type="password" name="password" autocomplete="current-password" /></label><br />
   <button type="submit">Sign in</button>
-</form>`,
+</form>
+<p>${link(hostedPageUrl("/forgotPassword", params), "Forgot your password?")}</p>
+${params.signUpAllowed === false ? "" : `<p>Need an account? ${link(hostedPageUrl("/signup", params), "Sign up")}</p>\n`}`,
+    params.notice,
   );
 
-const stepForm = (sessionId: string, fields: string) =>
-  `<form method="POST" action="/oauth2/authorize">
+export interface SignUpPageParams extends OAuthPageParams {
+  usernameField: FormField;
+  attributeFields: FormField[];
+  values?: Record<string, string | undefined>;
+  error?: string;
+}
+
+export const signUpPage = (params: SignUpPageParams): string =>
+  page(
+    "Sign up",
+    params.error,
+    `<form method="POST" action="/signup">
+${oauthHiddenInputs(params)}${input(params.usernameField, params.values?.username)}
+${params.attributeFields.map((field) => `${input(field, params.values?.[field.name])}\n`).join("")}${passwordInput("password", "Password", "new-password")}
+  <button type="submit">Sign up</button>
+</form>
+<p>Already have an account? ${link(hostedPageUrl("/login", params), "Sign in")}</p>
+`,
+  );
+
+export interface ForgotPasswordPageParams extends OAuthPageParams {
+  usernameField: FormField;
+  username?: string;
+  error?: string;
+}
+
+export const forgotPasswordPage = (params: ForgotPasswordPageParams): string =>
+  page(
+    "Forgot your password?",
+    params.error,
+    `<p>Enter your ${escapeHtml(params.usernameField.label.toLowerCase())} below and we will send a message to reset your password.</p>
+<form method="POST" action="/forgotPassword">
+${oauthHiddenInputs(params)}${input(params.usernameField, params.username)}
+  <button type="submit">Reset my password</button>
+</form>
+<p>${link(hostedPageUrl("/login", params), "Back to sign in")}</p>
+`,
+  );
+
+const stepForm = (
+  sessionId: string,
+  fields: string,
+  action = "/oauth2/authorize",
+) =>
+  `<form method="POST" action="${action}">
 ${hiddenInput("login_session", sessionId)}${fields}
 </form>`;
-
-const maskDestination = (destination: string): string =>
-  destination.length <= 4
-    ? destination
-    : `${destination.startsWith("+") ? "+" : ""}${"*".repeat(
-        destination.length - 4 - (destination.startsWith("+") ? 1 : 0),
-      )}${destination.slice(-4)}`;
 
 const MFA_LABELS = {
   SMS_MFA: "Text message (SMS)",
   SOFTWARE_TOKEN_MFA: "Authenticator app",
 } as const;
 
+const sentTo = (
+  delivery: { DeliveryMedium?: string; Destination?: string } | null,
+): string =>
+  delivery?.Destination
+    ? ` by ${delivery.DeliveryMedium === "SMS" ? "SMS" : "email"} to ${escapeHtml(maskDestination(delivery.Destination))}`
+    : "";
+
 export const stepPage = (
   sessionId: string,
   step: HostedLoginStep,
   error?: string,
+  notice?: string,
 ): string => {
   switch (step.kind) {
     case "newPassword":
@@ -63,10 +173,11 @@ export const stepPage = (
         `<p>Please enter a new password.</p>
 ${stepForm(
   sessionId,
-  `  <label>New password: <input type="password" name="new_password" /></label><br />
-  <label>Enter new password again: <input type="password" name="confirm_password" /></label><br />
+  `${passwordInput("new_password", "New password", "new-password")}
+${passwordInput("confirm_password", "Enter new password again", "new-password")}
   <button type="submit">Send</button>`,
 )}`,
+        notice,
       );
     case "selectMfa":
       return page(
@@ -81,28 +192,57 @@ ${stepForm(
             )
             .join("\n"),
         ),
+        notice,
       );
     case "smsMfa":
       return page(
         "Verify your identity",
         error,
         `<p>We have sent a code by SMS to ${escapeHtml(maskDestination(step.destination))}. Enter it below to complete sign-in.</p>
-${stepForm(
-  sessionId,
-  `  <label>Code: <input type="text" name="code" autocomplete="one-time-code" /></label><br />
-  <button type="submit">Sign in</button>`,
-)}`,
+${stepForm(sessionId, `${codeInput()}\n  <button type="submit">Sign in</button>`)}`,
+        notice,
       );
     case "totpMfa":
       return page(
         "Verify your identity",
         error,
         `<p>Enter the code from your authenticator app.</p>
+${stepForm(sessionId, `${codeInput()}\n  <button type="submit">Sign in</button>`)}`,
+        notice,
+      );
+    case "mfaSetup":
+      return page(
+        "Set up an authenticator app",
+        error,
+        `<p>Multi-factor authentication is required. Add this account to an authenticator app, then enter the code the app shows.</p>
+<p>Secret key: <code>${escapeHtml(step.secret)}</code></p>
+<p>Setup link: <a href="${escapeHtml(step.uri)}">${escapeHtml(step.uri)}</a></p>
+${stepForm(sessionId, `${codeInput()}\n  <button type="submit">Verify and sign in</button>`)}`,
+        notice,
+      );
+    case "confirmSignUp":
+      return page(
+        "Confirm your account",
+        error,
+        `<p>${step.delivery ? `We have sent a code${sentTo(step.delivery)}.` : "Enter the confirmation code you received."} Enter it below to confirm your account.</p>
+${stepForm(sessionId, `${codeInput()}\n  <button type="submit">Confirm account</button>`, "/confirm")}
+${stepForm(sessionId, `  <p>Didn't receive a code? <button type="submit">Send a new code</button></p>`, "/resendcode")}`,
+        notice,
+      );
+    case "confirmForgotPassword":
+      return page(
+        "Reset your password",
+        error,
+        `<p>${step.delivery ? `We have sent a password reset code${sentTo(step.delivery)}.` : "Enter the password reset code you received."} Enter it below to reset your password.</p>
 ${stepForm(
   sessionId,
-  `  <label>Code: <input type="text" name="code" autocomplete="one-time-code" /></label><br />
-  <button type="submit">Sign in</button>`,
+  `${codeInput()}
+${passwordInput("new_password", "New password", "new-password")}
+${passwordInput("confirm_password", "Enter new password again", "new-password")}
+  <button type="submit">Change password</button>`,
+  "/confirmForgotPassword",
 )}`,
+        notice,
       );
   }
 };
