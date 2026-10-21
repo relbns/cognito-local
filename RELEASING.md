@@ -3,7 +3,7 @@
 A release is a pushed `vX.Y.Z` tag that matches the `version` in `package.json`.
 
 1. In a pull request to `main`, set the version and add its notes:
-   - `npm version X.Y.Z --no-git-tag-version` updates `package.json` and `package-lock.json`.
+   - `npm version X.Y.Z --no-git-tag-version` updates `package.json` and `npm-shrinkwrap.json`.
    - Add a `## X.Y.Z` section at the top of `CHANGELOG.md`: it becomes the GitHub release notes.
 2. After the merge, tag the merged commit and push the tag:
 

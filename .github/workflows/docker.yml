@@ -10,7 +10,7 @@ on:
       - Dockerfile
       - .dockerignore
       - package.json
-      - package-lock.json
+      - npm-shrinkwrap.json
       - src/**
       - .github/workflows/docker.yml
   workflow_dispatch:

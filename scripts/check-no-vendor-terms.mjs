@@ -34,7 +34,7 @@ const SKIP_DIRS = new Set([
   "lib",
   "coverage",
 ]);
-const SKIP_FILES = new Set(["CHANGELOG.md", "package-lock.json", "yarn.lock"]);
+const SKIP_FILES = new Set(["CHANGELOG.md", "npm-shrinkwrap.json", "package-lock.json", "yarn.lock"]);
 const SELF = fileURLToPath(import.meta.url);
 
 function* walk(dir) {
