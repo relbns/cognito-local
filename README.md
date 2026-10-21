@@ -498,6 +498,7 @@ The admin UI and its API are open by default, which suits a server on `localhost
 | Operations, OAuth2 endpoints and triggers, with their simplifications | [docs/api-coverage.md](docs/api-coverage.md)           |
 | Token checks, revocation, validity, `SECRET_HASH`                     | [docs/tokens.md](docs/tokens.md)                       |
 | Tested SDKs and known gaps                                            | [docs/sdk-compatibility.md](docs/sdk-compatibility.md) |
+| Behaviours not confirmed against AWS                                  | [docs/assumptions.md](docs/assumptions.md)             |
 | Lambda and KMS client options                                         | [docs/aws-client-config.md](docs/aws-client-config.md) |
 
 ## Compatibility and differences from AWS
@@ -505,7 +506,9 @@ The admin UI and its API are open by default, which suits a server on `localhost
 Tested with the AWS SDK for JavaScript v2 and v3, boto3 and the AWS CLI v2; see
 [docs/sdk-compatibility.md](docs/sdk-compatibility.md) for versions and per-SDK settings. SigV4
 signatures are not checked, so any credentials and region work. The emulator answers 122 API
-operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what each one does.
+operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what each one does. Where
+the AWS documentation leaves a behaviour open, [docs/assumptions.md](docs/assumptions.md) lists the
+choice the emulator makes.
 
 ### Not supported yet
 

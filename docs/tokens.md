@@ -39,7 +39,8 @@ Every operation that takes an `AccessToken` (`GetUser`, `UpdateUserAttributes`, 
 | The scope includes `aws.cognito.signin.user.admin` (not for `userInfo`) | `Access Token does not have required scopes` |
 
 `/oauth2/userInfo` answers HTTP 401 `{"error":"invalid_token","error_description":...}` with a
-`WWW-Authenticate: Bearer` header.
+`WWW-Authenticate: Bearer` header, and HTTP 404 `{"error":"user_not_found"}` when the user no longer
+exists.
 
 ## Refresh tokens
 

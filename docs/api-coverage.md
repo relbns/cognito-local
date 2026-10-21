@@ -82,8 +82,8 @@ Unset means `LEGACY`, the CreateUserPoolClient default.
 | Built-in login form | "User does not exist." | "Incorrect username or password." |
 
 A simulated destination is the username itself when it is an email address or a phone number, and
-otherwise a masked placeholder (`u***@e***`, or `+*******0000` when the pool verifies phone numbers
-first). PreAuthentication runs for an unknown user only under `ENABLED`, with `userNotFound: true`.
+otherwise a masked placeholder (the username's first character followed by `***@e***`, or
+`+*******0000` when the pool verifies phone numbers first). PreAuthentication runs for an unknown user only under `ENABLED`, with `userNotFound: true`.
 
 ### Attempt limits
 
