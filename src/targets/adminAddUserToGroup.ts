@@ -22,7 +22,7 @@ export const AdminAddUserToGroup =
 
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
-      throw new UserNotFoundError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     await userPool.addUserToGroup(ctx, group, user);

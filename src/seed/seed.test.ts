@@ -421,6 +421,39 @@ describe("seed files", () => {
         fs.rmSync(fresh, { recursive: true, force: true });
       }
     });
+
+    it("exports a developer-only attribute under its schema name", async () => {
+      await applySeed(TestContext, services, {
+        UserPools: [
+          {
+            Id: "local_DevAttr",
+            PoolName: "dev-attr",
+            Schema: [
+              {
+                Name: "tier",
+                AttributeDataType: "String",
+                DeveloperOnlyAttribute: true,
+              },
+            ],
+          },
+        ],
+      });
+      const pool = await services.cognito.getUserPool(
+        TestContext,
+        "local_DevAttr",
+      );
+      expect(pool.options.SchemaAttributes?.map((a) => a.Name)).toContain(
+        "dev:custom:tier",
+      );
+
+      const exported = await exportSeed(TestContext, services);
+      const schema = exported.UserPools?.find(
+        (p) => p.Id === "local_DevAttr",
+      )?.Schema;
+      expect(schema).toEqual([
+        expect.objectContaining({ Name: "tier", DeveloperOnlyAttribute: true }),
+      ]);
+    });
   });
 
   describe("admin API", () => {

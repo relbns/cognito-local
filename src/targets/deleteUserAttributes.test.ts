@@ -90,4 +90,25 @@ describe("DeleteUserAttributes target", () => {
       UserLastModifiedDate: clock.get(),
     });
   });
+
+  it("refuses to delete a developer-only attribute", async () => {
+    mockUserPoolService.options.SchemaAttributes = [
+      { Name: "dev:custom:tier", DeveloperOnlyAttribute: true, Mutable: true },
+    ];
+    mockUserPoolService.getUserByUsername.mockResolvedValue(
+      TDB.user({ Attributes: [attribute("dev:custom:tier", "gold")] }),
+    );
+
+    await expect(
+      deleteUserAttributes(TestContext, {
+        AccessToken: validToken,
+        UserAttributeNames: ["dev:custom:tier"],
+      }),
+    ).rejects.toEqual(
+      new NotAuthorizedError(
+        "A client attempted to write unauthorized attribute",
+      ),
+    );
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+  });
 });

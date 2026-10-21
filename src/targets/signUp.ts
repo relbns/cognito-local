@@ -13,9 +13,11 @@ import type { DeliveryDetails } from "../services/messageDelivery/messageDeliver
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
+  assertNoDeveloperOnlyAttributes,
   attribute,
   attributesAppend,
   attributesInclude,
+  attributesToRecord,
   type User,
 } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -136,6 +138,10 @@ export const SignUp =
 
     // Validate custom attributes against pool schema
     const schemaAttributes = userPool.options.SchemaAttributes ?? [];
+    assertNoDeveloperOnlyAttributes(
+      (req.UserAttributes ?? []).map((x) => x.Name),
+      schemaAttributes,
+    );
     if (req.UserAttributes) {
       for (const attr of req.UserAttributes) {
         if (attr.Name.startsWith("custom:")) {
@@ -211,7 +217,9 @@ export const SignUp =
           userAttributes: attributes,
           username,
           userPoolId: userPool.options.Id,
-          validationData: undefined,
+          validationData: req.ValidationData
+            ? attributesToRecord(req.ValidationData)
+            : undefined,
         });
 
       if (autoConfirmUser) {

@@ -46,7 +46,7 @@ export const AdminDisableProviderForUser =
     });
 
     if (!user) {
-      throw new UserNotFoundError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     const identitiesStr = attributeValue("identities", user.Attributes) ?? "[]";

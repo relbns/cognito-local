@@ -57,6 +57,68 @@ describe(
         expect(result.Groups).toEqual([createGroupResponse.Group]);
       });
 
+      it("lists groups for a user addressed by email in an email-username pool", async () => {
+        const client = Cognito();
+
+        const pool = await client
+          .createUserPool({
+            PoolName: "test",
+            UsernameAttributes: ["email"],
+          })
+          .promise();
+        const userPoolId = pool.UserPool?.Id!;
+
+        const createGroupResponse = await client
+          .createGroup({ GroupName: "group-1", UserPoolId: userPoolId })
+          .promise();
+
+        await client
+          .adminCreateUser({
+            MessageAction: "SUPPRESS",
+            TemporaryPassword: "def-Aa1!",
+            Username: "jane@example.test",
+            UserPoolId: userPoolId,
+          })
+          .promise();
+
+        await client
+          .adminAddUserToGroup({
+            Username: "jane@example.test",
+            GroupName: "group-1",
+            UserPoolId: userPoolId,
+          })
+          .promise();
+
+        const byEmail = await client
+          .adminListGroupsForUser({
+            UserPoolId: userPoolId,
+            Username: "jane@example.test",
+          })
+          .promise();
+        expect(byEmail.Groups).toEqual([createGroupResponse.Group]);
+
+        const members = await client
+          .listUsersInGroup({ UserPoolId: userPoolId, GroupName: "group-1" })
+          .promise();
+        expect(members.Users).toHaveLength(1);
+
+        await client
+          .adminRemoveUserFromGroup({
+            Username: "jane@example.test",
+            GroupName: "group-1",
+            UserPoolId: userPoolId,
+          })
+          .promise();
+
+        const afterRemove = await client
+          .adminListGroupsForUser({
+            UserPoolId: userPoolId,
+            Username: "jane@example.test",
+          })
+          .promise();
+        expect(afterRemove.Groups).toHaveLength(0);
+      });
+
       it("lists groups for an unassigned user", async () => {
         const client = Cognito();
 

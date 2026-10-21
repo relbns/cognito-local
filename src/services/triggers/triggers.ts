@@ -12,6 +12,10 @@ import {
 } from "./customEmailSender";
 import { CustomMessage, type CustomMessageTrigger } from "./customMessage";
 import {
+  CustomSMSSender,
+  type CustomSMSSenderTrigger,
+} from "./customSmsSender";
+import {
   DefineAuthChallenge,
   type DefineAuthChallengeTrigger,
 } from "./defineAuthChallenge";
@@ -23,6 +27,10 @@ import {
   PostConfirmation,
   type PostConfirmationTrigger,
 } from "./postConfirmation";
+import {
+  PreAuthentication,
+  type PreAuthenticationTrigger,
+} from "./preAuthentication";
 import { PreSignUp, type PreSignUpTrigger } from "./preSignUp";
 import {
   PreTokenGeneration,
@@ -38,9 +46,11 @@ type SupportedTriggers =
   | "CreateAuthChallenge"
   | "CustomEmailSender"
   | "CustomMessage"
+  | "CustomSMSSender"
   | "DefineAuthChallenge"
   | "PostAuthentication"
   | "PostConfirmation"
+  | "PreAuthentication"
   | "PreSignUp"
   | "PreTokenGeneration"
   | "UserMigration"
@@ -51,9 +61,11 @@ export interface Triggers {
   createAuthChallenge: CreateAuthChallengeTrigger;
   customMessage: CustomMessageTrigger;
   customEmailSender: CustomEmailSenderTrigger;
+  customSmsSender: CustomSMSSenderTrigger;
   defineAuthChallenge: DefineAuthChallengeTrigger;
   postAuthentication: PostAuthenticationTrigger;
   postConfirmation: PostConfirmationTrigger;
+  preAuthentication: PreAuthenticationTrigger;
   preSignUp: PreSignUpTrigger;
   preTokenGeneration: PreTokenGenerationTrigger;
   userMigration: UserMigrationTrigger;
@@ -66,9 +78,11 @@ export class TriggersService implements Triggers {
   public readonly createAuthChallenge: CreateAuthChallengeTrigger;
   public readonly customMessage: CustomMessageTrigger;
   public readonly customEmailSender: CustomEmailSenderTrigger;
+  public readonly customSmsSender: CustomSMSSenderTrigger;
   public readonly defineAuthChallenge: DefineAuthChallengeTrigger;
   public readonly postAuthentication: PostAuthenticationTrigger;
   public readonly postConfirmation: PostConfirmationTrigger;
+  public readonly preAuthentication: PreAuthenticationTrigger;
   public readonly preSignUp: PreSignUpTrigger;
   public readonly preTokenGeneration: PreTokenGenerationTrigger;
   public readonly userMigration: UserMigrationTrigger;
@@ -85,9 +99,11 @@ export class TriggersService implements Triggers {
     this.createAuthChallenge = CreateAuthChallenge({ lambda });
     this.customEmailSender = CustomEmailSender({ lambda, crypto });
     this.customMessage = CustomMessage({ lambda });
+    this.customSmsSender = CustomSMSSender({ lambda, crypto });
     this.defineAuthChallenge = DefineAuthChallenge({ lambda });
     this.postAuthentication = PostAuthentication({ lambda });
     this.postConfirmation = PostConfirmation({ lambda });
+    this.preAuthentication = PreAuthentication({ lambda });
     this.preSignUp = PreSignUp({ lambda });
     this.preTokenGeneration = PreTokenGeneration({ lambda });
     this.userMigration = UserMigration({ clock, lambda, cognitoClient });

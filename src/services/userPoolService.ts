@@ -4,7 +4,7 @@ import type {
   UserPoolType,
   UserStatusType,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { InvalidParameterError } from "../errors";
+import { InvalidParameterError, NotAuthorizedError } from "../errors";
 import type { AppClient } from "./appClient";
 import type { Clock } from "./clock";
 import type { Context } from "./context";
@@ -89,6 +89,19 @@ export const customAttributes = (
   attributes: Attribute[] | undefined,
 ): Attribute[] =>
   (attributes ?? []).filter((attr) => attr.Name.startsWith("custom:"));
+
+// UsernameConfiguration.CaseSensitive defaults to true; false folds usernames and the email and
+// preferred_username aliases to lower case for every comparison (UsernameConfigurationType).
+export const isCaseInsensitivePool = (
+  userPool: Pick<UserPool, "UsernameConfiguration">,
+): boolean => userPool.UsernameConfiguration?.CaseSensitive === false;
+
+export const usernameComparer = (
+  userPool: Pick<UserPool, "UsernameConfiguration">,
+): ((value: string | undefined) => string | undefined) =>
+  isCaseInsensitivePool(userPool)
+    ? (value) => value?.toLowerCase()
+    : (value) => value;
 
 export interface User {
   Attributes: Attribute[];
@@ -332,15 +345,20 @@ export class UserPoolServiceImpl implements UserPoolService {
       "Users",
       {},
     );
+    const fold = usernameComparer(this.options);
 
     for (const user of Object.values(users)) {
+      if (fold(user.Username) === fold(username)) {
+        return user;
+      }
+
       if (attributesIncludeMatch("sub", username, user.Attributes)) {
         return user;
       }
 
       if (
         aliasEmailEnabled &&
-        attributesIncludeMatch("email", username, user.Attributes)
+        fold(attributeValue("email", user.Attributes)) === fold(username)
       ) {
         return user;
       }
@@ -380,11 +398,13 @@ export class UserPoolServiceImpl implements UserPoolService {
   ): Promise<readonly User[]> {
     ctx.logger.debug("UserPoolServiceImpl.listUsers");
 
+    // Pools with CaseSensitive=false compare usernames, email and preferred_username in any case.
+    const caseFor = isCaseInsensitivePool(this.options)
+      ? FilterConfig.caseInsensitive
+      : FilterConfig.caseSensitive;
     const filterConfig = new FilterConfig<User>({
-      username: FilterConfig.caseSensitive((x) => x.Username),
-      email: FilterConfig.caseSensitive((x) =>
-        attributeValue("email", x.Attributes),
-      ),
+      username: caseFor((x) => x.Username),
+      email: caseFor((x) => attributeValue("email", x.Attributes)),
       phone_number: FilterConfig.caseSensitive((x) =>
         attributeValue("phone_number", x.Attributes),
       ),
@@ -397,7 +417,7 @@ export class UserPoolServiceImpl implements UserPoolService {
       family_name: FilterConfig.caseSensitive((x) =>
         attributeValue("family_name", x.Attributes),
       ),
-      preferred_username: FilterConfig.caseSensitive((x) =>
+      preferred_username: caseFor((x) =>
         attributeValue("preferred_username", x.Attributes),
       ),
       "cognito:user_status": FilterConfig.caseInsensitive((x) => x.UserStatus),
@@ -590,6 +610,22 @@ export class UserPoolServiceFactoryImpl implements UserPoolServiceFactory {
   }
 }
 
+export const UNAUTHORIZED_ATTRIBUTE_WRITE =
+  "A client attempted to write unauthorized attribute";
+
+/** Throws when a user-level request names a developer-only attribute, which only admin operations may write. */
+export const assertNoDeveloperOnlyAttributes = (
+  attributeNames: readonly string[],
+  schemaAttributes: SchemaAttributeType[] | undefined,
+): void => {
+  for (const name of attributeNames) {
+    const attrSchema = schemaAttributes?.find((x) => x.Name === name);
+    if (attrSchema?.DeveloperOnlyAttribute || name.startsWith("dev:")) {
+      throw new NotAuthorizedError(UNAUTHORIZED_ATTRIBUTE_WRITE);
+    }
+  }
+};
+
 export const validatePermittedAttributeChanges = (
   requestAttributes: Attribute[],
   schemaAttributes: SchemaAttributeType[],
@@ -601,6 +637,9 @@ export const validatePermittedAttributeChanges = (
       throw new InvalidParameterError(
         `user.${attr.Name}: Attribute does not exist in the schema.`,
       );
+    }
+    if (!admin && attrSchema.DeveloperOnlyAttribute) {
+      throw new NotAuthorizedError(UNAUTHORIZED_ATTRIBUTE_WRITE);
     }
     if (!attrSchema.Mutable) {
       throw new InvalidParameterError(

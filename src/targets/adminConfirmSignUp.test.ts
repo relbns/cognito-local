@@ -6,7 +6,7 @@ import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { NotAuthorizedError } from "../errors";
+import { NotAuthorizedError, UserNotFoundError } from "../errors";
 import type { Triggers, UserPoolService } from "../services";
 import { attribute, attributesAppend } from "../services/userPoolService";
 import {
@@ -44,7 +44,7 @@ describe("AdminConfirmSignUp target", () => {
         Username: "invalid user",
         UserPoolId: "test",
       }),
-    ).rejects.toEqual(new NotAuthorizedError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it.each([

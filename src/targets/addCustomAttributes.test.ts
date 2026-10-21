@@ -105,6 +105,56 @@ describe("AddCustomAttributes target", () => {
     );
   });
 
+  it("names a developer-only attribute dev:custom:<name>", async () => {
+    const userPool = TDB.userPool();
+    const mockUserPoolService = newMockUserPoolService(userPool);
+    mockCognitoService.getUserPool.mockResolvedValue(mockUserPoolService);
+
+    await addCustomAttributes(TestContext, {
+      UserPoolId: "test",
+      CustomAttributes: [
+        {
+          AttributeDataType: "String",
+          DeveloperOnlyAttribute: true,
+          Name: "tier",
+        },
+      ],
+    });
+
+    expect(mockUserPoolService.updateOptions).toHaveBeenCalledWith(
+      TestContext,
+      expect.objectContaining({
+        SchemaAttributes: [
+          ...(userPool.SchemaAttributes ?? []),
+          expect.objectContaining({
+            Name: "dev:custom:tier",
+            DeveloperOnlyAttribute: true,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("throws if a developer-only attribute reuses a custom attribute's name", async () => {
+    const userPool = TDB.userPool({
+      SchemaAttributes: [{ Name: "custom:tier", AttributeDataType: "String" }],
+    });
+    mockCognitoService.getUserPool.mockResolvedValue(
+      newMockUserPoolService(userPool),
+    );
+
+    await expect(
+      addCustomAttributes(TestContext, {
+        UserPoolId: "test",
+        CustomAttributes: [{ DeveloperOnlyAttribute: true, Name: "tier" }],
+      }),
+    ).rejects.toEqual(
+      new InvalidParameterError(
+        "dev:custom:tier: Existing attribute already has name dev:custom:tier.",
+      ),
+    );
+  });
+
   it("throws if an attribute with the name already exists", async () => {
     const userPool = TDB.userPool({
       SchemaAttributes: [

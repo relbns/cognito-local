@@ -44,6 +44,6 @@ describe("AdminDeleteUser target", () => {
         Username: existingUser.Username,
         UserPoolId: "test",
       }),
-    ).rejects.toEqual(new UserNotFoundError("User does not exist"));
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 });

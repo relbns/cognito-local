@@ -109,13 +109,17 @@ DeleteUserAttributes, GetUserAttributeVerificationCode, VerifyUserAttribute, Set
 - SetUserSettings and AdminSetUserSettings store `MFAOptions` and enable SMS MFA when an option uses
   SMS.
 - AdminDisableUser revokes the user's tokens.
+- Every `Admin*` operation that takes a `Username` returns `UserNotFoundException` ("User does not
+  exist.") when no user matches.
 
 ## Groups
 
 CreateGroup, GetGroup, UpdateGroup, DeleteGroup, ListGroups, AdminAddUserToGroup,
 AdminRemoveUserFromGroup, AdminListGroupsForUser, ListUsersInGroup.
 
-Group membership appears in the `cognito:groups` claim of access and ID tokens.
+Group membership appears in the `cognito:groups` claim of access and ID tokens. The group operations
+that take a `Username` accept any name the user signs in with (the username, `sub`, or an email or
+phone number alias) and resolve it to the same user.
 
 ## User pools and clients
 
@@ -128,6 +132,15 @@ ListUserPoolClientSecrets.
   returns that one secret.
 - Pools created without `UsernameAttributes` use `UserPoolDefaults` from `config.json` (email as the
   username by default).
+- `UsernameConfiguration.CaseSensitive: false` makes every username lookup case-insensitive (sign-in,
+  admin and group operations, sign-up and AdminCreateUser uniqueness), together with email as a
+  username, the `email` and `preferred_username` alias uniqueness checks and the ListUsers
+  `username`, `email` and `preferred_username` filters. The username is stored as given. Without
+  `UsernameConfiguration`, or with `CaseSensitive: true`, lookups are exact, as with the Cognito API.
+- A schema attribute with `DeveloperOnlyAttribute: true` (CreateUserPool, AddCustomAttributes) is
+  named `dev:custom:<name>`. Admin operations write it; SignUp, UpdateUserAttributes and
+  DeleteUserAttributes refuse it with `NotAuthorizedException` ("A client attempted to write
+  unauthorized attribute"). GetUser returns it, and it is not added to tokens.
 
 ## Identity providers
 
@@ -270,7 +283,8 @@ A successful sign-in runs PostAuthentication (`PostAuthentication_Authentication
 or tokens from the user as the trigger left it. The steps after the password are kept on the server
 under a random id that expires after 3 minutes, so the username, client, redirect URI, PKCE challenge,
 scope and state come from the server, not from the page. The form has no sign-up or forgot-password
-pages and does not run PreAuthentication.
+pages. PreAuthentication runs before the password is checked, and an error it throws is shown on the
+form.
 
 The emulator also serves `/mock-idp/{providerName}/authorize` (the [mock IdP](federation.md) form),
 `/health`, and the admin UI and its API under `/_admin` (see [oauth-callback.md](oauth-callback.md)
@@ -283,13 +297,15 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 
 | Trigger | Runs on |
 | --- | --- |
-| PreSignUp | SignUp, and the first federated sign-in (`PreSignUp_ExternalProvider`) |
+| PreSignUp | SignUp (with its `ValidationData` as `validationData`), AdminCreateUser (`PreSignUp_AdminCreateUser`, with `ValidationData` and `ClientMetadata`; a thrown error stops the user from being created, and `autoConfirmUser`, `autoVerifyEmail` and `autoVerifyPhone` are ignored, as in Cognito), and the first federated sign-in (`PreSignUp_ExternalProvider`). Seed files create users without it. |
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
+| PreAuthentication | Every sign-in attempt before the password or challenge is checked: InitiateAuth and AdminInitiateAuth with a password, SRP, `CUSTOM_AUTH` or `USER_AUTH` (once, before any factor is chosen), and the built-in login form (`PreAuthentication_Authentication`). `validationData` is the request's `ClientMetadata`. An unknown user triggers it only when the app client has `PreventUserExistenceErrors: ENABLED`, with `userNotFound: true`. A thrown error fails the sign-in with `UserLambdaValidationException` ("PreAuthentication failed with error ..."). Refresh-token and federated sign-ins do not run it. |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
 | PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
-| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`) |
+| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. The forgot-password flow does not run it. |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
-| CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA |
-| CustomEmailSender | Replaces message delivery for the same events except SMS MFA. The code is encrypted with the configured KMS key. |
+| CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA, and the `EMAIL_OTP` and `SMS_OTP` codes of `USER_AUTH` |
+| CustomEmailSender | Replaces delivery of every email the emulator sends for those events, including `EMAIL_OTP` sign-in codes (`CustomEmailSender_Authentication`). The code is encrypted with the configured KMS key. |
+| CustomSMSSender | Replaces delivery of every SMS: sign-up and resend codes, forgot password, AdminCreateUser temporary passwords, attribute update and verification, and SMS MFA and `SMS_OTP` sign-in codes (`CustomSMSSender_Authentication`). The event's `request.type` is `customSMSSenderRequestV1` and the code is encrypted with the configured KMS key. |
 
-PreAuthentication and CustomSMSSender can be configured on a pool but never run.
+With a custom sender trigger the code still appears in the admin UI Codes viewer.

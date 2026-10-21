@@ -33,7 +33,7 @@ export const AdminLinkProviderForUser =
       req.DestinationUser?.ProviderAttributeValue ?? "",
     );
     if (!user) {
-      throw new UserNotFoundError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     const providerName = req.SourceUser?.ProviderName ?? "";

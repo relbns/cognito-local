@@ -483,12 +483,12 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - Passkey (`WEB_AUTHN`) sign-in in the `USER_AUTH` flow, and its `SESSION` parameter that signs a
   user in after ConfirmSignUp.
 - Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
-- Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
+- Refresh token rotation.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no
   effect.
 - The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
-  for a new password and for SMS or TOTP MFA codes, and runs PostAuthentication, but has no sign-up,
-  forgot-password or MFA setup pages.
+  for a new password and for SMS or TOTP MFA codes, and runs PreAuthentication and
+  PostAuthentication, but has no sign-up, forgot-password or MFA setup pages.
 
 ### Stricter than upstream cognito-local
 

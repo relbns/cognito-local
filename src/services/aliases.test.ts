@@ -192,4 +192,46 @@ describe("enforceAliasUniqueness", () => {
       );
     });
   });
+
+  describe("in a pool with CaseSensitive=false", () => {
+    beforeEach(() => {
+      userPool.options.AliasAttributes = ["email", "preferred_username"];
+      userPool.options.UsernameConfiguration = { CaseSensitive: false };
+      userPool.listUsers.mockResolvedValue([
+        TDB.user({
+          Username: "other",
+          Attributes: [
+            attribute("email", "Jane@Example.test"),
+            attribute("email_verified", "true"),
+            attribute("preferred_username", "JaneD"),
+          ],
+        }),
+      ]);
+    });
+
+    it("treats an email alias in another case as a duplicate", async () => {
+      await expect(
+        enforceAliasUniqueness(TestContext, userPool, clock, "new", [
+          attribute("email", "jane@example.test"),
+          attribute("email_verified", "true"),
+        ]),
+      ).rejects.toEqual(new AliasExistsError("email"));
+    });
+
+    it("treats a preferred_username in another case as a duplicate", async () => {
+      await expect(
+        enforceAliasUniqueness(TestContext, userPool, clock, "new", [
+          attribute("preferred_username", "janed"),
+        ]),
+      ).rejects.toEqual(new AliasExistsError("preferred_username"));
+    });
+
+    it("keeps aliases case-sensitive when CaseSensitive is unset", async () => {
+      userPool.options.UsernameConfiguration = undefined;
+      await enforceAliasUniqueness(TestContext, userPool, clock, "new", [
+        attribute("preferred_username", "janed"),
+      ]);
+      expect(userPool.saveUser).not.toHaveBeenCalled();
+    });
+  });
 });

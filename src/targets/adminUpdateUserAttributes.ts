@@ -2,7 +2,7 @@ import type {
   AdminUpdateUserAttributesRequest,
   AdminUpdateUserAttributesResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { InvalidParameterError, NotAuthorizedError } from "../errors";
+import { InvalidParameterError, UserNotFoundError } from "../errors";
 import type { Messages, Services, UserPoolService } from "../services";
 import {
   aliasAttributesTouchedBy,
@@ -73,7 +73,7 @@ export const AdminUpdateUserAttributes =
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
     const user = await userPool.getUserByUsername(ctx, req.Username);
     if (!user) {
-      throw new NotAuthorizedError();
+      throw new UserNotFoundError("User does not exist.");
     }
 
     const userAttributesToSet = defaultVerifiedAttributesIfModified(

@@ -24,6 +24,7 @@ import {
   startUserAuth,
 } from "../services/signIn";
 import { refreshSecretHashUsername } from "../services/tokenVerifier";
+import { runPreAuthentication } from "../services/triggers/preAuthentication";
 import type { User } from "../services/userPoolService";
 import type { Target } from "./Target";
 
@@ -93,8 +94,9 @@ const adminUserPasswordAuthFlow = async (
     // sign-in with a password, or in the forgot-password flow. After the Lambda function returns successfully, Amazon
     // Cognito creates the user in the user pool.
     user = await services.triggers.userMigration(ctx, {
-      clientMetadata: {},
-      validationData: {},
+      // AdminInitiateAuth passes its ClientMetadata as validationData (migrate user trigger docs).
+      clientMetadata: undefined,
+      validationData: req.ClientMetadata,
       userPoolId: userPool.options.Id,
       clientId: req.ClientId,
       username: req.AuthParameters.USERNAME,
@@ -103,8 +105,19 @@ const adminUserPasswordAuthFlow = async (
     });
   }
 
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
+
   if (!user || !userPoolClient) {
     throw new NotAuthorizedError();
+  }
+  if (user.UserStatus === "RESET_REQUIRED") {
+    throw new PasswordResetRequiredError();
   }
 
   if (user.Password !== req.AuthParameters.PASSWORD) {
@@ -198,6 +211,13 @@ const userSrpAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user || !userPoolClient) {
     throw new NotAuthorizedError();
   }
@@ -241,6 +261,13 @@ const userAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user) {
     throw new NotAuthorizedError();
   }
@@ -282,13 +309,20 @@ const customAuthFlow = async (
     ctx,
     req.AuthParameters.USERNAME,
   );
+  const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
+  await runPreAuthentication(ctx, services.triggers, {
+    client: userPoolClient,
+    user,
+    username: req.AuthParameters.USERNAME,
+    userPoolId: userPool.options.Id,
+    validationData: req.ClientMetadata,
+  });
   if (!user) {
     throw new NotAuthorizedError();
   }
   if (!user.Enabled) {
     throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
-  const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
   if (!userPoolClient) throw new NotAuthorizedError();
 
   return startCustomAuth(ctx, services, {

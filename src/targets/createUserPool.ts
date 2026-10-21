@@ -59,7 +59,7 @@ export const createSchemaAttributes = (
       const type = attr.AttributeDataType ?? "String";
 
       return {
-        Name: `custom:${attr.Name}`,
+        Name: customAttributeName(attr.Name, attr.DeveloperOnlyAttribute),
         AttributeDataType: type,
         DeveloperOnlyAttribute: attr.DeveloperOnlyAttribute ?? false,
         Mutable: attr.Mutable ?? true,
@@ -77,6 +77,12 @@ export const createSchemaAttributes = (
 
   return [...overriddenAttributes, ...customAttributes];
 };
+
+// Developer-only attributes are stored as dev:custom:<name>, and only admin operations may write them.
+export const customAttributeName = (
+  name: string | undefined,
+  developerOnly: boolean | undefined,
+) => `${developerOnly ? "dev:" : ""}custom:${name ?? "null"}`;
 
 export const userPoolArn = (userPoolId: string) =>
   `arn:aws:cognito-idp:${REGION}:${ACCOUNT_ID}:userpool/${userPoolId}`;

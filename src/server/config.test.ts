@@ -62,6 +62,19 @@ describe("loadConfig", () => {
     });
   });
 
+  it("keeps a null credentials or region so the SDK default chains apply", async () => {
+    const ds = newMockDataStore();
+    ds.getRoot.mockResolvedValue({
+      LambdaClient: { credentials: null },
+      KMSConfig: { credentials: null, region: null },
+    });
+
+    const config = await loadConfig(TestContext, newMockDataStoreFactory(ds));
+
+    expect(config.LambdaClient).toEqual({ credentials: null, region: "local" });
+    expect(config.KMSConfig).toEqual({ credentials: null, region: null });
+  });
+
   it("overwrites arrays when merging", async () => {
     const ds = newMockDataStore();
     const mockDataStoreFactory = newMockDataStoreFactory(ds);

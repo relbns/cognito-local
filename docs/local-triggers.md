@@ -32,8 +32,9 @@ Or for every pool, in `<data>/config.json`:
   is a Lambda ARN is ignored, as before; `TriggerFunctions` entries that are not `file:` keep going
   to the Lambda endpoint configured in `LambdaClient`.
 - Supported triggers: the ones cognito-local invokes (`PreSignUp`, `PostConfirmation`,
-  `PostAuthentication`, `DefineAuthChallenge`, `CreateAuthChallenge`, `VerifyAuthChallengeResponse`,
-  `PreTokenGeneration`, `UserMigration`, `CustomMessage`, `CustomEmailSender`).
+  `PreAuthentication`, `PostAuthentication`, `DefineAuthChallenge`, `CreateAuthChallenge`,
+  `VerifyAuthChallengeResponse`, `PreTokenGeneration`, `UserMigration`, `CustomMessage`,
+  `CustomEmailSender`, `CustomSMSSender`).
 
 ## Modules and handlers
 

@@ -6,7 +6,7 @@ import type {
 import type { Triggers } from "./triggers";
 import type { User } from "./userPoolService";
 
-const AWS_ADMIN_CLIENT_ID = "CLIENT_ID_NOT_APPLICABLE";
+export const AWS_ADMIN_CLIENT_ID = "CLIENT_ID_NOT_APPLICABLE";
 
 export interface Message {
   __code?: string; // not really part of the message, but we pass it around for convenience logging to the console
@@ -57,8 +57,24 @@ export class MessagesService implements Messages {
     deliveryDetails: DeliveryDetails,
   ): Promise<void> {
     if (
-      this.triggers.enabled("CustomEmailSender", userPoolId) &&
-      source !== "Authentication"
+      deliveryDetails.DeliveryMedium === "SMS" &&
+      this.triggers.enabled("CustomSMSSender", userPoolId)
+    ) {
+      await this.triggers.customSmsSender(ctx, {
+        clientId: clientId ?? AWS_ADMIN_CLIENT_ID,
+        clientMetadata,
+        code,
+        source: `CustomSMSSender_${source}`,
+        userAttributes: user.Attributes,
+        username: user.Username,
+        userPoolId,
+      });
+      return;
+    }
+
+    if (
+      deliveryDetails.DeliveryMedium === "EMAIL" &&
+      this.triggers.enabled("CustomEmailSender", userPoolId)
     ) {
       return this.customDelivery(
         ctx,
@@ -118,7 +134,7 @@ export class MessagesService implements Messages {
 
   private async customDelivery(
     ctx: Context,
-    source: Exclude<MessageSource, "Authentication">,
+    source: MessageSource,
     clientId: string | null,
     userPoolId: string,
     user: User,

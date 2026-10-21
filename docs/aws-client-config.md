@@ -1,9 +1,9 @@
 # Lambda and KMS client options
 
 The emulator calls two AWS services itself: Lambda, to run triggers that are not `file:` targets,
-and KMS, to encrypt the code a `CustomEmailSender` trigger receives. Both clients come from the
-AWS SDK for JavaScript v3 (`@aws-sdk/client-lambda`, and `@aws-crypto/client-node` 5.x for KMS).
-Their options live in `.cognito/config.json`:
+and KMS, to encrypt the code a `CustomEmailSender` or `CustomSMSSender` trigger receives. Both
+clients come from the AWS SDK for JavaScript v3 (`@aws-sdk/client-lambda`, and
+`@aws-crypto/client-node` 5.x for KMS). Their options live in `.cognito/config.json`:
 
 ```json
 {
@@ -23,13 +23,33 @@ Their options live in `.cognito/config.json`:
 
 `KMSKeyId` and `KMSKeyAlias` select the key. Every other key in both sections is a client option.
 
+## Default credentials
+
+Both sections default to `credentials` `{ "accessKeyId": "local", "secretAccessKey": "local" }`
+and `region` `local`, which suit a local Lambda runner or a KMS emulator. A section you write is
+merged over these defaults, so leaving `credentials` out keeps the `local` pair. To call real AWS
+with your own credentials, set `credentials` (and `region`, if `AWS_REGION` or your profile names
+it) to `null`. The SDK then resolves them through its default chain: environment variables,
+`AWS_PROFILE` and the shared `~/.aws` files, SSO, and container or instance roles.
+
+```json
+{
+  "KMSConfig": {
+    "KMSKeyId": "arn:aws:kms:us-east-1:111111111111:key/...",
+    "KMSKeyAlias": "alias/custom-sender",
+    "credentials": null,
+    "region": "us-east-1"
+  }
+}
+```
+
 ## Supported options
 
 | Option | Meaning |
 | --- | --- |
-| `region` | Region the client signs for |
+| `region` | Region the client signs for, or `null` for the SDK's default region chain |
 | `endpoint` | Full URL of the service, for example a local Lambda runner or LocalStack |
-| `credentials` | `{ accessKeyId, secretAccessKey, sessionToken? }` |
+| `credentials` | `{ accessKeyId, secretAccessKey, sessionToken? }`, or `null` for the SDK's default credential chain |
 | `maxAttempts` | Total attempts per call, including the first |
 | `retryMode` | `standard` or `adaptive` |
 | `tls` | `false` to use plain HTTP when the endpoint has no scheme |

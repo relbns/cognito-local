@@ -133,4 +133,17 @@ describe("toSdkV3ClientConfig", () => {
       ].sort(),
     );
   });
+
+  it("leaves credentials and region to the SDK's default chains when they are null", () => {
+    expect(
+      toSdkV3ClientConfig("KMSConfig", {
+        credentials: null,
+        region: null,
+        endpoint: "http://localhost:4566",
+      }),
+    ).toEqual({
+      config: { endpoint: "http://localhost:4566" },
+      warnings: [],
+    });
+  });
 });

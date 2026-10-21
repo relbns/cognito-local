@@ -1,5 +1,11 @@
 import * as uuid from "uuid";
-import { NotAuthorizedError, ResourceNotFoundError } from "../../errors";
+import {
+  NotAuthorizedError,
+  ResourceNotFoundError,
+  UserLambdaValidationError,
+  UsernameExistsError,
+} from "../../errors";
+import { enforceAliasUniqueness } from "../aliases";
 import type { Clock } from "../clock";
 import type { CognitoService } from "../cognitoService";
 import type { Lambda, UserMigrationTriggerResponse } from "../lambda";
@@ -86,26 +92,65 @@ export const UserMigration =
     }
 
     const now = clock.get();
+    const sub = uuid.v4();
+    const { username: requestedUsername, ...returnedAttributes } =
+      result.userAttributes ?? {};
+    const attributes: Record<string, string> = {
+      ...returnedAttributes,
+      sub,
+    };
+    const usernameAttributes = userPool.options.UsernameAttributes ?? [];
+    if (usernameAttributes.length) {
+      const signInAttribute =
+        username.includes("@") && usernameAttributes.includes("email")
+          ? "email"
+          : usernameAttributes.includes("phone_number")
+            ? "phone_number"
+            : undefined;
+      if (signInAttribute && !attributes[signInAttribute]) {
+        attributes[signInAttribute] = username;
+      }
+    }
+
+    if (result.enableSMSMFA && !attributes.phone_number) {
+      throw new UserLambdaValidationError(
+        "UserMigration failed with error enableSMSMFA requires a phone_number attribute.",
+      );
+    }
+
     const user: User = {
-      Attributes: attributesFromRecord(result.userAttributes ?? {}),
+      Attributes: attributesFromRecord(attributes),
       Enabled: true,
       Password: password,
       UserCreateDate: now,
       UserLastModifiedDate: now,
-      Username: result.userAttributes?.username || uuid.v4(),
-      UserStatus: result.finalUserStatus ?? "CONFIRMED",
+      // Pools with email or phone as the username identify users by sub, as SignUp does.
+      Username: usernameAttributes.length ? sub : requestedUsername || username,
+      UserStatus:
+        result.finalUserStatus === "CONFIRMED" ? "CONFIRMED" : "RESET_REQUIRED",
       RefreshTokens: [],
+      ...(result.enableSMSMFA
+        ? {
+            UserMFASettingList: ["SMS_MFA"],
+            PreferredMfaSetting: "SMS_MFA",
+          }
+        : {}),
     };
 
-    if (result.forceAliasCreation) {
-      // TODO: do something with aliases?
+    if (await userPool.getUserByUsername(ctx, user.Username)) {
+      throw new UsernameExistsError();
     }
+
+    await enforceAliasUniqueness(
+      ctx,
+      userPool,
+      clock,
+      user.Username,
+      user.Attributes,
+      { forceAliasCreation: !!result.forceAliasCreation },
+    );
 
     await userPool.saveUser(ctx, user);
-
-    if (result.messageAction !== "SUPPRESS") {
-      // TODO: send notification when not suppressed?
-    }
 
     return user;
   };

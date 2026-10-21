@@ -4,7 +4,7 @@ import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { NotAuthorizedError } from "../errors";
+import { UserNotFoundError } from "../errors";
 import type { UserPoolService } from "../services";
 import { attribute } from "../services/userPoolService";
 import {
@@ -33,7 +33,7 @@ describe("AdminDeleteUserAttributes target", () => {
         Username: "abc",
         UserAttributeNames: ["custom:example"],
       }),
-    ).rejects.toEqual(new NotAuthorizedError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 
   it("saves the updated attributes on the user", async () => {

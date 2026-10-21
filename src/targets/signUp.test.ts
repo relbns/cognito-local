@@ -212,7 +212,7 @@ describe("SignUp target", () => {
         ],
         userPoolId: "test",
         username: "user-supplied",
-        validationData: undefined,
+        validationData: { another: "attribute" },
       });
     });
 
@@ -248,7 +248,7 @@ describe("SignUp target", () => {
         ],
         userPoolId: "test",
         username: expect.stringMatching(UUID),
-        validationData: undefined,
+        validationData: { another: "attribute" },
       });
     });
 
@@ -561,6 +561,27 @@ describe("SignUp target", () => {
         }),
       );
     });
+  });
+
+  it("refuses a developer-only attribute", async () => {
+    mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+    mockUserPoolService.options.SchemaAttributes = [
+      { Name: "dev:custom:tier", DeveloperOnlyAttribute: true, Mutable: true },
+    ];
+
+    await expect(
+      signUp(TestContext, {
+        ClientId: "clientId",
+        Password: "pwd-Aa1!",
+        Username: "user-supplied",
+        UserAttributes: [{ Name: "dev:custom:tier", Value: "gold" }],
+      }),
+    ).rejects.toEqual(
+      new NotAuthorizedError(
+        "A client attempted to write unauthorized attribute",
+      ),
+    );
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
   });
 
   describe("when PreSignUp trigger is disabled", () => {

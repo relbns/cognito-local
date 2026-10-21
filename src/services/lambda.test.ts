@@ -396,6 +396,99 @@ describe("Lambda function invoker", () => {
       });
     });
 
+    describe("CustomSMSSender", () => {
+      it("sends a customSMSSenderRequestV1 event with the encrypted code", async () => {
+        mockLambdaClient.invoke.mockReturnValue(
+          Promise.resolve({
+            StatusCode: 200,
+            Payload: encode('{ "response": {} }'),
+          }) as any,
+        );
+        const lambda = new LambdaService(
+          { CustomSMSSender: "MyLambdaName" },
+          mockLambdaClient,
+        );
+
+        await lambda.invoke(TestContext, "CustomSMSSender", {
+          clientId: "clientId",
+          clientMetadata: { client: "metadata" },
+          code: "encrypted",
+          triggerSource: "CustomSMSSender_Authentication",
+          username: "username",
+          userPoolId: "userPoolId",
+          userAttributes: { phone_number: "+15555550100" },
+        });
+
+        expect(invokedWith(mockLambdaClient).Payload).toEqual({
+          version: "0",
+          callerContext: {
+            awsSdkVersion: "aws-sdk-unknown-unknown",
+            clientId: "clientId",
+          },
+          region: "local",
+          userPoolId: "userPoolId",
+          triggerSource: "CustomSMSSender_Authentication",
+          request: {
+            type: "customSMSSenderRequestV1",
+            code: "encrypted",
+            userAttributes: { phone_number: "+15555550100" },
+            clientMetadata: { client: "metadata" },
+          },
+          response: {},
+          userName: "username",
+        });
+      });
+    });
+
+    describe("PreAuthentication_Authentication", () => {
+      it.each([
+        [undefined, {}],
+        [true, { userNotFound: true }],
+      ])(
+        "sends the event with userNotFound=%s",
+        async (userNotFound, extra) => {
+          mockLambdaClient.invoke.mockReturnValue(
+            Promise.resolve({
+              StatusCode: 200,
+              Payload: encode('{ "response": {} }'),
+            }) as any,
+          );
+          const lambda = new LambdaService(
+            { PreAuthentication: "MyLambdaName" },
+            mockLambdaClient,
+          );
+
+          await lambda.invoke(TestContext, "PreAuthentication", {
+            clientId: "clientId",
+            triggerSource: "PreAuthentication_Authentication",
+            username: "username",
+            userPoolId: "userPoolId",
+            userAttributes: { user: "attributes" },
+            userNotFound,
+            validationData: { client: "metadata" },
+          });
+
+          expect(invokedWith(mockLambdaClient).Payload).toEqual({
+            version: "0",
+            callerContext: {
+              awsSdkVersion: "aws-sdk-unknown-unknown",
+              clientId: "clientId",
+            },
+            region: "local",
+            userPoolId: "userPoolId",
+            triggerSource: "PreAuthentication_Authentication",
+            request: {
+              userAttributes: { user: "attributes" },
+              validationData: { client: "metadata" },
+              ...extra,
+            },
+            response: {},
+            userName: "username",
+          });
+        },
+      );
+    });
+
     describe.each`
       trigger               | source
       ${"PostConfirmation"} | ${"PostConfirmation_ConfirmSignUp"}
@@ -589,6 +682,7 @@ describe("Lambda function invoker", () => {
       "CustomEmailSender_UpdateUserAttribute",
       "CustomEmailSender_VerifyUserAttribute",
       "CustomEmailSender_AdminCreateUser",
+      "CustomEmailSender_Authentication",
     ] as const)("%s", (source) => {
       it("invokes the lambda function with the code parameter", async () => {
         const response = Promise.resolve({

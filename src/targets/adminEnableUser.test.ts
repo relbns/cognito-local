@@ -51,6 +51,6 @@ describe("AdminEnableUser target", () => {
         Username: "user",
         UserPoolId: "test",
       }),
-    ).rejects.toEqual(new UserNotFoundError());
+    ).rejects.toEqual(new UserNotFoundError("User does not exist."));
   });
 });

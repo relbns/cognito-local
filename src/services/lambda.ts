@@ -31,6 +31,7 @@ import {
 type CognitoUserPoolEvent =
   | CreateAuthChallengeTriggerEvent
   | CustomEmailSenderTriggerEvent
+  | CustomSMSSenderTriggerEvent
   | CustomMessageTriggerEvent
   | DefineAuthChallengeTriggerEvent
   | PostAuthenticationTriggerEvent
@@ -55,11 +56,43 @@ interface CustomEmailSenderEvent
   clientMetadata: Record<string, string> | undefined;
   triggerSource:
     | "CustomEmailSender_AdminCreateUser"
+    | "CustomEmailSender_Authentication"
     | "CustomEmailSender_ForgotPassword"
     | "CustomEmailSender_ResendCode"
     | "CustomEmailSender_SignUp"
     | "CustomEmailSender_UpdateUserAttribute"
     | "CustomEmailSender_VerifyUserAttribute";
+}
+
+interface CustomSMSSenderEvent extends Omit<EventCommonParameters, "clientId"> {
+  clientId: string | null;
+  code: string;
+  clientMetadata: Record<string, string> | undefined;
+  triggerSource:
+    | "CustomSMSSender_AdminCreateUser"
+    | "CustomSMSSender_Authentication"
+    | "CustomSMSSender_ForgotPassword"
+    | "CustomSMSSender_ResendCode"
+    | "CustomSMSSender_SignUp"
+    | "CustomSMSSender_UpdateUserAttribute"
+    | "CustomSMSSender_VerifyUserAttribute";
+}
+
+// aws-lambda has no type for this event; it has the custom email sender's shape.
+export interface CustomSMSSenderTriggerEvent {
+  version: string;
+  region: string;
+  userPoolId: string;
+  triggerSource: CustomSMSSenderEvent["triggerSource"];
+  userName: string;
+  callerContext: { awsSdkVersion: string; clientId: string };
+  request: {
+    type: "customSMSSenderRequestV1";
+    code: string;
+    userAttributes: Record<string, string>;
+    clientMetadata?: Record<string, string>;
+  };
+  response: Record<string, unknown>;
 }
 
 interface CustomMessageEvent extends Omit<EventCommonParameters, "clientId"> {
@@ -130,6 +163,12 @@ interface PreTokenGenerationEvent extends EventCommonParameters {
   };
 }
 
+interface PreAuthenticationEvent extends EventCommonParameters {
+  triggerSource: "PreAuthentication_Authentication";
+  userNotFound: boolean | undefined;
+  validationData: Record<string, string> | undefined;
+}
+
 interface PostAuthenticationEvent extends EventCommonParameters {
   clientMetadata: Record<string, string> | undefined;
   triggerSource: "PostAuthentication_Authentication";
@@ -148,9 +187,11 @@ export interface FunctionConfig {
   CreateAuthChallenge?: string;
   CustomEmailSender?: string;
   CustomMessage?: string;
+  CustomSMSSender?: string;
   DefineAuthChallenge?: string;
   PostAuthentication?: string;
   PostConfirmation?: string;
+  PreAuthentication?: string;
   PreSignUp?: string;
   PreTokenGeneration?: string;
   UserMigration?: string;
@@ -166,16 +207,20 @@ export type VerifyAuthChallengeResponseTriggerResponse =
 export type CustomMessageTriggerResponse =
   CustomMessageTriggerEvent["response"];
 export type UserMigrationTriggerResponse =
-  UserMigrationTriggerEvent["response"];
+  UserMigrationTriggerEvent["response"] & { enableSMSMFA?: boolean };
 export type PreSignUpTriggerResponse = PreSignUpTriggerEvent["response"];
 export type PreTokenGenerationTriggerResponse =
   PreTokenGenerationTriggerEvent["response"];
+export type PreAuthenticationTriggerResponse =
+  PreAuthenticationTriggerEvent["response"];
 export type PostAuthenticationTriggerResponse =
   PostAuthenticationTriggerEvent["response"];
 export type PostConfirmationTriggerResponse =
   PostConfirmationTriggerEvent["response"];
 export type CustomEmailSenderTriggerResponse =
   CustomEmailSenderTriggerEvent["response"];
+export type CustomSMSSenderTriggerResponse =
+  CustomSMSSenderTriggerEvent["response"];
 
 interface DefineAuthChallengeEvent extends EventCommonParameters {
   clientMetadata: Record<string, string> | undefined;
@@ -282,6 +327,11 @@ export interface Lambda {
   ): Promise<PreTokenGenerationTriggerResponse>;
   invoke(
     ctx: Context,
+    lambda: "PreAuthentication",
+    event: PreAuthenticationEvent,
+  ): Promise<PreAuthenticationTriggerResponse>;
+  invoke(
+    ctx: Context,
     lambda: "PostAuthentication",
     event: PostAuthenticationEvent,
   ): Promise<PostAuthenticationTriggerResponse>;
@@ -290,6 +340,11 @@ export interface Lambda {
     lambda: "PostConfirmation",
     event: PostConfirmationEvent,
   ): Promise<PostConfirmationTriggerResponse>;
+  invoke(
+    ctx: Context,
+    lambda: "CustomSMSSender",
+    event: CustomSMSSenderEvent,
+  ): Promise<CustomSMSSenderTriggerResponse>;
   invoke(
     ctx: Context,
     lambda: "CustomEmailSender",
@@ -335,9 +390,11 @@ export class LambdaService implements Lambda {
       | CreateAuthChallengeEvent
       | CustomEmailSenderEvent
       | CustomMessageEvent
+      | CustomSMSSenderEvent
       | DefineAuthChallengeEvent
       | PostAuthenticationEvent
       | PostConfirmationEvent
+      | PreAuthenticationEvent
       | PreSignUpEvent
       | PreTokenGenerationEvent
       | UserMigrationEvent
@@ -459,9 +516,11 @@ export class LambdaService implements Lambda {
       | CreateAuthChallengeEvent
       | CustomEmailSenderEvent
       | CustomMessageEvent
+      | CustomSMSSenderEvent
       | DefineAuthChallengeEvent
       | PostAuthenticationEvent
       | PostConfirmationEvent
+      | PreAuthenticationEvent
       | PreSignUpEvent
       | PreTokenGenerationEvent
       | UserMigrationEvent
@@ -489,6 +548,25 @@ export class LambdaService implements Lambda {
             userAttributes: event.userAttributes,
             clientMetadata: event.clientMetadata,
             newDeviceUsed: false,
+          },
+          response: {},
+        };
+      }
+
+      case "PreAuthentication_Authentication": {
+        return {
+          version,
+          callerContext,
+          region,
+          userPoolId: event.userPoolId,
+          triggerSource: event.triggerSource,
+          userName: event.username,
+          request: {
+            userAttributes: event.userAttributes,
+            validationData: event.validationData,
+            ...(event.userNotFound === undefined
+              ? {}
+              : { userNotFound: event.userNotFound }),
           },
           response: {},
         };
@@ -614,6 +692,33 @@ export class LambdaService implements Lambda {
       case "CustomEmailSender_UpdateUserAttribute":
       case "CustomEmailSender_VerifyUserAttribute":
       case "CustomEmailSender_AdminCreateUser":
+      case "CustomEmailSender_Authentication":
+        return {
+          version,
+          region,
+          userPoolId: event.userPoolId,
+          // @types/aws-lambda predates the Authentication source.
+          triggerSource: event.triggerSource as Exclude<
+            typeof event.triggerSource,
+            "CustomEmailSender_Authentication"
+          >,
+          userName: event.username,
+          callerContext,
+          request: {
+            type: "customEmailSenderRequestV1",
+            code: event.code,
+            userAttributes: event.userAttributes,
+            clientMetadata: event.clientMetadata,
+          },
+          response: {},
+        };
+      case "CustomSMSSender_AdminCreateUser":
+      case "CustomSMSSender_Authentication":
+      case "CustomSMSSender_ForgotPassword":
+      case "CustomSMSSender_ResendCode":
+      case "CustomSMSSender_SignUp":
+      case "CustomSMSSender_UpdateUserAttribute":
+      case "CustomSMSSender_VerifyUserAttribute":
         return {
           version,
           region,
@@ -622,7 +727,7 @@ export class LambdaService implements Lambda {
           userName: event.username,
           callerContext,
           request: {
-            type: "customEmailSenderRequestV1",
+            type: "customSMSSenderRequestV1",
             code: event.code,
             userAttributes: event.userAttributes,
             clientMetadata: event.clientMetadata,

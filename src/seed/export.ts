@@ -73,8 +73,9 @@ const exportSchema = (
   const defaults = USER_POOL_AWS_DEFAULTS.SchemaAttributes ?? [];
   const out: SchemaAttributeType[] = [];
   for (const attr of attributes ?? []) {
-    if (attr.Name?.startsWith("custom:")) {
-      out.push(defined({ ...attr, Name: attr.Name.slice("custom:".length) }));
+    const custom = attr.Name?.match(/^(?:dev:)?custom:(.*)$/);
+    if (custom) {
+      out.push(defined({ ...attr, Name: custom[1] }));
       continue;
     }
     const standard = defaults.find((d) => d.Name === attr.Name);

@@ -3,7 +3,10 @@ import type {
   DeleteUserAttributesResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { Services } from "../services";
-import { attributesRemove } from "../services/userPoolService";
+import {
+  assertNoDeveloperOnlyAttributes,
+  attributesRemove,
+} from "../services/userPoolService";
 import type { Target } from "./Target";
 
 export type DeleteUserAttributesTarget = Target<
@@ -22,6 +25,11 @@ export const DeleteUserAttributes =
     const { user, userPool } = await tokenVerifier.verifyAccessToken(
       ctx,
       req.AccessToken,
+    );
+
+    assertNoDeveloperOnlyAttributes(
+      req.UserAttributeNames,
+      userPool.options.SchemaAttributes,
     );
 
     const updatedUser = {

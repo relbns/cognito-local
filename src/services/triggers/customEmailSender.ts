@@ -9,6 +9,7 @@ export type CustomEmailSenderTrigger = Trigger<
     code: string;
     source:
       | "CustomEmailSender_SignUp"
+      | "CustomEmailSender_Authentication"
       | "CustomEmailSender_ResendCode"
       | "CustomEmailSender_ForgotPassword"
       | "CustomEmailSender_UpdateUserAttribute"
