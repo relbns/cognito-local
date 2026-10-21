@@ -3,14 +3,17 @@ import type {
   ForgotPasswordResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
+  InvalidParameterError,
   NotAuthorizedError,
   TokenErrorMessages,
-  UnsupportedError,
   UserNotFoundError,
 } from "../errors";
 import type { Services, UserPoolService } from "../services";
 import type { Context } from "../services/context";
-import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import {
+  recoveryAttributeOrder,
+  selectRecoveryDeliveryMethod,
+} from "../services/messageDelivery/deliveryMethod";
 import { countPasswordResetAttempt } from "../services/signInLockout";
 import { verifyRequestSecretHash } from "../services/tokenVerifier";
 import {
@@ -18,7 +21,7 @@ import {
   simulatedDelivery,
   USERNAME_CLIENT_NOT_FOUND,
 } from "../services/userExistence";
-import { attributeValue, type User } from "../services/userPoolService";
+import type { User } from "../services/userPoolService";
 import type { Target } from "./Target";
 
 export type ForgotPasswordTarget = Target<
@@ -83,12 +86,15 @@ export const ForgotPassword =
       req.SecretHash,
     );
     const user = await findOrMigrateUser(ctx, triggers, userPool, req);
+    const recovery = userPool.options.AccountRecoverySetting;
+    const simulated = () => ({
+      CodeDeliveryDetails: simulatedDelivery(
+        req.Username,
+        recoveryAttributeOrder(recovery),
+      ),
+    });
     if (!user || !user.Enabled) {
-      if (preventsUserExistenceErrors(client)) {
-        return {
-          CodeDeliveryDetails: simulatedDelivery(req.Username, ["email"]),
-        };
-      }
+      if (preventsUserExistenceErrors(client)) return simulated();
       throw user
         ? new NotAuthorizedError(TokenErrorMessages.userDisabled)
         : new UserNotFoundError(USERNAME_CLIENT_NOT_FOUND);
@@ -100,24 +106,15 @@ export const ForgotPassword =
       );
     }
 
-    const counted = await countPasswordResetAttempt(
-      ctx,
-      config,
-      userPool,
-      user,
-      clock.get(),
-    );
-
-    const userEmail = attributeValue("email", counted.Attributes);
-    if (!userEmail) {
-      throw new UnsupportedError("ForgotPassword without email on user");
+    const deliveryDetails = selectRecoveryDeliveryMethod(recovery, user);
+    if (!deliveryDetails) {
+      if (preventsUserExistenceErrors(client)) return simulated();
+      throw new InvalidParameterError(
+        "Cannot reset password for the user as there is no registered/verified email or phone_number",
+      );
     }
 
-    const deliveryDetails: DeliveryDetails = {
-      AttributeName: "email",
-      DeliveryMedium: "EMAIL",
-      Destination: userEmail,
-    };
+    await countPasswordResetAttempt(ctx, config, userPool, user, clock.get());
 
     const code = otp();
     await messages.deliver(

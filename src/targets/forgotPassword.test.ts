@@ -15,7 +15,11 @@ import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { TestContext } from "../__tests__/testContext";
 import * as TDB from "../__tests__/testDataBuilder";
-import { NotAuthorizedError, UserNotFoundError } from "../errors";
+import {
+  InvalidParameterError,
+  NotAuthorizedError,
+  UserNotFoundError,
+} from "../errors";
 import type {
   CognitoService,
   Messages,
@@ -23,10 +27,20 @@ import type {
   UserPoolService,
 } from "../services";
 import type { TokenVerifier } from "../services/tokenVerifier";
-import { attributeValue } from "../services/userPoolService";
+import { attributeValue, type UserPool } from "../services/userPoolService";
 import { ForgotPassword, type ForgotPasswordTarget } from "./forgotPassword";
 
 const currentDate = new Date();
+
+const verifiedUser = (partial: Parameters<typeof TDB.user>[0] = {}) =>
+  TDB.user({
+    Attributes: [
+      { Name: "sub", Value: "user-sub" },
+      { Name: "email", Value: "user@example.test" },
+      { Name: "email_verified", Value: "true" },
+    ],
+    ...partial,
+  });
 
 describe("ForgotPassword target", () => {
   let mockCognito: MockedObject<CognitoService>;
@@ -98,7 +112,7 @@ describe("ForgotPassword target", () => {
     });
 
     it("migrates an unknown user and sends the code to the migrated user", async () => {
-      const migrated = TDB.user({ UserStatus: "RESET_REQUIRED" });
+      const migrated = verifiedUser({ UserStatus: "RESET_REQUIRED" });
       mockTriggers.userMigration.mockResolvedValue(migrated);
 
       const result = await forgotPassword(TestContext, {
@@ -146,7 +160,7 @@ describe("ForgotPassword target", () => {
   });
 
   it("sends a confirmation code to the user's email address", async () => {
-    const user = TDB.user();
+    const user = verifiedUser();
 
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
 
@@ -181,7 +195,7 @@ describe("ForgotPassword target", () => {
   });
 
   it("saves the confirmation code on the user for comparison when confirming", async () => {
-    const user = TDB.user();
+    const user = verifiedUser();
 
     mockUserPoolService.getUserByUsername.mockResolvedValue(user);
 
@@ -194,6 +208,96 @@ describe("ForgotPassword target", () => {
       ...user,
       UserLastModifiedDate: currentDate,
       ConfirmationCode: "123456",
+    });
+  });
+
+  describe("delivery", () => {
+    const phoneAndEmail = (verified: { email?: boolean; phone?: boolean }) =>
+      TDB.user({
+        Attributes: [
+          { Name: "sub", Value: "user-sub" },
+          { Name: "email", Value: "user@example.test" },
+          { Name: "email_verified", Value: String(!!verified.email) },
+          { Name: "phone_number", Value: "+15555550100" },
+          { Name: "phone_number_verified", Value: String(!!verified.phone) },
+        ],
+      });
+    const sms = {
+      AttributeName: "phone_number",
+      DeliveryMedium: "SMS",
+      Destination: "+15555550100",
+    };
+    const email = {
+      AttributeName: "email",
+      DeliveryMedium: "EMAIL",
+      Destination: "user@example.test",
+    };
+    const send = async (
+      user: ReturnType<typeof TDB.user>,
+      AccountRecoverySetting?: UserPool["AccountRecoverySetting"],
+    ) => {
+      mockUserPoolService.options.AccountRecoverySetting =
+        AccountRecoverySetting;
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+      return forgotPassword(TestContext, {
+        ClientId: "clientId",
+        Username: user.Username,
+      });
+    };
+
+    it("prefers a verified phone number when the pool has no AccountRecoverySetting", async () => {
+      const result = await send(phoneAndEmail({ email: true, phone: true }));
+      expect(result.CodeDeliveryDetails).toEqual(sms);
+      expect(mockMessages.deliver).toHaveBeenCalledWith(
+        TestContext,
+        "ForgotPassword",
+        "clientId",
+        "test",
+        expect.anything(),
+        "123456",
+        undefined,
+        sms,
+      );
+    });
+
+    it("follows the AccountRecoverySetting priorities", async () => {
+      const emailFirst = {
+        RecoveryMechanisms: [
+          { Name: "verified_phone_number" as const, Priority: 2 },
+          { Name: "verified_email" as const, Priority: 1 },
+        ],
+      };
+      expect(
+        (await send(phoneAndEmail({ email: true, phone: true }), emailFirst))
+          .CodeDeliveryDetails,
+      ).toEqual(email);
+      expect(
+        (await send(phoneAndEmail({ phone: true }), emailFirst))
+          .CodeDeliveryDetails,
+      ).toEqual(sms);
+    });
+
+    it("refuses a user with no verified email or phone number", async () => {
+      await expect(send(phoneAndEmail({}))).rejects.toEqual(
+        new InvalidParameterError(
+          "Cannot reset password for the user as there is no registered/verified email or phone_number",
+        ),
+      );
+      await expect(
+        send(phoneAndEmail({ email: true, phone: true }), {
+          RecoveryMechanisms: [{ Name: "admin_only", Priority: 1 }],
+        }),
+      ).rejects.toBeInstanceOf(InvalidParameterError);
+      expect(mockMessages.deliver).not.toHaveBeenCalled();
+    });
+
+    it("simulates delivery for a user with no verified attribute when existence errors are prevented", async () => {
+      mockCognito.getAppClient.mockResolvedValue(
+        TDB.appClient({ PreventUserExistenceErrors: "ENABLED" }),
+      );
+      const result = await send(phoneAndEmail({}));
+      expect(result.CodeDeliveryDetails?.DeliveryMedium).toBe("SMS");
+      expect(mockMessages.deliver).not.toHaveBeenCalled();
     });
   });
 });

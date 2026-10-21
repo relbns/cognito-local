@@ -527,6 +527,9 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
   code provided, please try again." and "Invalid code or auth state for the user.": see
   [docs/api-coverage.md](docs/api-coverage.md#error-messages).
 
+- **Password reset delivery.** ForgotPassword sends the code by email or SMS to the verified address
+  the pool's `AccountRecoverySetting` picks (a verified phone number first by default), and refuses
+  a user without one: see [docs/api-coverage.md](docs/api-coverage.md#authentication-sign-up-and-sign-out).
 - **Tokens.** User access tokens carry `version: 2`, and `device_key` when the pool tracks devices.
   An app client without `ReadAttributes` reads the standard attributes only, so `custom:` attributes
   reach ID tokens, `GetUser` and `/oauth2/userInfo` only when `ReadAttributes` lists them: see

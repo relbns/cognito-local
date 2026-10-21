@@ -159,6 +159,14 @@ RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`
   [tokens.md](tokens.md#revocation).
 - SignUp returns `NotAuthorizedException` ("SignUp is not permitted for this user pool") when the
   pool's `AdminCreateUserConfig.AllowAdminCreateUserOnly` is `true`.
+- ForgotPassword sends the code as the pool's `AccountRecoverySetting` asks: to the first of
+  `verified_email` and `verified_phone_number`, by `Priority`, that the user has, an email by email
+  and a phone number by SMS. Without the setting a verified phone number comes first, then a
+  verified email
+  ([account recovery](https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html)).
+  An address only counts when its `email_verified` or `phone_number_verified` is `true`. With none,
+  or with `admin_only`, it returns `InvalidParameterException` ("Cannot reset password for the user
+  as there is no registered/verified email or phone_number").
 - ForgotPassword for an unknown user runs UserMigration (`UserMigration_ForgotPassword`) when the
   pool has it, and sends the code to the migrated user. Without it, or when the trigger rejects the
   user, the user is unknown, as described in [User existence errors](#user-existence-errors).
