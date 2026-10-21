@@ -159,6 +159,40 @@ describe("SDK v3 Lambda and KMS clients against a local endpoint", () => {
     expect(received.at(-1)?.authorization).toContain("Credential=v2key/");
   });
 
+  it("uses the default credential and region chains when credentials and region are null", async () => {
+    const saved = {
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+      AWS_REGION: process.env.AWS_REGION,
+    };
+    process.env.AWS_ACCESS_KEY_ID = "envkey";
+    process.env.AWS_SECRET_ACCESS_KEY = "envsecret";
+    process.env.AWS_REGION = "eu-west-2";
+    try {
+      const mapped = toSdkV3ClientConfig("LambdaClient", {
+        credentials: null,
+        region: null,
+        endpoint,
+      });
+      expect(mapped.warnings).toEqual([]);
+      const lambda = new LambdaService(
+        { PreSignUp: "pre-sign-up" },
+        new Lambda(mapped.config),
+      );
+
+      await expect(preSignUp(lambda)).resolves.toEqual(
+        expect.objectContaining({ autoConfirmUser: true }),
+      );
+      expect(received.at(-1)?.authorization).toContain("Credential=envkey/");
+      expect(received.at(-1)?.authorization).toContain("/eu-west-2/lambda/");
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it("encrypts a code with the KMS keyring for custom sender triggers", async () => {
     const crypto = new CryptoService(
       { KMSKeyAlias: "alias/test", KMSKeyId: KEY_ARN },

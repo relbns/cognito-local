@@ -91,13 +91,14 @@ export const toSdkV3ClientConfig = (
   const superseded = (key: string, by: string) =>
     warnings.push(`${section}.${key} is ignored because ${by} is set.`);
 
+  // null clears a default, so the SDK resolves the value itself (credential and region chains).
   for (const key of PASSED_THROUGH) {
-    if (source[key] !== undefined) {
+    if (source[key] !== undefined && source[key] !== null) {
       (config as Record<string, unknown>)[key] = source[key];
     }
   }
 
-  if (source.credentials !== undefined) {
+  if (source.credentials !== undefined && source.credentials !== null) {
     const credentials = isObject(source.credentials)
       ? pickCredentials(source.credentials)
       : undefined;
