@@ -5,7 +5,7 @@ import type {
   PreventUserExistenceErrorTypes,
   TokenValidityUnitsType,
 } from "@aws-sdk/client-cognito-identity-provider";
-import shortUUID from "short-uuid";
+import { createTranslator } from "short-uuid";
 import { InvalidParameterError } from "../errors";
 
 export interface AppClient {
@@ -117,6 +117,6 @@ export const assertAuthSessionValidity = (value: number | undefined): void => {
   }
 };
 
-const generator = shortUUID("0123456789abcdefghijklmnopqrstuvwxyz");
+const generator = createTranslator("0123456789abcdefghijklmnopqrstuvwxyz");
 
-export const newId = generator.new;
+export const newId = generator.generate;

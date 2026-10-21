@@ -3,7 +3,7 @@ import type {
   CreateUserPoolResponse,
   SchemaAttributeType,
 } from "@aws-sdk/client-cognito-identity-provider";
-import shortUUID from "short-uuid";
+import { createTranslator } from "short-uuid";
 import type { Services } from "../services";
 import { USER_POOL_AWS_DEFAULTS } from "../services/cognitoService";
 import { normalizePasswordPolicy } from "../services/passwordPolicy";
@@ -15,7 +15,7 @@ import type { Target } from "./Target";
 const REGION = "local";
 const ACCOUNT_ID = "local";
 
-const generator = shortUUID(
+const generator = createTranslator(
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
 );
 
@@ -81,7 +81,8 @@ export const createSchemaAttributes = (
 export const userPoolArn = (userPoolId: string) =>
   `arn:aws:cognito-idp:${REGION}:${ACCOUNT_ID}:userpool/${userPoolId}`;
 
-export const newUserPoolId = () => `${REGION}_${generator.new().slice(0, 8)}`;
+export const newUserPoolId = () =>
+  `${REGION}_${generator.generate().slice(0, 8)}`;
 
 /** The pool settings CreateUserPool stores, without Id, Arn and dates. */
 export const userPoolSettingsFromRequest = (
