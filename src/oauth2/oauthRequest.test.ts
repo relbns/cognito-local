@@ -8,6 +8,7 @@ import {
   isClientAuthenticated,
   parseClientCredentials,
   parseClientMetadata,
+  parsePrompt,
   parseScopes,
 } from "./oauthRequest";
 
@@ -284,5 +285,22 @@ describe("parseClientMetadata", () => {
 
   it.each(["not json", "[1]", "3", "null"])("is null for %s", (value) => {
     expect(parseClientMetadata(value)).toBeNull();
+  });
+});
+
+describe("parsePrompt", () => {
+  it("splits the values on spaces", () => {
+    expect(parsePrompt("login consent")).toEqual(["login", "consent"]);
+    expect(parsePrompt("none")).toEqual(["none"]);
+    expect(parsePrompt(undefined)).toEqual([]);
+    expect(parsePrompt(["none"])).toEqual([]);
+  });
+});
+
+describe("buildErrorRedirect without a description", () => {
+  it("leaves error_description out", () => {
+    expect(
+      buildErrorRedirect("http://localhost/cb", "login_required", "", "s"),
+    ).toBe("http://localhost/cb?error=login_required&state=s");
   });
 });

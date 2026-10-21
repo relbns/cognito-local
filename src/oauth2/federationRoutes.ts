@@ -153,11 +153,19 @@ export function beginFederation(
   );
 }
 
+export type OnFederatedSignIn = (
+  req: Request,
+  res: Response,
+  userPoolId: string,
+  username: string,
+) => void;
+
 export function attachFederationRoutes(
   app: Application,
   services: Services,
   codeStore: AuthorizationCodeStore,
   store: FederationStore,
+  onSignIn?: OnFederatedSignIn,
 ): void {
   const loadProvider = async (
     ctx: Context,
@@ -282,6 +290,7 @@ export function attachFederationRoutes(
         provider,
         claims,
       );
+      onSignIn?.(req, res, userPool.options.Id, user.Username);
       return await sendAuthorizationResponse(ctx, res, services, codeStore, {
         appClient,
         userPool,

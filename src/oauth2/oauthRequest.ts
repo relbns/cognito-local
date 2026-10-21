@@ -13,6 +13,7 @@ export interface AuthorizeParams {
   code_challenge_method?: string;
   identity_provider?: string;
   idp_identifier?: string;
+  prompt?: string;
 }
 
 export interface FederatedProvider {
@@ -36,6 +37,10 @@ export type AuthorizeDecision =
   | { kind: "redirectError"; error: string; description: string }
   | (FederatedTarget & AuthorizeFlow)
   | ({ kind: "login" } & AuthorizeFlow);
+
+/** The space-separated values of the OIDC prompt parameter. */
+export const parsePrompt = (prompt: unknown): string[] =>
+  typeof prompt === "string" ? prompt.split(/[\s+]+/).filter(Boolean) : [];
 
 export const parseScopes = (scope: string | undefined): string[] => [
   ...new Set((scope ?? "").split(/[\s+]+/).filter(Boolean)),
@@ -195,7 +200,7 @@ export function buildErrorRedirect(
 ): string {
   const url = new URL(redirectUri);
   url.searchParams.set("error", error);
-  url.searchParams.set("error_description", description);
+  if (description) url.searchParams.set("error_description", description);
   if (state) url.searchParams.set("state", state);
   return url.toString();
 }

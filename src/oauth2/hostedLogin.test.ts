@@ -20,6 +20,7 @@ import { HostedLoginStore } from "./hostedLoginStore";
 import { attachOAuth2Routes } from "./routes";
 
 const CALLBACK = "http://localhost:9876/cb";
+const LOGOUT = "http://localhost:9876/bye";
 const PASSWORD = "Passw0rd!";
 const NEW_PASSWORD = "NewPassw0rd!";
 const TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
@@ -108,6 +109,7 @@ describe("hosted login form", () => {
         ClientId: "client-1",
         UserPoolId: "local_Pool1",
         CallbackURLs: [CALLBACK],
+        LogoutURLs: [LOGOUT],
         AllowedOAuthFlows: ["code", "implicit"],
         AllowedOAuthScopes: ["openid", "email"],
       }),
@@ -160,6 +162,198 @@ describe("hosted login form", () => {
 
   it("signs a confirmed user straight in", async () => {
     expectCodeRedirect(await login());
+  });
+
+  describe("browser session", () => {
+    const authorizeQuery = (extra: Record<string, string> = {}) => ({
+      client_id: "client-1",
+      redirect_uri: CALLBACK,
+      response_type: "code",
+      scope: "openid email",
+      state: "st-1",
+      ...extra,
+    });
+    const cookieOf = (res: supertest.Response) =>
+      ([] as string[])
+        .concat(res.header["set-cookie"] ?? [])
+        .find((c) => c.startsWith("cognito="));
+    const signIn = async () => {
+      const res = await login();
+      const cookie = cookieOf(res);
+      expect(cookie).toBeDefined();
+      return (cookie as string).split(";")[0];
+    };
+    const authorize = (
+      cookie: string | undefined,
+      extra: Record<string, string> = {},
+      path = "/oauth2/authorize",
+    ) => {
+      const req = supertest(app).get(path).query(authorizeQuery(extra));
+      return cookie ? req.set("Cookie", cookie) : req;
+    };
+
+    it("sets an HttpOnly session cookie for one hour after sign-in", async () => {
+      const res = await login();
+      expectCodeRedirect(res);
+      const cookie = cookieOf(res) as string;
+      expect(cookie).toMatch(/^cognito=[\w-]{43};/);
+      expect(cookie).toContain("Max-Age=3600");
+      expect(cookie).toContain("Path=/");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Lax");
+    });
+
+    it("issues a code without the form while the session is valid", async () => {
+      const cookie = await signIn();
+
+      const res = await authorize(cookie);
+      expectCodeRedirect(res);
+
+      const implicit = await authorize(cookie, { response_type: "token" });
+      expect(implicit.status).toBe(302);
+      expect(new URL(implicit.header.location).hash).toContain(
+        "access_token=access-token",
+      );
+    });
+
+    it("shows the form for prompt=login even with a session", async () => {
+      const cookie = await signIn();
+
+      const res = await authorize(cookie, { prompt: "login" });
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('name="username"');
+    });
+
+    it("answers prompt=none with the session's code, or login_required", async () => {
+      const without = await authorize(undefined, { prompt: "none" });
+      expect(without.status).toBe(302);
+      const location = new URL(without.header.location);
+      expect(`${location.origin}${location.pathname}`).toBe(CALLBACK);
+      expect(Object.fromEntries(location.searchParams)).toEqual({
+        error: "login_required",
+        state: "st-1",
+      });
+
+      const cookie = await signIn();
+      expectCodeRedirect(await authorize(cookie, { prompt: "none" }));
+    });
+
+    it("validates the request before prompt=none", async () => {
+      const res = await authorize(undefined, {
+        prompt: "none",
+        redirect_uri: "http://elsewhere.example.test/cb",
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("ends after one hour", async () => {
+      const cookie = await signIn();
+      clock.advanceBy(60 * 60 * 1000);
+
+      const res = await authorize(cookie);
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('name="username"');
+      const none = await authorize(cookie, { prompt: "none" });
+      expect(new URL(none.header.location).searchParams.get("error")).toBe(
+        "login_required",
+      );
+    });
+
+    it("is ignored once the user is disabled", async () => {
+      const cookie = await signIn();
+      stored = { ...stored, Enabled: false };
+
+      const res = await authorize(cookie);
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('name="username"');
+    });
+
+    it("serves the login page at /login too", async () => {
+      const res = await authorize(undefined, {}, "/login");
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('name="username"');
+    });
+
+    describe("GET /logout", () => {
+      const logout = (
+        cookie: string | undefined,
+        query: Record<string, string>,
+      ) => {
+        const req = supertest(app)
+          .get("/logout")
+          .query({ client_id: "client-1", ...query });
+        return cookie ? req.set("Cookie", cookie) : req;
+      };
+
+      it("clears the session and redirects to a registered logout_uri", async () => {
+        const cookie = await signIn();
+
+        const res = await logout(cookie, {
+          logout_uri: LOGOUT,
+          redirect_uri: CALLBACK,
+        });
+
+        expect(res.status).toBe(302);
+        expect(res.header.location).toBe(LOGOUT);
+        expect(cookieOf(res)).toMatch(/^cognito=;.*Expires=Thu, 01 Jan 1970/);
+        const after = await authorize(cookie);
+        expect(after.status).toBe(200);
+        expect(after.text).toContain('name="username"');
+      });
+
+      it("redirects to the login page with the sign-in parameters of redirect_uri", async () => {
+        const cookie = await signIn();
+
+        const res = await logout(cookie, {
+          redirect_uri: CALLBACK,
+          response_type: "code",
+          state: "st-2",
+          scope: "openid",
+          identity_provider: "Ignored",
+        });
+
+        expect(res.status).toBe(302);
+        const location = new URL(res.header.location, "http://emulator");
+        expect(location.pathname).toBe("/login");
+        expect(Object.fromEntries(location.searchParams)).toEqual({
+          client_id: "client-1",
+          response_type: "code",
+          redirect_uri: CALLBACK,
+          state: "st-2",
+          scope: "openid",
+        });
+        expect((await authorize(cookie)).status).toBe(200);
+      });
+
+      it.each([
+        [
+          { logout_uri: "http://elsewhere.example.test/bye" },
+          "redirect_mismatch",
+        ],
+        [
+          {
+            redirect_uri: "http://elsewhere.example.test/cb",
+            response_type: "code",
+          },
+          "redirect_mismatch",
+        ],
+        [{ redirect_uri: CALLBACK }, "Missing response_type"],
+        [{}, "Missing logout_uri or redirect_uri"],
+      ])("refuses %j and keeps the session", async (query, message) => {
+        const cookie = await signIn();
+
+        const res = await logout(cookie, query);
+
+        expect(res.status).toBe(400);
+        expect(res.body.error_description).toContain(message);
+        expect(cookieOf(res)).toBeUndefined();
+        expectCodeRedirect(await authorize(cookie));
+      });
+    });
   });
 
   describe("disabled user", () => {

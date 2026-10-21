@@ -191,11 +191,12 @@ ListUserPoolClientSecrets return everything in one response.
 
 | Endpoint | Method | Behaviour |
 | --- | --- | --- |
-| `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. |
+| `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form, or issues the code at once when the browser has a session for the pool. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. `prompt=login` always shows the form, and `prompt=none` uses the session or redirects with `error=login_required`. |
+| `/login` | GET | The same as `/oauth2/authorize`; `/logout` sends the browser here. |
 | `/oauth2/token` | POST | `authorization_code`, `refresh_token` and `client_credentials` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` issues an M2M access token for custom scopes (see [tokens.md](tokens.md#client-credentials)). |
 | `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token, limited to the app client's `ReadAttributes` when it sets them. |
 | `/oauth2/revoke` | POST | Revokes a refresh token and the access tokens issued from it. |
-| `/logout` | GET | Takes `client_id` and `logout_uri` and redirects to `logout_uri` when it is one of the client's `LogoutURLs`. The `redirect_uri` + `response_type` form is not supported. |
+| `/logout` | GET | Ends the browser session for the client's pool, then redirects to `logout_uri` when it is one of the client's `LogoutURLs`, or, with `redirect_uri` (one of the `CallbackURLs`) and `response_type`, to `/login` with `client_id`, `response_type`, `redirect_uri`, `state`, `scope` and `nonce`. `logout_uri` wins when both are sent. An unregistered URL answers HTTP 400 `redirect_mismatch` and keeps the session. |
 | `/{poolId}/.well-known/jwks.json` | GET | JSON Web Key Set. Every pool uses the same signing key. |
 | `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`, or on the request's scheme and `Host` header with `TokenConfig.IssuerFromRequest`. |
 | `/oauth2/idpresponse` | GET, POST | Return leg of a federated sign-in. |
@@ -216,6 +217,14 @@ or tokens from the user as the trigger left it. The steps after the password are
 under a random id that expires after 3 minutes, so the username, client, redirect URI, PKCE challenge,
 scope and state come from the server, not from the page. The form has no sign-up or forgot-password
 pages and does not run PreAuthentication.
+
+A sign-in through the form or a federated provider sets a `cognito` cookie (HttpOnly, `SameSite=Lax`,
+`Path=/`) for one hour, as Cognito's managed login does. While it is valid, `/oauth2/authorize` for
+any app client of the same pool issues the code or tokens without the form and without running
+PostAuthentication. A disabled or deleted user's session is ignored. A new sign-in, including after
+`prompt=login`, gives a new cookie. Sessions are kept in memory, so a restart ends them, and one
+cookie holds the sessions of every pool on the emulator, where Cognito gives each pool its own
+domain.
 
 The emulator also serves `/mock-idp/{providerName}/authorize` (the [mock IdP](federation.md) form),
 `/health`, and the admin UI and its API under `/_admin` (see [oauth-callback.md](oauth-callback.md)

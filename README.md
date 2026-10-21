@@ -468,6 +468,8 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
   for a new password and for SMS or TOTP MFA codes, and runs PostAuthentication, but has no sign-up,
   forgot-password or MFA setup pages.
+- Hosted login sessions (the `cognito` cookie) live in memory: a restart signs browsers out, and one
+  cookie covers every pool, where Cognito sets one per user pool domain.
 - The admin UI has no authentication.
 
 ### Stricter than upstream cognito-local

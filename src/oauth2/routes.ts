@@ -9,6 +9,12 @@ import type { VerifiedAccessToken } from "../services/tokenVerifier";
 import { attributeValue } from "../services/userPoolService";
 import type { AuthorizationCodeStore } from "./authorizationCodeStore";
 import { sendAuthorizationResponse } from "./authorizationResponse";
+import {
+  BrowserSessionStore,
+  endBrowserSession,
+  readSessionCookie,
+  startBrowserSession,
+} from "./browserSession";
 import { type IdentityProviderConfig, identityProvidersOf } from "./federation";
 import { attachFederationRoutes, beginFederation } from "./federationRoutes";
 import { FederationStore } from "./federationStore";
@@ -32,6 +38,7 @@ import {
   isClientAuthenticated,
   parseClientCredentials,
   parseClientMetadata,
+  parsePrompt,
   parseScopes,
   type ResourceServerScopes,
 } from "./oauthRequest";
@@ -92,14 +99,25 @@ export function attachOAuth2Routes(
   codeStore: AuthorizationCodeStore,
   federationStore: FederationStore = new FederationStore(),
   hostedLoginStore: HostedLoginStore = new HostedLoginStore(services.clock),
+  browserSessions: BrowserSessionStore = new BrowserSessionStore(
+    services.clock,
+  ),
 ): void {
-  attachFederationRoutes(app, services, codeStore, federationStore);
+  attachFederationRoutes(
+    app,
+    services,
+    codeStore,
+    federationStore,
+    (req, res, userPoolId, username) =>
+      startBrowserSession(req, res, browserSessions, userPoolId, username),
+  );
 
   const sendHtml = (res: Response, status: number, html: string) =>
     res.status(status).type("text/html").send(html);
 
   const renderOutcome = (
     ctx: Context,
+    req: Request,
     res: Response,
     login: HostedLoginContext,
     outcome: HostedLoginOutcome,
@@ -127,6 +145,13 @@ export function attachOAuth2Routes(
           stepPage(outcome.sessionId, outcome.step, outcome.error),
         );
       case "signedIn":
+        startBrowserSession(
+          req,
+          res,
+          browserSessions,
+          login.userPool.options.Id,
+          outcome.user.Username,
+        );
         return sendAuthorizationResponse(ctx, res, services, codeStore, {
           appClient: login.appClient,
           userPool: login.userPool,
@@ -151,6 +176,7 @@ export function attachOAuth2Routes(
 
   const continueLogin = async (
     ctx: Context,
+    req: Request,
     res: Response,
     sessionId: string,
     body: Record<string, unknown>,
@@ -188,10 +214,32 @@ export function attachOAuth2Routes(
       pending,
       formFields(body),
     );
-    return renderOutcome(ctx, res, login, outcome);
+    return renderOutcome(ctx, req, res, login, outcome);
   };
 
-  app.get("/oauth2/authorize", async (req: Request, res: Response) => {
+  const sessionUser = async (
+    ctx: Context,
+    req: Request,
+    appClient: AppClient,
+  ) => {
+    const signIn = browserSessions.find(
+      readSessionCookie(req),
+      appClient.UserPoolId,
+    );
+    if (!signIn) return null;
+    try {
+      const userPool = await services.cognito.getUserPool(
+        ctx,
+        appClient.UserPoolId,
+      );
+      const user = await userPool.getUserByUsername(ctx, signIn.username);
+      return user?.Enabled ? { userPool, user } : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const authorize = async (req: Request, res: Response) => {
     const params = req.query as AuthorizeParams;
     const ctx = requestContext(req, services.config?.TokenConfig);
 
@@ -204,51 +252,81 @@ export function attachOAuth2Routes(
     }
     const decision = decideAuthorize(params, appClient, providers);
 
-    switch (decision.kind) {
-      case "reject":
-        return badRequest(res, decision.description);
-      case "redirectError":
-        return res.redirect(
-          buildErrorRedirect(
-            params.redirect_uri ?? "",
-            decision.error,
-            decision.description,
-            params.state,
-          ),
-        );
-      case "federated": {
-        const provider = providers.find(
-          (p) => p.ProviderName === decision.providerName,
-        );
-        if (!appClient || !provider) {
-          return badRequest(res, "Invalid identity provider");
-        }
-        return beginFederation(req, res, federationStore, {
-          clientId: appClient.ClientId,
-          userPoolId: appClient.UserPoolId,
-          redirectUri: params.redirect_uri ?? "",
-          state: params.state,
-          provider,
-          flow: decision,
-        });
-      }
-      case "login":
-        return res
-          .status(200)
-          .type("text/html")
-          .send(
-            loginForm({
-              clientId: params.client_id ?? "",
-              redirectUri: params.redirect_uri ?? "",
-              responseType: decision.responseType,
-              codeChallenge: decision.codeChallenge,
-              codeChallengeMethod: decision.codeChallengeMethod,
-              scope: params.scope ?? "",
-              state: params.state ?? "",
-            }),
-          );
+    if (decision.kind === "reject") {
+      return badRequest(res, decision.description);
     }
-  });
+    if (decision.kind === "redirectError") {
+      return res.redirect(
+        buildErrorRedirect(
+          params.redirect_uri ?? "",
+          decision.error,
+          decision.description,
+          params.state,
+        ),
+      );
+    }
+    if (!appClient) return badRequest(res, "Invalid client_id");
+
+    const prompt = parsePrompt(params.prompt);
+    const reuseSession =
+      !prompt.includes("login") &&
+      (decision.kind === "login" || prompt.includes("none"));
+    const session = reuseSession
+      ? await sessionUser(ctx, req, appClient)
+      : null;
+    const { kind: _, ...flow } = decision;
+    if (session) {
+      return sendAuthorizationResponse(ctx, res, services, codeStore, {
+        appClient,
+        userPool: session.userPool,
+        user: session.user,
+        redirectUri: params.redirect_uri ?? "",
+        state: params.state,
+        flow,
+      });
+    }
+    if (prompt.includes("none")) {
+      return res.redirect(
+        buildErrorRedirect(
+          params.redirect_uri ?? "",
+          "login_required",
+          "",
+          params.state,
+        ),
+      );
+    }
+
+    if (decision.kind === "federated") {
+      const provider = providers.find(
+        (p) => p.ProviderName === decision.providerName,
+      );
+      if (!provider) return badRequest(res, "Invalid identity provider");
+      return beginFederation(req, res, federationStore, {
+        clientId: appClient.ClientId,
+        userPoolId: appClient.UserPoolId,
+        redirectUri: params.redirect_uri ?? "",
+        state: params.state,
+        provider,
+        flow: decision,
+      });
+    }
+    return sendHtml(
+      res,
+      200,
+      loginForm({
+        clientId: params.client_id ?? "",
+        redirectUri: params.redirect_uri ?? "",
+        responseType: decision.responseType,
+        codeChallenge: decision.codeChallenge,
+        codeChallengeMethod: decision.codeChallengeMethod,
+        scope: params.scope ?? "",
+        state: params.state ?? "",
+      }),
+    );
+  };
+
+  app.get("/oauth2/authorize", authorize);
+  app.get("/login", authorize);
 
   app.post("/oauth2/authorize", async (req: Request, res: Response) => {
     const body = req.body as AuthorizeParams & {
@@ -258,7 +336,7 @@ export function attachOAuth2Routes(
     };
     const ctx = requestContext(req, services.config?.TokenConfig);
     if (typeof body.login_session === "string") {
-      return continueLogin(ctx, res, body.login_session, req.body);
+      return continueLogin(ctx, req, res, body.login_session, req.body);
     }
     const { client_id, redirect_uri, scope, state, username, password } = body;
 
@@ -313,7 +391,7 @@ export function attachOAuth2Routes(
       username,
       password,
     );
-    return renderOutcome(ctx, res, login, outcome);
+    return renderOutcome(ctx, req, res, login, outcome);
   });
 
   const clientCredentialsGrant = async (
@@ -624,29 +702,57 @@ export function attachOAuth2Routes(
     return res.status(200).json({});
   });
 
-  // GET /logout — redirect to a registered logout URI (hosted UI logout)
+  // GET /logout: end the browser session, then go to logout_uri or back to the login page
   app.get("/logout", async (req: Request, res: Response) => {
     const ctx = requestContext(req, services.config?.TokenConfig);
-    const { client_id, logout_uri } = req.query as Record<string, string>;
+    const query = req.query as Record<string, string | undefined>;
+    const { client_id, logout_uri, redirect_uri } = query;
 
-    if (!client_id || !logout_uri) {
-      return badRequest(res, "Missing client_id or logout_uri");
-    }
-
-    const appClient = await services.cognito.getAppClient(ctx, client_id);
+    if (!client_id) return badRequest(res, "Missing client_id");
+    const appClient = await findAppClient(services, ctx, client_id);
     if (!appClient) {
       return res
         .status(400)
         .json({ error: "invalid_client", error_description: "Unknown client" });
     }
 
-    if (
-      appClient.LogoutURLs?.length &&
-      !appClient.LogoutURLs.includes(logout_uri)
-    ) {
-      return badRequest(res, "logout_uri not registered");
+    let destination: string;
+    if (logout_uri) {
+      if (!(appClient.LogoutURLs ?? []).includes(logout_uri)) {
+        return badRequest(
+          res,
+          "redirect_mismatch: logout_uri is not registered for this client",
+        );
+      }
+      destination = logout_uri;
+    } else if (redirect_uri) {
+      if (!(appClient.CallbackURLs ?? []).includes(redirect_uri)) {
+        return badRequest(
+          res,
+          "redirect_mismatch: redirect_uri is not registered for this client",
+        );
+      }
+      if (!query.response_type) {
+        return badRequest(res, "Missing response_type");
+      }
+      const login = new URLSearchParams();
+      for (const name of [
+        "client_id",
+        "response_type",
+        "redirect_uri",
+        "state",
+        "scope",
+        "nonce",
+      ]) {
+        const value = query[name];
+        if (typeof value === "string") login.set(name, value);
+      }
+      destination = `/login?${login}`;
+    } else {
+      return badRequest(res, "Missing logout_uri or redirect_uri");
     }
 
-    return res.redirect(logout_uri);
+    endBrowserSession(req, res, browserSessions, appClient.UserPoolId);
+    return res.redirect(destination);
   });
 }
