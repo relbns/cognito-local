@@ -17,6 +17,12 @@ export type HostedLoginStep =
   | { kind: "totpMfa" }
   | { kind: "mfaSetup"; secret: string; uri: string }
   | {
+      kind: "passkey";
+      challenge: string;
+      requireUserVerification: boolean;
+      options: object;
+    }
+  | {
       kind: "confirmSignUp";
       delivery: CodeDelivery | null;
       // True only when this browser just signed up with the password, so confirming can sign in.

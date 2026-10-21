@@ -1,6 +1,7 @@
 import {
   CodeMismatchError,
   CognitoError,
+  InvalidParameterError,
   InvalidPasswordError,
   NotAuthorizedError,
 } from "../errors";
@@ -14,6 +15,11 @@ import {
   nextMfaStep,
   totpUri,
 } from "../services/mfaSetup";
+import {
+  newPasskeyChallenge,
+  passkeySignInAvailable,
+  verifyPasskeySignIn,
+} from "../services/passkeys";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import { verify as verifyTotp } from "../services/totp";
 import { runPreAuthentication } from "../services/triggers/preAuthentication";
@@ -38,6 +44,9 @@ export const HOSTED_LOGIN_MESSAGES = {
     "This user must set up MFA before signing in. Set it up through the API (AssociateSoftwareToken, VerifySoftwareToken, SetUserMFAPreference).",
   smsDestinationMissing:
     "SMS MFA is enabled but the user has no phone number to send the code to.",
+  usernameRequired: "Enter your username to sign in with a passkey.",
+  passkeyUnavailable: "Passkey sign-in is not available for this user.",
+  passkeyFailed: "The passkey could not be verified. Try again.",
 } as const;
 
 export type HostedLoginServices = Pick<
@@ -61,7 +70,10 @@ export type HostedLoginOutcome =
   | { kind: "loginNotice"; notice: string };
 
 export type HostedLoginForm = Partial<
-  Record<"new_password" | "confirm_password" | "mfa_method" | "code", string>
+  Record<
+    "new_password" | "confirm_password" | "mfa_method" | "code" | "credential",
+    string
+  >
 >;
 
 const loginError = (error: string): HostedLoginOutcome => ({
@@ -255,6 +267,44 @@ export async function signInWithPassword(
   return afterPassword(ctx, services, store, login, user);
 }
 
+/** Starts passkey sign-in for a username, as the managed login page does before it prompts for the passkey. */
+export async function signInWithPasskey(
+  ctx: Context,
+  services: HostedLoginServices,
+  store: HostedLoginStore,
+  login: HostedLoginContext,
+  username: string,
+): Promise<HostedLoginOutcome> {
+  if (!username) return loginError(HOSTED_LOGIN_MESSAGES.usernameRequired);
+  const user = await login.userPool.getUserByUsername(ctx, username);
+  try {
+    await runPreAuthentication(ctx, services.triggers, {
+      client: login.appClient,
+      user,
+      username,
+      userPoolId: login.userPool.options.Id,
+      validationData: undefined,
+    });
+  } catch (e) {
+    if (e instanceof CognitoError) return loginError(e.message);
+    throw e;
+  }
+  if (!user || !passkeySignInAvailable(login.userPool.options, user)) {
+    return loginError(HOSTED_LOGIN_MESSAGES.passkeyUnavailable);
+  }
+  if (!user.Enabled) return loginError(HOSTED_LOGIN_MESSAGES.userDisabled);
+  if (user.UserStatus === "RESET_REQUIRED") {
+    return loginError(HOSTED_LOGIN_MESSAGES.passwordResetRequired);
+  }
+  const passkey = newPasskeyChallenge(login.userPool.options, user);
+  return toStep(store, login, user, {
+    kind: "passkey",
+    challenge: passkey.challenge,
+    requireUserVerification: passkey.requireUserVerification,
+    options: passkey.options,
+  });
+}
+
 /** Signs in a user who has just signed up and confirmed in this browser, as managed login does after sign-up. */
 export async function signInAfterSignUp(
   ctx: Context,
@@ -376,6 +426,31 @@ export async function continueHostedLogin(
       }
       store.delete(sessionId);
       return completeSignIn(ctx, services, login, registered);
+    }
+    case "passkey": {
+      let verified: Awaited<ReturnType<typeof verifyPasskeySignIn>>;
+      try {
+        verified = await verifyPasskeySignIn(ctx, {
+          userPool: login.userPool,
+          user,
+          credential: form.credential,
+          challenge: step.challenge,
+          requireUserVerification: step.requireUserVerification,
+          clock: services.clock,
+        });
+      } catch (e) {
+        if (
+          e instanceof NotAuthorizedError ||
+          e instanceof InvalidParameterError
+        ) {
+          return retry(HOSTED_LOGIN_MESSAGES.passkeyFailed);
+        }
+        throw e;
+      }
+      store.delete(sessionId);
+      return verified.satisfiesMfa
+        ? completeSignIn(ctx, services, login, verified.user)
+        : afterPassword(ctx, services, store, login, verified.user);
     }
     case "confirmSignUp":
     case "confirmForgotPassword":
