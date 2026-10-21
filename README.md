@@ -35,6 +35,9 @@ and tests, and [the differences](#compatibility-and-differences-from-aws) are li
 - **Hosted login and OAuth2.** `/oauth2/authorize`, `/oauth2/token`, `/oauth2/userInfo`,
   `/oauth2/revoke`, `/logout` and OIDC discovery, with PKCE and a callback page to try them. The
   login page has sign-up, confirm, forgot-password and MFA setup pages.
+- **Passkeys.** WebAuthn registration and `WEB_AUTHN` sign-in in `USER_AUTH`, with the attestation,
+  signature, origin and relying party checked as Cognito checks them, and passkey buttons on the
+  hosted login page and `/passkeys/add`. Tests can use a software authenticator, no browser needed.
 - **Federated sign-in without a provider.** A mock IdP page stands in for social, OIDC and SAML
   providers, with attribute mapping and linked users.
 - **Tokens checked as Cognito checks them.** Signature, issuer, expiry, user and revocation of access
@@ -480,8 +483,9 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 ### Not supported yet
 
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
-- Passkey (`WEB_AUTHN`) sign-in in the `USER_AUTH` flow, and its `SESSION` parameter that signs a
-  user in after ConfirmSignUp.
+- The `SESSION` parameter of the `USER_AUTH` flow that signs a user in after ConfirmSignUp.
+- Usernameless passkey sign-in, which Cognito does not offer either, and the managed login prompt
+  to add a passkey right after sign-up.
 - Devices in `CUSTOM_AUTH`, which returns no `NewDeviceMetadata` and no final `DEVICE_SRP_AUTH`.
 - Some operations only store their input: risk, log delivery, branding and terms settings have no
   effect.

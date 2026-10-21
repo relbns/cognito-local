@@ -7,7 +7,8 @@ request and a client like a `CreateUserPoolClient` request.
 
 Examples: [`seed.basic.json`](../examples/seed.basic.json),
 [`seed.custom-auth-otp.json`](../examples/seed.custom-auth-otp.json),
-[`seed.federation.json`](../examples/seed.federation.json). Seed files are JSON.
+[`seed.federation.json`](../examples/seed.federation.json),
+[`seed.passkeys.json`](../examples/seed.passkeys.json). Seed files are JSON.
 
 ## Format
 
@@ -21,6 +22,8 @@ Examples: [`seed.basic.json`](../examples/seed.basic.json),
       // any CreateUserPool setting: Policies, Schema, UsernameAttributes, AliasAttributes,
       // AutoVerifiedAttributes, MfaConfiguration, LambdaConfig, AdminCreateUserConfig,
       // UsernameConfiguration, AccountRecoverySetting, VerificationMessageTemplate, ...
+      "WebAuthnConfiguration": { "RelyingPartyId": "localhost", // passkeys, as SetUserPoolMfaConfig
+                                 "UserVerification": "preferred" },
       "LambdaConfig": { "PreSignUp": "file:./triggers/pre-sign-up.js" },
       "IdentityProviders": [{ "ProviderName": "Google", "ProviderType": "Google",
                               "ProviderDetails": {}, "AttributeMapping": {} }],
