@@ -136,6 +136,69 @@ describe("JwtTokenVerifier", () => {
       ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
     });
 
+    describe("with TokenConfig.IssuerFromRequest", () => {
+      const issuedAt = async (issuerDomain: string) => {
+        const triggers = newMockTriggers();
+        triggers.enabled.mockReturnValue(false);
+        const generator = new JwtTokenGenerator(clock, triggers, {
+          IssuerDomain: ISSUER_DOMAIN,
+          IssuerFromRequest: true,
+        });
+        const issued = await generator.generate(
+          { ...TestContext, issuerDomain },
+          user,
+          [],
+          client,
+          undefined,
+          "Authentication",
+        );
+        user = withRefreshToken(user, issued.RefreshToken, clock.get());
+        return issued;
+      };
+
+      it("accepts tokens issued for the pool under another host", async () => {
+        const issued = await issuedAt("http://localhost:32768");
+        expect(jwt.decode(issued.AccessToken)).toMatchObject({
+          iss: "http://localhost:32768/pool",
+        });
+        const fromRequest = verifierWith({ IssuerFromRequest: true });
+
+        await expect(
+          fromRequest.verifyAccessToken(TestContext, issued.AccessToken),
+        ).resolves.toMatchObject({ user });
+        await expect(
+          fromRequest.verifyRefreshToken(
+            TestContext,
+            issued.RefreshToken,
+            "client",
+          ),
+        ).resolves.toMatchObject({ user });
+        await expect(
+          fromRequest.verifyAccessToken(TestContext, tokens.AccessToken),
+        ).resolves.toMatchObject({ user });
+        await expect(
+          verifier.verifyAccessToken(TestContext, issued.AccessToken),
+        ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
+      });
+
+      it.each([
+        "http://localhost:32768/other-pool",
+        "http://localhost:32768/pool/extra",
+        "ftp://localhost/pool",
+        "http://localhost:32768/pool?x=1",
+        "not a url",
+      ])("still rejects the issuer %s", async (iss) => {
+        const token = sign({ ...accessClaims(), iss });
+
+        await expect(
+          verifierWith({ IssuerFromRequest: true }).verifyAccessToken(
+            TestContext,
+            token,
+          ),
+        ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
+      });
+    });
+
     it("rejects an expired token", async () => {
       clock.advanceBy(60 * 60 * 1000);
 

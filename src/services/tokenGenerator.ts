@@ -25,6 +25,8 @@ import {
 
 export interface TokenConfig {
   IssuerDomain?: string;
+  /** Issue tokens and discovery for `<scheme>://<Host header>` of each request instead of IssuerDomain. */
+  IssuerFromRequest?: boolean;
   /** Verify signature, expiry and revocation of tokens sent to the API; false decodes them unchecked. */
   Verify?: boolean;
   /** Require SECRET_HASH / ClientSecret from app clients that have a secret. */
@@ -232,6 +234,10 @@ export class JwtTokenGenerator implements TokenGenerator {
     this.groupLookup = groupLookup;
   }
 
+  private issuer(ctx: Context, userPoolId: string): string {
+    return `${ctx.issuerDomain ?? this.tokenConfig.IssuerDomain}/${userPoolId}`;
+  }
+
   private async groupsOf(
     ctx: Context,
     userPoolId: string,
@@ -334,7 +340,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       };
     }
 
-    const issuer = `${this.tokenConfig.IssuerDomain}/${userPoolClient.UserPoolId}`;
+    const issuer = this.issuer(ctx, userPoolClient.UserPoolId);
 
     const accessTokenSeconds = tokenValiditySeconds(
       userPoolClient,
@@ -431,7 +437,7 @@ export class JwtTokenGenerator implements TokenGenerator {
     return {
       AccessToken: jwt.sign(accessToken, PrivateKey.pem, {
         algorithm: "RS256",
-        issuer: `${this.tokenConfig.IssuerDomain}/${userPoolId}`,
+        issuer: this.issuer(ctx, userPoolId),
         expiresIn,
         keyid: "CognitoLocal",
       } satisfies SignOptions),

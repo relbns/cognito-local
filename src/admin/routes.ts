@@ -15,7 +15,7 @@ import { assertValidSeed } from "../seed/validate";
 import type { Router } from "../server/Router";
 import type { Services } from "../services";
 import type { CodeLogEntry } from "../services/codeLog";
-import type { Context } from "../services/context";
+import { type Context, requestContext } from "../services/context";
 import {
   attributeValue,
   type User,
@@ -35,7 +35,8 @@ import {
   usersPage,
 } from "./views";
 
-const ctxOf = (req: Request): Context => ({ logger: req.log });
+const ctxOf = (req: Request, services: Services): Context =>
+  requestContext(req, services.config?.TokenConfig);
 
 const str = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
@@ -162,7 +163,7 @@ export const createAdminRouter = (
   });
 
   const run = <T = unknown>(req: Request, target: string, body: unknown) =>
-    router(target)(ctxOf(req), body) as Promise<T>;
+    router(target)(ctxOf(req, services), body) as Promise<T>;
 
   const action =
     (
@@ -241,7 +242,7 @@ export const createAdminRouter = (
   admin.get(
     "/",
     page(async (req, res) => {
-      const ctx = ctxOf(req);
+      const ctx = ctxOf(req, services);
       const pools = await services.cognito.listUserPools(ctx);
       const summaries = [];
       for (const pool of pools) {
@@ -259,7 +260,8 @@ export const createAdminRouter = (
         "pools",
         poolsPage(summaries, {
           triggers: Object.keys(services.config.TriggerFunctions ?? {}),
-          issuerDomain: services.config.TokenConfig?.IssuerDomain,
+          issuerDomain:
+            ctx.issuerDomain ?? services.config.TokenConfig?.IssuerDomain,
           authSessionValidityMinutes:
             services.config.AuthSessionConfig?.AuthSessionValidity,
           codeLogSize: services.config.AdminUIConfig?.CodeLogSize,
@@ -272,7 +274,7 @@ export const createAdminRouter = (
   admin.get(
     "/pools/:poolId",
     page(async (req, res) => {
-      const ctx = ctxOf(req);
+      const ctx = ctxOf(req, services);
       const pool = await services.cognito.getUserPool(ctx, req.params.poolId);
       send(
         res,
@@ -292,7 +294,7 @@ export const createAdminRouter = (
   admin.get(
     "/pools/:poolId/users",
     page(async (req, res) => {
-      const ctx = ctxOf(req);
+      const ctx = ctxOf(req, services);
       const pool = await services.cognito.getUserPool(ctx, req.params.poolId);
       const q = str(req.query.q);
       const status = str(req.query.status);
@@ -387,7 +389,7 @@ export const createAdminRouter = (
   admin.get(
     "/pools/:poolId/users/:username",
     page(async (req, res) => {
-      const ctx = ctxOf(req);
+      const ctx = ctxOf(req, services);
       const pool = await services.cognito.getUserPool(ctx, req.params.poolId);
       const user = await pool.getUserByUsername(ctx, req.params.username);
       if (!user) {
@@ -496,7 +498,7 @@ export const createAdminRouter = (
   admin.get(
     "/pools/:poolId/groups",
     page(async (req, res) => {
-      const ctx = ctxOf(req);
+      const ctx = ctxOf(req, services);
       const pool = await services.cognito.getUserPool(ctx, req.params.poolId);
       send(
         res,
@@ -534,7 +536,7 @@ export const createAdminRouter = (
   admin.get(
     "/codes",
     page(async (req, res) => {
-      const ctx = ctxOf(req);
+      const ctx = ctxOf(req, services);
       const filters = codeFilters(req);
       const entries = filterCodes(
         await enrichEntries(ctx, services.codeLog?.list() ?? []),
@@ -561,7 +563,7 @@ export const createAdminRouter = (
     const filters = codeFilters(req);
     const limit = Number(str(req.query.limit)) || undefined;
     const entries = filterCodes(
-      await enrichEntries(ctxOf(req), services.codeLog?.list() ?? []),
+      await enrichEntries(ctxOf(req, services), services.codeLog?.list() ?? []),
       filters,
     ).slice(0, limit);
     res.set("Cache-Control", "no-store").json({
@@ -580,7 +582,7 @@ export const createAdminRouter = (
   });
 
   const tokens = async (req: Request, res: Response) => {
-    const ctx = ctxOf(req);
+    const ctx = ctxOf(req, services);
     const pools = await services.cognito.listUserPools(ctx);
     const token = str(req.body?.token);
     const poolId = str(req.body?.pool);
@@ -604,7 +606,8 @@ export const createAdminRouter = (
       }
     }
 
-    const issuerDomain = services.config.TokenConfig?.IssuerDomain;
+    const issuerDomain =
+      ctx.issuerDomain ?? services.config.TokenConfig?.IssuerDomain;
     const result = inspectToken(token, {
       jwks: [PublicKey.jwk],
       expectedIssuer:
@@ -631,17 +634,18 @@ export const createAdminRouter = (
   admin.use("/callback", createCallbackRouter(services));
 
   admin.get("/api/status", async (req, res) => {
-    const ctx = ctxOf(req);
+    const ctx = ctxOf(req, services);
     const pools = await services.cognito.listUserPools(ctx);
     res.set("Cache-Control", "no-store").json({
       running: true,
       pools: pools.length,
-      issuerDomain: services.config.TokenConfig?.IssuerDomain,
+      issuerDomain:
+        ctx.issuerDomain ?? services.config.TokenConfig?.IssuerDomain,
     });
   });
 
   admin.get("/api/export", async (req, res) => {
-    const seed = await exportSeed(ctxOf(req), services);
+    const seed = await exportSeed(ctxOf(req, services), services);
     if (str(req.query.download)) {
       res.attachment("cognito-local.seed.json");
     }
@@ -661,7 +665,12 @@ export const createAdminRouter = (
         str(req.query.baseDir) || process.cwd(),
         source,
       );
-      const result = await applySeed(ctxOf(req), services, seed, source);
+      const result = await applySeed(
+        ctxOf(req, services),
+        services,
+        seed,
+        source,
+      );
       res.json({
         ...result,
         summary: summarizeSeedResult(result),

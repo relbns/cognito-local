@@ -18,6 +18,7 @@ import PublicKey from "../keys/cognitoLocal.public.json";
 import { AuthorizationCodeStore } from "../oauth2/authorizationCodeStore";
 import { attachOAuth2Routes } from "../oauth2/routes";
 import type { Services } from "../services";
+import { requestContext, requestIssuerDomain } from "../services/context";
 import type { Router } from "./Router";
 
 export type ServerOptions = {
@@ -74,8 +75,10 @@ export const createServer = (
   });
 
   app.get("/:userPoolId/.well-known/openid-configuration", (req, res) => {
+    const tokenConfig = services?.config.TokenConfig;
     const baseUrl =
-      services?.config.TokenConfig.IssuerDomain ??
+      requestIssuerDomain(req, tokenConfig) ??
+      tokenConfig?.IssuerDomain ??
       `${req.protocol}://${req.get("host")}`;
     const poolUrl = `${baseUrl}/${req.params.userPoolId}`;
 
@@ -143,7 +146,7 @@ export const createServer = (
       return value;
     };
 
-    route({ logger: req.log }, req.body).then(
+    route(requestContext(req, services?.config.TokenConfig), req.body).then(
       (output) =>
         res
           .status(200)

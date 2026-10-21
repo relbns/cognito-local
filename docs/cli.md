@@ -52,7 +52,8 @@ A flag wins over the environment, the environment over the built-in default. Val
 `<data>/config.json` (`ServerConfig.port`, `ServerConfig.hostname`, `AdminUIConfig.Enabled`) win
 over the environment but not over a flag. The token issuer (`TokenConfig.IssuerDomain`) follows the
 final host and port unless `config.json` sets it; a wildcard host (`0.0.0.0`, `::`) becomes
-`localhost` in the issuer.
+`localhost` in the issuer. `TokenConfig.IssuerFromRequest: true` takes the issuer from each
+request's `Host` header instead (see [tokens.md](tokens.md#issuer)).
 
 ## Data directory
 

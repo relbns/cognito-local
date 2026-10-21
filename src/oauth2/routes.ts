@@ -2,7 +2,7 @@ import type { Application, Request, Response } from "express";
 import { CognitoError, TokenErrorMessages, UserNotFoundError } from "../errors";
 import type { Services } from "../services";
 import type { AppClient } from "../services/appClient";
-import type { Context } from "../services/context";
+import { type Context, requestContext } from "../services/context";
 import { refreshTokens } from "../services/refreshTokens";
 import { withRefreshTokenRevoked } from "../services/tokenRevocation";
 import type { VerifiedAccessToken } from "../services/tokenVerifier";
@@ -193,7 +193,7 @@ export function attachOAuth2Routes(
 
   app.get("/oauth2/authorize", async (req: Request, res: Response) => {
     const params = req.query as AuthorizeParams;
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
 
     const appClient = await findAppClient(services, ctx, params.client_id);
     let providers: IdentityProviderConfig[] = [];
@@ -256,7 +256,7 @@ export function attachOAuth2Routes(
       password?: string;
       login_session?: unknown;
     };
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
     if (typeof body.login_session === "string") {
       return continueLogin(ctx, res, body.login_session, req.body);
     }
@@ -360,7 +360,7 @@ export function attachOAuth2Routes(
     const body = req.body as Record<string, string>;
     const { grant_type } = body;
 
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
 
     if (
       grant_type !== "authorization_code" &&
@@ -493,7 +493,7 @@ export function attachOAuth2Routes(
 
   // GET /oauth2/userInfo — return OIDC claims for a valid access token
   app.get("/oauth2/userInfo", async (req: Request, res: Response) => {
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
 
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
@@ -586,7 +586,7 @@ export function attachOAuth2Routes(
 
   // POST /oauth2/revoke — revoke a refresh token
   app.post("/oauth2/revoke", async (req: Request, res: Response) => {
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
     const body = req.body as Record<string, string>;
     const { token } = body;
     const credentials = parseClientCredentials(req.headers.authorization, body);
@@ -627,7 +627,7 @@ export function attachOAuth2Routes(
 
   // GET /logout — redirect to a registered logout URI (hosted UI logout)
   app.get("/logout", async (req: Request, res: Response) => {
-    const ctx: Context = { logger: req.log };
+    const ctx = requestContext(req, services.config?.TokenConfig);
     const { client_id, logout_uri } = req.query as Record<string, string>;
 
     if (!client_id || !logout_uri) {

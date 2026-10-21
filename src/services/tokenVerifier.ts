@@ -160,6 +160,23 @@ const signatureValid = (token: string): boolean => {
   }
 };
 
+/** An issuer built from a request host: `http(s)://<host>/<poolId>` and nothing else. */
+export const isRequestIssuerFor = (iss: string, poolId: string): boolean => {
+  try {
+    const url = new URL(iss);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.pathname === `/${poolId}` &&
+      !url.search &&
+      !url.hash &&
+      !url.username &&
+      iss === `${url.origin}/${poolId}`
+    );
+  } catch {
+    return false;
+  }
+};
+
 const sameSubject = (user: User, sub: unknown): boolean => {
   const userSub = attributeValue("sub", user.Attributes);
   return !userSub || typeof sub !== "string" || userSub === sub;
@@ -184,8 +201,14 @@ export class JwtTokenVerifier implements TokenVerifier {
     return this.tokenConfig.Verify !== false;
   }
 
-  private issuerFor(userPool: UserPoolService): string {
-    return `${this.tokenConfig.IssuerDomain}/${userPool.options.Id}`;
+  private issuedBy(iss: unknown, userPool: UserPoolService): boolean {
+    const poolId = userPool.options.Id;
+    if (iss === `${this.tokenConfig.IssuerDomain}/${poolId}`) return true;
+    return (
+      this.tokenConfig.IssuerFromRequest === true &&
+      typeof iss === "string" &&
+      isRequestIssuerFor(iss, poolId)
+    );
   }
 
   public async verifyAccessToken(
@@ -209,7 +232,7 @@ export class JwtTokenVerifier implements TokenVerifier {
       ctx,
       claims.client_id,
     );
-    if (claims.iss !== this.issuerFor(userPool)) throw invalid();
+    if (!this.issuedBy(claims.iss, userPool)) throw invalid();
 
     const now = this.clock.get();
     if (typeof claims.exp !== "number" || claims.exp <= epochSeconds(now)) {
@@ -292,7 +315,7 @@ export class JwtTokenVerifier implements TokenVerifier {
     if (
       claims.token_use !== undefined ||
       typeof claims["cognito:username"] !== "string" ||
-      claims.iss !== this.issuerFor(userPool) ||
+      !this.issuedBy(claims.iss, userPool) ||
       (claims.client_id !== undefined && claims.client_id !== clientId)
     ) {
       throw invalid();

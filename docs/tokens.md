@@ -3,6 +3,23 @@
 The emulator checks tokens the way Cognito does. A token that Cognito would reject is rejected here
 with the same exception and message, so the error paths of your app can be tested locally.
 
+## Issuer
+
+Tokens carry `iss` = `TokenConfig.IssuerDomain` + `/<poolId>`, and only that issuer is accepted. With
+`TokenConfig.IssuerFromRequest: true` in `config.json`, the issuer comes from each request instead:
+`<scheme>://<Host header>/<poolId>` for the tokens it issues, and for the issuer, `jwks_uri` and
+endpoints of `/<poolId>/.well-known/openid-configuration`. This suits Testcontainers and other setups
+where clients reach the emulator on a mapped port that is only known at run time. The verifier then
+accepts any `http://` or `https://` issuer made of a host and the token's pool id, as well as
+`IssuerDomain`, so a token issued through one host name works when another one sends it back. The
+signature is checked as usual. The default is `false`.
+
+```json
+{ "TokenConfig": { "IssuerFromRequest": true } }
+```
+
+The scheme is `http` unless the emulator serves HTTPS itself; `X-Forwarded-*` headers are not read.
+
 ## Access tokens
 
 Every operation that takes an `AccessToken` (`GetUser`, `UpdateUserAttributes`, `DeleteUser`,

@@ -5,7 +5,7 @@ import { identityProvidersOf } from "../oauth2/federation";
 import { COGNITO_PROVIDER } from "../oauth2/oauthRequest";
 import type { Services } from "../services";
 import type { AppClient } from "../services/appClient";
-import type { Context } from "../services/context";
+import { type Context, requestContext } from "../services/context";
 import type { UserPool } from "../services/userPoolService";
 import { adminUrl, chips, html, layout, type SafeHtml } from "./html";
 import { inspectToken, type TokenInspection } from "./tokens";
@@ -34,7 +34,8 @@ export interface TokenExchangeResult {
 const str = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
-const ctxOf = (req: Request): Context => ({ logger: req.log });
+const ctxOf = (req: Request, services: Services): Context =>
+  requestContext(req, services.config?.TokenConfig);
 
 export const callbackUrlOf = (req: Request) =>
   `${req.protocol}://${req.get("host")}${adminUrl("callback")}`;
@@ -202,12 +203,16 @@ export const createCallbackRouter = (services: Services): express.Router => {
       .set("Cache-Control", "no-store")
       .send(layout({ title, active: "callback", body }));
 
-  const inspect = (token: unknown, choice: ClientChoice | undefined) =>
+  const inspect = (
+    ctx: Context,
+    token: unknown,
+    choice: ClientChoice | undefined,
+  ) =>
     typeof token === "string"
       ? inspectToken(token, {
           jwks: [PublicKey.jwk],
           expectedIssuer: choice
-            ? `${services.config.TokenConfig?.IssuerDomain}/${choice.pool.Id}`
+            ? `${ctx.issuerDomain ?? services.config.TokenConfig?.IssuerDomain}/${choice.pool.Id}`
             : undefined,
           clientIds: choice ? [choice.client.ClientId] : undefined,
           now: services.clock.get(),
@@ -215,7 +220,7 @@ export const createCallbackRouter = (services: Services): express.Router => {
       : undefined;
 
   router.get("/", async (req, res) => {
-    const ctx = ctxOf(req);
+    const ctx = ctxOf(req, services);
     const query = Object.fromEntries(
       ["code", "state", "error", "error_description"]
         .map((k) => [k, str(req.query[k])])
@@ -252,7 +257,7 @@ export const createCallbackRouter = (services: Services): express.Router => {
   });
 
   router.get("/start", async (req, res) => {
-    const ctx = ctxOf(req);
+    const ctx = ctxOf(req, services);
     const clientId = str(req.query.client_id);
     const choice = (await oauthClients(ctx)).find(
       (c) => c.client.ClientId === clientId,
@@ -319,7 +324,7 @@ export const createCallbackRouter = (services: Services): express.Router => {
   });
 
   router.post("/exchange", async (req, res) => {
-    const ctx = ctxOf(req);
+    const ctx = ctxOf(req, services);
     const body = req.body as Record<string, unknown>;
     const clientId = str(body.client_id);
     const code = str(body.code);
@@ -354,8 +359,8 @@ export const createCallbackRouter = (services: Services): express.Router => {
       result = {
         status: response.status,
         body: json,
-        idToken: inspect(json.id_token, choice),
-        accessToken: inspect(json.access_token, choice),
+        idToken: inspect(ctx, json.id_token, choice),
+        accessToken: inspect(ctx, json.access_token, choice),
         refreshToken: typeof json.refresh_token === "string",
       };
     } catch (e) {

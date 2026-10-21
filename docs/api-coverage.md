@@ -195,7 +195,7 @@ ListUserPoolClientSecrets return everything in one response.
 | `/oauth2/revoke` | POST | Revokes a refresh token and the access tokens issued from it. |
 | `/logout` | GET | Takes `client_id` and `logout_uri` and redirects to `logout_uri` when it is one of the client's `LogoutURLs`. The `redirect_uri` + `response_type` form is not supported. |
 | `/{poolId}/.well-known/jwks.json` | GET | JSON Web Key Set. Every pool uses the same signing key. |
-| `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`. |
+| `/{poolId}/.well-known/openid-configuration` | GET | OIDC discovery document, based on `TokenConfig.IssuerDomain`, or on the request's scheme and `Host` header with `TokenConfig.IssuerFromRequest`. |
 | `/oauth2/idpresponse` | GET, POST | Return leg of a federated sign-in. |
 
 The built-in login form checks the password, then follows the user's state:
