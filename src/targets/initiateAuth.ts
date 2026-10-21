@@ -8,6 +8,7 @@ import {
   InvalidParameterError,
   NotAuthorizedError,
   PasswordResetRequiredError,
+  TokenErrorMessages,
   UnsupportedError,
   UserNotConfirmedException,
 } from "../errors";
@@ -232,11 +233,14 @@ const userPasswordAuthFlow = async (
   if (user.UserStatus === "RESET_REQUIRED") {
     throw new PasswordResetRequiredError();
   }
-  if (user.UserStatus === "FORCE_CHANGE_PASSWORD") {
-    return newPasswordChallenge(user);
-  }
   if (user.Password !== req.AuthParameters.PASSWORD) {
     throw new NotAuthorizedError("Incorrect username or password.");
+  }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
+  }
+  if (user.UserStatus === "FORCE_CHANGE_PASSWORD") {
+    return newPasswordChallenge(user);
   }
   if (user.UserStatus === "UNCONFIRMED") {
     throw new UserNotConfirmedException();
@@ -345,6 +349,9 @@ const userSrpAuthFlow = async (
   if (!user) {
     throw new NotAuthorizedError();
   }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
+  }
 
   if (user.UserStatus === "RESET_REQUIRED") {
     throw new PasswordResetRequiredError();
@@ -383,6 +390,9 @@ const customAuthFlow = async (
   );
   if (!user) {
     throw new NotAuthorizedError();
+  }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
 
   return startCustomAuth(ctx, services, {

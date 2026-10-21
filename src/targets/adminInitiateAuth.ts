@@ -7,6 +7,7 @@ import {
   InvalidParameterError,
   NotAuthorizedError,
   PasswordResetRequiredError,
+  TokenErrorMessages,
   UnsupportedError,
   UserNotConfirmedException,
 } from "../errors";
@@ -85,6 +86,9 @@ const adminUserPasswordAuthFlow = async (
 
   if (user.Password !== req.AuthParameters.PASSWORD) {
     throw new NotAuthorizedError("Incorrect username or password.");
+  }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
 
   if (user.UserStatus === "UNCONFIRMED") {
@@ -230,6 +234,9 @@ const userSrpAuthFlow = async (
   if (!user || !userPoolClient) {
     throw new NotAuthorizedError();
   }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
+  }
   if (user.UserStatus === "RESET_REQUIRED") {
     throw new PasswordResetRequiredError();
   }
@@ -269,6 +276,9 @@ const customAuthFlow = async (
   );
   if (!user) {
     throw new NotAuthorizedError();
+  }
+  if (!user.Enabled) {
+    throw new NotAuthorizedError(TokenErrorMessages.userDisabled);
   }
   const userPoolClient = await services.cognito.getAppClient(ctx, req.ClientId);
   if (!userPoolClient) throw new NotAuthorizedError();

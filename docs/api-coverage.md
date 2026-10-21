@@ -42,6 +42,11 @@ ConfirmForgotPassword, AdminResetUserPassword, GlobalSignOut, AdminUserGlobalSig
 | `CUSTOM_AUTH` | both | Runs DefineAuthChallenge, CreateAuthChallenge and VerifyAuthChallengeResponse over several rounds, keeps the challenge history, issues a new `Session` after a wrong answer, and accepts `SRP_A` + `PASSWORD_VERIFIER` before the custom challenge, checking the password as `USER_SRP_AUTH` does: a wrong one ends the sign-in with `NotAuthorizedException` before DefineAuthChallenge runs again. Sessions are in memory and expire after the client's `AuthSessionValidity`. |
 | `USER_AUTH` | | Not supported. |
 
+Every flow refuses a disabled user with `NotAuthorizedException` ("User is disabled."). The password
+flows check the password first, so a wrong password still returns "Incorrect username or password.".
+A `FORCE_CHANGE_PASSWORD` user gets the `NEW_PASSWORD_REQUIRED` challenge only after the temporary
+password matches.
+
 Challenges answered by RespondToAuthChallenge: `CUSTOM_CHALLENGE`, `PASSWORD_VERIFIER`, `SMS_MFA`,
 `SOFTWARE_TOKEN_MFA`, `SELECT_MFA_TYPE`, `NEW_PASSWORD_REQUIRED` and `MFA_SETUP`.
 AdminRespondToAuthChallenge answers the same set except `SELECT_MFA_TYPE`.

@@ -345,6 +345,32 @@ describe("AdminInitiateAuth target", () => {
     });
   });
 
+  describe("when the user is disabled", () => {
+    const user = TDB.user({ Enabled: false });
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+    });
+
+    it.each([
+      [
+        "ADMIN_USER_PASSWORD_AUTH",
+        { USERNAME: user.Username, PASSWORD: user.Password },
+      ],
+      ["USER_SRP_AUTH", { USERNAME: user.Username, SRP_A: "abc123" }],
+      ["CUSTOM_AUTH", { USERNAME: user.Username }],
+    ])("rejects %s with User is disabled.", async (authFlow, params) => {
+      await expect(
+        adminInitiateAuth(TestContext, {
+          AuthFlow: authFlow as "ADMIN_USER_PASSWORD_AUTH",
+          ClientId: userPoolClient.ClientId,
+          UserPoolId: userPoolClient.UserPoolId,
+          AuthParameters: params,
+        }),
+      ).rejects.toEqual(new NotAuthorizedError("User is disabled."));
+    });
+  });
+
   describe("USER_SRP_AUTH", () => {
     it("returns a PASSWORD_VERIFIER challenge a client with the password can answer", async () => {
       const user = TDB.user({ Password: "Example-Passw0rd!" });

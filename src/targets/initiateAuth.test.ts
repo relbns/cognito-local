@@ -647,13 +647,28 @@ describe("InitiateAuth target", () => {
         mockUserPoolService.getUserByUsername.mockResolvedValue(user);
       });
 
+      it("rejects a wrong temporary password", async () => {
+        await expect(
+          initiateAuth(TestContext, {
+            ClientId: userPoolClient.ClientId,
+            AuthFlow: "USER_PASSWORD_AUTH",
+            AuthParameters: {
+              USERNAME: user.Username,
+              PASSWORD: "bad-password",
+            },
+          }),
+        ).rejects.toEqual(
+          new NotAuthorizedError("Incorrect username or password."),
+        );
+      });
+
       it("responds with a NEW_PASSWORD_REQUIRED challenge", async () => {
         const response = await initiateAuth(TestContext, {
           ClientId: userPoolClient.ClientId,
           AuthFlow: "USER_PASSWORD_AUTH",
           AuthParameters: {
             USERNAME: user.Username,
-            PASSWORD: "bad-password",
+            PASSWORD: user.Password,
           },
         });
 
@@ -686,6 +701,43 @@ describe("InitiateAuth target", () => {
           expect(mockTriggers.postAuthentication).not.toHaveBeenCalled();
         });
       });
+    });
+  });
+
+  describe("when the user is disabled", () => {
+    const user = TDB.user({ Enabled: false });
+
+    beforeEach(() => {
+      mockUserPoolService.getUserByUsername.mockResolvedValue(user);
+    });
+
+    it.each([
+      [
+        "USER_PASSWORD_AUTH",
+        { USERNAME: user.Username, PASSWORD: user.Password },
+      ],
+      ["USER_SRP_AUTH", { USERNAME: user.Username, SRP_A: "abc123" }],
+      ["CUSTOM_AUTH", { USERNAME: user.Username }],
+    ])("rejects %s with User is disabled.", async (authFlow, params) => {
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: authFlow as "USER_PASSWORD_AUTH",
+          AuthParameters: params,
+        }),
+      ).rejects.toEqual(new NotAuthorizedError("User is disabled."));
+    });
+
+    it("still answers a wrong password with Incorrect username or password.", async () => {
+      await expect(
+        initiateAuth(TestContext, {
+          ClientId: userPoolClient.ClientId,
+          AuthFlow: "USER_PASSWORD_AUTH",
+          AuthParameters: { USERNAME: user.Username, PASSWORD: "bad-password" },
+        }),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Incorrect username or password."),
+      );
     });
   });
 
