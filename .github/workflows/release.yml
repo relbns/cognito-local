@@ -37,11 +37,11 @@ jobs:
             exit 1
           fi
 
-      - name: Use npm 11 (11.5.1 or later) for trusted publishing
+      - name: Use npm 11 (11.15.0 or later) for staged publishing
         run: |
           npm install -g npm@11
           npm --version
-          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)"
+          node -e 'const [a,b]=process.argv[1].split(".").map(Number); process.exit(a===11&&b>=15?0:1)' "$(npm --version)"
 
       - run: npm ci
 
@@ -49,7 +49,7 @@ jobs:
 
       - run: npm test -- --run
 
-      - name: Publish unless this version is already on npm
+      - name: Stage the version for a maintainer's 2FA approval, unless it is already on npm
         run: |
           name="$(node -p 'require("./package.json").name')"
           version="$(node -p 'require("./package.json").version')"
@@ -61,18 +61,32 @@ jobs:
             *-*) dist_tag=next ;;
             *) dist_tag=latest ;;
           esac
-          npm publish --provenance --access public --tag "$dist_tag"
+          npm stage publish --provenance --access public --tag "$dist_tag"
 
   github-release:
     runs-on: ubuntu-latest
     name: GitHub release
     needs: npm
-    timeout-minutes: 5
+    timeout-minutes: 125
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Wait until a maintainer approves the staged version on npm
+        run: |
+          name="$(node -p 'require("./package.json").name')"
+          version="$(node -p 'require("./package.json").version')"
+          for _ in $(seq 240); do
+            if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+              echo "$name@$version is on npm"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::$name@$version was not approved within 2 hours. Approve it, then re-run this job."
+          exit 1
 
       - name: Create the release with its CHANGELOG.md section
         env:
