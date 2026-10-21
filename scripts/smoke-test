@@ -14,7 +14,7 @@ do
   continue
 done
 
-PORT=$PORT yarn start &
+PORT=$PORT npm start &
 PID=$!
 
 trap "kill $PID" SIGINT
