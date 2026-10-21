@@ -161,13 +161,29 @@ Passkey sign-in needs the `USER_AUTH` flow, which is not supported.
 
 | Operation | Behaviour |
 | --- | --- |
-| CreateUserImportJob | Stores a job with a placeholder `PreSignedUrl` that accepts no upload. |
-| StartUserImportJob | Marks the job `Succeeded` without importing any user. |
-| StopUserImportJob | Marks the job `Stopped`. |
+| CreateUserImportJob | Creates a job in `Created` with a `PreSignedUrl` on the emulator (`PUT /_import/<pool>/<job>?X-Amz-Signature=<secret>`, built from `TokenConfig.IssuerDomain`). A `PUT` of the CSV to that URL stores it on the job, as an upload to S3 does; a wrong signature, or an upload after the job started, gets 403. Files up to 100 MB. |
+| StartUserImportJob | Imports the uploaded CSV and answers with the job in `Pending`, as Cognito does. The import runs before the response, so the next DescribeUserImportJob shows `Succeeded` or `Failed` with `ImportedUsers`, `FailedUsers` and `CompletionMessage`. Only a job in `Created` can start. |
+| StopUserImportJob | Marks a job that has not finished `Stopped`. |
 | DescribeUserImportJob, ListUserImportJobs | Read the stored jobs. |
-| GetCSVHeader | Returns the CSV header Cognito expects. |
+| GetCSVHeader | Returns Cognito's header: the standard attributes, the pool's `custom:` attributes, `cognito:mfa_enabled` and `cognito:username`. |
 
-To load users, use a [seed file](seed-files.md) or AdminCreateUser.
+The import follows Cognito's CSV rules. The header names known columns in any order and must have
+`cognito:username` and `cognito:mfa_enabled`; an unknown or repeated column, a missing upload or an
+empty file fails the whole job. Each record becomes a user in `RESET_REQUIRED` with no password, so
+sign-in returns `PasswordResetRequiredException` until ForgotPassword and ConfirmForgotPassword
+set one. `cognito:mfa_enabled` `TRUE` turns on SMS MFA and needs `phone_number`. When the pool signs
+in with email, the username is a generated `sub` and the email comes from `email` (or from
+`cognito:username` when it is an address). No trigger runs.
+
+A record fails, and the others still import, when it has the wrong number of fields, a
+`cognito:mfa_enabled` or `*_verified` value other than `TRUE`/`FALSE`, a malformed email, phone
+number or `updated_at`, a missing required attribute, an existing username or alias, a username
+repeated in the file, or none of the pool's `AutoVerifiedAttributes` marked verified. Each failure
+is logged as `[ERROR] Line Number <n> - <reason>`, in place of the CloudWatch log. When every record
+fails the job ends `Failed` with "Too many users have failed or been skipped during the import.";
+otherwise it ends `Succeeded` with "Import Job Completed Successfully.". `SkippedUsers` stays 0.
+
+To load users with passwords, use a [seed file](seed-files.md) or AdminCreateUser.
 
 ## Tags, terms, risk and logging
 

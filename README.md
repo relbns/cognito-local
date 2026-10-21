@@ -483,8 +483,8 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - The `USER_AUTH` (choice-based) flow, and with it passkey sign-in.
 - Device tracking (`NewDeviceMetadata`, device challenges) and the `MFA_SETUP` challenge.
 - Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
-- Some operations only store their input: user import jobs import nothing, and risk, log delivery,
-  branding and terms settings have no effect.
+- Some operations only store their input: risk, log delivery, branding and terms settings have no
+  effect.
 - The built-in login page is a plain form without Cognito's styling. It refuses disabled users, asks
   for a new password and for SMS or TOTP MFA codes, and runs PostAuthentication, but has no sign-up,
   forgot-password or MFA setup pages.

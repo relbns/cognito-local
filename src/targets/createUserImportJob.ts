@@ -1,9 +1,17 @@
+import { randomBytes } from "node:crypto";
 import type {
   CreateUserImportJobRequest,
   CreateUserImportJobResponse,
 } from "@aws-sdk/client-cognito-identity-provider";
 import * as uuid from "uuid";
 import type { Services } from "../services";
+import {
+  importJobsOf,
+  type StoredUserImportJob,
+  saveImportJobs,
+  toUserImportJob,
+  userImportUrl,
+} from "../services/userImport";
 import type { Target } from "./Target";
 
 export type CreateUserImportJobTarget = Target<
@@ -15,31 +23,39 @@ export const CreateUserImportJob =
   ({
     cognito,
     clock,
-  }: Pick<Services, "cognito" | "clock">): CreateUserImportJobTarget =>
+    config,
+  }: Pick<
+    Services,
+    "cognito" | "clock" | "config"
+  >): CreateUserImportJobTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
-    const now = clock.get();
+    const jobId = `import-${uuid.v4().replace(/-/g, "").slice(0, 10)}`;
+    const uploadToken = randomBytes(24).toString("hex");
 
-    const job = {
+    const job: StoredUserImportJob = {
       JobName: req.JobName,
-      JobId: uuid.v4(),
+      JobId: jobId,
       UserPoolId: req.UserPoolId,
-      PreSignedUrl: `https://cognito-local.example.com/import/${uuid.v4()}`,
-      CreationDate: now,
-      Status: "Created" as const,
+      PreSignedUrl: userImportUrl(
+        config.TokenConfig.IssuerDomain ?? "http://localhost:9229",
+        req.UserPoolId,
+        jobId,
+        uploadToken,
+      ),
+      CreationDate: clock.get(),
+      Status: "Created",
       CloudWatchLogsRoleArn: req.CloudWatchLogsRoleArn,
       ImportedUsers: 0,
       SkippedUsers: 0,
       FailedUsers: 0,
+      _uploadToken: uploadToken,
     };
 
-    const jobs = ((userPool.options as any)._importJobs as any[]) ?? [];
-    jobs.push(job);
+    await saveImportJobs(ctx, userPool, [
+      ...importJobsOf(userPool.options),
+      job,
+    ]);
 
-    await userPool.updateOptions(ctx, {
-      ...userPool.options,
-      _importJobs: jobs,
-    } as any);
-
-    return { UserImportJob: job };
+    return { UserImportJob: toUserImportJob(job) };
   };

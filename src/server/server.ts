@@ -19,6 +19,7 @@ import { AuthorizationCodeStore } from "../oauth2/authorizationCodeStore";
 import { attachOAuth2Routes } from "../oauth2/routes";
 import type { Services } from "../services";
 import type { Router } from "./Router";
+import { attachUserImportRoutes } from "./userImportRoutes";
 
 export type ServerOptions = {
   port?: number;
@@ -60,6 +61,7 @@ export const createServer = (
       origin: "*",
     }),
   );
+  if (services) attachUserImportRoutes(app, services);
   app.use(
     bodyParser.json({
       type: "application/x-amz-json-1.1",
