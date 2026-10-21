@@ -1,6 +1,4 @@
 import type { TimeUnitsType } from "@aws-sdk/client-cognito-identity-provider";
-import type { StringMap } from "aws-lambda/trigger/cognito-user-pool-trigger/_common";
-import type { GroupOverrideDetails } from "aws-lambda/trigger/cognito-user-pool-trigger/pre-token-generation";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import * as uuid from "uuid";
 import { InvalidParameterError } from "../errors";
@@ -8,12 +6,20 @@ import PrivateKey from "../keys/cognitoLocal.private.json";
 import { identitiesClaim } from "../oauth2/federation";
 import type { AppClient } from "./appClient";
 import type { Clock } from "./clock";
+import type { CognitoService } from "./cognitoService";
 import type { Context } from "./context";
+import {
+  applyGroupClaims,
+  applyPreTokenGenerationResponse,
+  type Claims,
+  groupConfigurationFor,
+} from "./tokenCustomization";
 import type { Triggers } from "./triggers";
 import {
   attributesToRecord,
   attributeValue,
   customAttributes,
+  type Group,
   type User,
 } from "./userPoolService";
 
@@ -38,32 +44,6 @@ export interface Token {
   origin_jti?: string;
   exp?: number;
 }
-
-interface TokenOverrides {
-  claimsToAddOrOverride?: StringMap | undefined;
-  claimsToSuppress?: string[] | undefined;
-  groupOverrideDetails?: GroupOverrideDetails | undefined;
-}
-
-const RESERVED_CLAIMS = [
-  "acr",
-  "amr",
-  "aud",
-  "at_hash",
-  "auth_time",
-  "azp",
-  "cognito:username",
-  "exp",
-  "iat",
-  "identities",
-  "iss",
-  "jti",
-  "nbf",
-  "nonce",
-  "origin_jti",
-  "sub",
-  "token_use",
-];
 
 type RawToken = Record<
   string,
@@ -107,27 +87,6 @@ function standardClaims(user: User): RawToken {
   if (identities) claims.identities = identities;
   return claims;
 }
-
-const applyTokenOverrides = (
-  token: RawToken,
-  overrides: TokenOverrides,
-): RawToken => {
-  // TODO: support group overrides
-
-  const claimsToSuppress = (overrides?.claimsToSuppress ?? []).filter(
-    (claim) => !RESERVED_CLAIMS.includes(claim),
-  );
-
-  const claimsToOverride = Object.entries(
-    overrides?.claimsToAddOrOverride ?? [],
-  ).filter(([claim]) => !RESERVED_CLAIMS.includes(claim));
-
-  return Object.fromEntries(
-    [...Object.entries(token), ...claimsToOverride].filter(
-      ([claim]) => !claimsToSuppress.includes(claim),
-    ),
-  );
-};
 
 export interface Tokens {
   readonly AccessToken: string;
@@ -229,19 +188,47 @@ export const assertTokenValidity = (
   }
 };
 
+/** The groups of a user pool, for the role claims of ID tokens. */
+export type GroupLookup = (
+  ctx: Context,
+  userPoolId: string,
+) => Promise<readonly Group[]>;
+
+export const poolGroups =
+  (cognito: Pick<CognitoService, "getUserPool">): GroupLookup =>
+  async (ctx, userPoolId) =>
+    (await cognito.getUserPool(ctx, userPoolId)).listGroups(ctx);
+
 export class JwtTokenGenerator implements TokenGenerator {
   private readonly clock: Clock;
   private readonly triggers: Triggers;
   private readonly tokenConfig: TokenConfig;
+  private readonly groupLookup: GroupLookup | undefined;
 
   public constructor(
     clock: Clock,
     triggers: Triggers,
     tokenConfig: TokenConfig,
+    groupLookup?: GroupLookup,
   ) {
     this.clock = clock;
     this.triggers = triggers;
     this.tokenConfig = tokenConfig;
+    this.groupLookup = groupLookup;
+  }
+
+  private async groupsOf(
+    ctx: Context,
+    userPoolId: string,
+    userGroups: readonly string[],
+  ): Promise<Pick<Group, "GroupName" | "RoleArn" | "Precedence">[]> {
+    const poolGroups = this.groupLookup
+      ? await this.groupLookup(ctx, userPoolId)
+      : [];
+    return userGroups.map(
+      (name) =>
+        poolGroups.find((g) => g.GroupName === name) ?? { GroupName: name },
+    );
   }
 
   public async generate(
@@ -278,7 +265,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       token_use: "access",
       username: user.Username,
     };
-    let idToken: RawToken = {
+    const idToken: RawToken = {
       ...standardClaims(user),
       "cognito:username": user.Username,
       auth_time: authTime,
@@ -294,30 +281,42 @@ export class JwtTokenGenerator implements TokenGenerator {
       ...attributesToRecord(customAttributes(user.Attributes)),
     };
 
-    if (userGroups.length) {
-      accessToken["cognito:groups"] = userGroups;
-      idToken["cognito:groups"] = userGroups;
-    }
+    const groupConfiguration = groupConfigurationFor(
+      await this.groupsOf(ctx, userPoolClient.UserPoolId, userGroups),
+    );
+    applyGroupClaims(idToken, accessToken, groupConfiguration);
 
+    let claims: { idToken: Claims; accessToken: Claims } = {
+      idToken,
+      accessToken,
+    };
     if (
       this.triggers.enabled("PreTokenGeneration", userPoolClient.UserPoolId)
     ) {
-      const result = await this.triggers.preTokenGeneration(ctx, {
+      const version =
+        this.triggers.preTokenGenerationVersion(userPoolClient.UserPoolId) ??
+        "1";
+      const response = await this.triggers.preTokenGeneration(ctx, {
         clientId: userPoolClient.ClientId,
         clientMetadata,
         source,
+        version,
         userAttributes: user.Attributes,
         username: user.Username,
-        groupConfiguration: {
-          // TODO: this should be populated from the user's groups
-          groupsToOverride: undefined,
-          iamRolesToOverride: undefined,
-          preferredRole: undefined,
-        },
+        groupConfiguration,
+        scopes: String(accessToken.scope).split(" "),
         userPoolId: userPoolClient.UserPoolId,
       });
-
-      idToken = applyTokenOverrides(idToken, result.claimsOverrideDetails);
+      const customized = applyPreTokenGenerationResponse(
+        version,
+        response,
+        claims,
+        userPoolClient.ClientId,
+      );
+      claims = {
+        idToken: customized.idToken ?? idToken,
+        accessToken: customized.accessToken,
+      };
     }
 
     const issuer = `${this.tokenConfig.IssuerDomain}/${userPoolClient.UserPoolId}`;
@@ -328,13 +327,13 @@ export class JwtTokenGenerator implements TokenGenerator {
     );
 
     return {
-      AccessToken: jwt.sign(accessToken, PrivateKey.pem, {
+      AccessToken: jwt.sign(claims.accessToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
         expiresIn: accessTokenSeconds,
         keyid: "CognitoLocal",
       } satisfies SignOptions),
-      IdToken: jwt.sign(idToken, PrivateKey.pem, {
+      IdToken: jwt.sign(claims.idToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
         expiresIn: tokenValiditySeconds(userPoolClient, "IdToken"),

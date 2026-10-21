@@ -11,6 +11,7 @@ export const newMockTriggers = (): MockedObject<Triggers> => ({
   postConfirmation: vi.fn(),
   preSignUp: vi.fn(),
   preTokenGeneration: vi.fn(),
+  preTokenGenerationVersion: vi.fn().mockReturnValue("1"),
   userMigration: vi.fn(),
   verifyAuthChallengeResponse: vi.fn(),
 });

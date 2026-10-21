@@ -3,6 +3,10 @@ import type { CognitoService } from "../cognitoService";
 import type { CryptoService } from "../crypto";
 import type { Lambda } from "../lambda";
 import {
+  type PreTokenGenerationVersion,
+  preTokenGenerationVersion,
+} from "../tokenCustomization";
+import {
   CreateAuthChallenge,
   type CreateAuthChallengeTrigger,
 } from "./createAuthChallenge";
@@ -56,12 +60,15 @@ export interface Triggers {
   postConfirmation: PostConfirmationTrigger;
   preSignUp: PreSignUpTrigger;
   preTokenGeneration: PreTokenGenerationTrigger;
+  /** The pre token generation event version that the user pool is configured for. */
+  preTokenGenerationVersion(userPoolId: string): PreTokenGenerationVersion;
   userMigration: UserMigrationTrigger;
   verifyAuthChallengeResponse: VerifyAuthChallengeResponseTrigger;
 }
 
 export class TriggersService implements Triggers {
   private readonly lambda: Lambda;
+  private readonly cognitoClient: CognitoService;
 
   public readonly createAuthChallenge: CreateAuthChallengeTrigger;
   public readonly customMessage: CustomMessageTrigger;
@@ -81,6 +88,7 @@ export class TriggersService implements Triggers {
     crypto: CryptoService,
   ) {
     this.lambda = lambda;
+    this.cognitoClient = cognitoClient;
 
     this.createAuthChallenge = CreateAuthChallenge({ lambda });
     this.customEmailSender = CustomEmailSender({ lambda, crypto });
@@ -96,5 +104,13 @@ export class TriggersService implements Triggers {
 
   public enabled(trigger: SupportedTriggers, userPoolId?: string): boolean {
     return this.lambda.enabled(trigger, userPoolId);
+  }
+
+  public preTokenGenerationVersion(
+    userPoolId: string,
+  ): PreTokenGenerationVersion {
+    return preTokenGenerationVersion(
+      this.cognitoClient.peekUserPool(userPoolId)?.LambdaConfig,
+    );
   }
 }

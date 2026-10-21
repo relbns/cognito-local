@@ -27,6 +27,11 @@ import {
   isFileTarget,
   parseFileTarget,
 } from "./fileTrigger";
+import type {
+  GroupConfiguration,
+  PreTokenGenerationResponse,
+  PreTokenGenerationVersion,
+} from "./tokenCustomization";
 
 type CognitoUserPoolEvent =
   | CreateAuthChallengeTriggerEvent
@@ -37,9 +42,23 @@ type CognitoUserPoolEvent =
   | PostConfirmationTriggerEvent
   | PreAuthenticationTriggerEvent
   | PreSignUpTriggerEvent
-  | PreTokenGenerationTriggerEvent
+  | PreTokenGenerationLambdaEvent
   | UserMigrationTriggerEvent
   | VerifyAuthChallengeResponseTriggerEvent;
+
+type PreTokenGenerationLambdaEvent = Omit<
+  PreTokenGenerationTriggerEvent,
+  "triggerSource" | "request" | "response"
+> & {
+  triggerSource: PreTokenGenerationEvent["triggerSource"];
+  request: {
+    userAttributes: Record<string, string>;
+    groupConfiguration: GroupConfiguration | null;
+    clientMetadata: Record<string, string> | undefined;
+    scopes?: readonly string[];
+  };
+  response: PreTokenGenerationResponse;
+};
 
 interface EventCommonParameters {
   clientId: string;
@@ -104,30 +123,17 @@ interface PreTokenGenerationEvent extends EventCommonParameters {
   triggerSource:
     | "TokenGeneration_AuthenticateDevice"
     | "TokenGeneration_Authentication"
+    | "TokenGeneration_ClientCredentials"
     | "TokenGeneration_HostedAuth"
     | "TokenGeneration_NewPasswordChallenge"
     | "TokenGeneration_RefreshTokens";
 
-  /**
-   * The input object containing the current group configuration. It includes groupsToOverride, iamRolesToOverride, and
-   * preferredRole.
-   */
-  groupConfiguration: {
-    /**
-     * A list of the group names that are associated with the user that the identity token is issued for.
-     */
-    groupsToOverride: readonly string[] | undefined;
+  groupConfiguration: GroupConfiguration | null;
 
-    /**
-     * A list of the current IAM roles associated with these groups.
-     */
-    iamRolesToOverride: readonly string[] | undefined;
+  /** Sent in event version 2 and later. */
+  scopes: readonly string[];
 
-    /**
-     * A string indicating the preferred IAM role.
-     */
-    preferredRole: string | undefined;
-  };
+  version: PreTokenGenerationVersion;
 }
 
 interface PostAuthenticationEvent extends EventCommonParameters {
@@ -168,8 +174,7 @@ export type CustomMessageTriggerResponse =
 export type UserMigrationTriggerResponse =
   UserMigrationTriggerEvent["response"];
 export type PreSignUpTriggerResponse = PreSignUpTriggerEvent["response"];
-export type PreTokenGenerationTriggerResponse =
-  PreTokenGenerationTriggerEvent["response"];
+export type PreTokenGenerationTriggerResponse = PreTokenGenerationResponse;
 export type PostAuthenticationTriggerResponse =
   PostAuthenticationTriggerEvent["response"];
 export type PostConfirmationTriggerResponse =
@@ -536,11 +541,13 @@ export class LambdaService implements Lambda {
 
       case "TokenGeneration_AuthenticateDevice":
       case "TokenGeneration_Authentication":
+      case "TokenGeneration_ClientCredentials":
       case "TokenGeneration_HostedAuth":
       case "TokenGeneration_NewPasswordChallenge":
       case "TokenGeneration_RefreshTokens": {
+        const v1 = event.version === "1";
         return {
-          version,
+          version: event.version,
           callerContext,
           region,
           userPoolId: event.userPoolId,
@@ -548,12 +555,13 @@ export class LambdaService implements Lambda {
           userName: event.username,
           request: {
             userAttributes: event.userAttributes,
-            groupConfiguration: {},
+            groupConfiguration: event.groupConfiguration,
+            ...(v1 ? {} : { scopes: event.scopes }),
             clientMetadata: event.clientMetadata,
           },
-          response: {
-            claimsOverrideDetails: {},
-          },
+          response: v1
+            ? { claimsOverrideDetails: {} }
+            : { claimsAndScopeOverrideDetails: null },
         };
       }
 

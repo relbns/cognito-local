@@ -49,6 +49,46 @@ The sessions are stored on the user record in the pool's data file, so revocatio
 restart. Tokens issued before this version have no `origin_jti`: their access tokens are refused as
 revoked, and their refresh tokens still work and start a tracked session.
 
+## Pre token generation
+
+The trigger runs before every token issue. Its event `version` follows the pool's
+`LambdaConfig.PreTokenGenerationConfig.LambdaVersion`: `"1"` for `V1_0` or when only
+`PreTokenGeneration` is set, `"2"` for `V2_0`, `"3"` for `V3_0`.
+
+`request.groupConfiguration` holds the user's groups (`groupsToOverride`), the role ARNs of those
+groups (`iamRolesToOverride`) and `preferredRole`: the role of the group with the lowest `Precedence`,
+or `null` when groups of equal precedence have different roles. Version 2 and 3 events add
+`request.scopes`, the scopes of the access token.
+
+| Response (version) | Effect |
+| --- | --- |
+| `claimsOverrideDetails.claimsToAddOrOverride`, `claimsToSuppress` (1) | ID token claims |
+| `claimsAndScopeOverrideDetails.idTokenGeneration` (2, 3) | ID token claims; values can be strings, numbers, booleans, arrays and objects |
+| `claimsAndScopeOverrideDetails.accessTokenGeneration` (2, 3) | Access token claims, plus `scopesToAdd` and `scopesToSuppress` for the `scope` claim |
+| `groupOverrideDetails` (all) | Replaces `cognito:groups` in both tokens and `cognito:roles`, `cognito:preferred_role` in the ID token. `null` or `{}` removes them; leaving the key out keeps them |
+
+A version 1 response in a version 2 or 3 event, and the reverse, is ignored. A claim that is both
+suppressed and overridden is suppressed. Suppressing `cognito:groups` also removes `cognito:roles`
+and `cognito:preferred_role`. The rules follow Cognito's claims reference; a change the rules refuse
+is dropped without an error:
+
+- Never changed: `sub`, `username`, `cognito:username` and every other `cognito:` claim (groups go
+  through `groupOverrideDetails`), `identities`, `client_id`, `event_id`, `device_key`, `version`,
+  `acr`, `amr`, `at_hash`, `auth_time`, `azp`, `exp`, `iat`, `iss`, `jti`, `nbf`, `nonce`,
+  `origin_jti`, `token_use`.
+- `aud`: never in the ID token; in the access token only with the app client id as value.
+- `scope`: only through `scopesToAdd` and `scopesToSuppress`. A scope with a space is not added. When
+  every scope is suppressed the access token has no `scope` claim.
+- `dev:` attributes can be suppressed but not added.
+- `email_verified`, `phone_number_verified`, `updated_at` and `address` take no object or array value
+  in the ID token.
+
+Version 3 also runs for the `client_credentials` grant (see
+[oauth-callback.md](oauth-callback.md#client-credentials)).
+
+ID tokens carry `cognito:roles` and `cognito:preferred_role` when the user's groups have a `RoleArn`,
+with or without the trigger.
+
 ## Validity
 
 Issued tokens use the app client's `AccessTokenValidity`, `IdTokenValidity`, `RefreshTokenValidity`

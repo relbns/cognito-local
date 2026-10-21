@@ -225,7 +225,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | PreSignUp | SignUp, and the first federated sign-in (`PreSignUp_ExternalProvider`) |
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
-| PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
+| PreTokenGeneration | Every token issue. Sends the event version set in `PreTokenGenerationConfig.LambdaVersion` (`V1_0`, `V2_0`, `V3_0`) with the user's groups and roles; version 2 and 3 responses customize the ID token, the access token and its scopes. See [tokens.md](tokens.md#pre-token-generation). |
 | UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`) |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA |

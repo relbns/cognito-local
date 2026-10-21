@@ -179,6 +179,124 @@ describe("JwtTokenGenerator", () => {
     });
   });
 
+  describe("groups and event versions", () => {
+    const groups = [
+      TDB.group({ GroupName: "admins", RoleArn: "role-admins", Precedence: 1 }),
+      TDB.group({
+        GroupName: "readers",
+        RoleArn: "role-readers",
+        Precedence: 5,
+      }),
+    ];
+    let generator: TokenGenerator;
+
+    beforeEach(() => {
+      generator = new JwtTokenGenerator(
+        clock,
+        mockTriggers,
+        { IssuerDomain: "http://example.com" },
+        async () => groups,
+      );
+    });
+
+    it("puts the group roles in the ID token and the groups in both tokens", async () => {
+      mockTriggers.enabled.mockReturnValue(false);
+
+      const tokens = await generator.generate(
+        TestContext,
+        user,
+        ["admins", "readers"],
+        TDB.appClient(),
+        undefined,
+        "Authentication",
+      );
+
+      expect(jwt.decode(tokens.IdToken)).toMatchObject({
+        "cognito:groups": ["admins", "readers"],
+        "cognito:roles": ["role-admins", "role-readers"],
+        "cognito:preferred_role": "role-admins",
+      });
+      const access = jwt.decode(tokens.AccessToken) as Record<string, unknown>;
+      expect(access["cognito:groups"]).toEqual(["admins", "readers"]);
+      expect(access).not.toHaveProperty("cognito:roles");
+    });
+
+    it("sends the version, the group configuration and the scopes to the trigger", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "PreTokenGeneration",
+      );
+      mockTriggers.preTokenGenerationVersion.mockReturnValue("2");
+      mockTriggers.preTokenGeneration.mockResolvedValue({});
+      const client = TDB.appClient();
+
+      await generator.generate(
+        TestContext,
+        user,
+        ["admins"],
+        client,
+        { key: "value" },
+        "HostedAuth",
+        ["openid", "email"],
+      );
+
+      expect(mockTriggers.preTokenGenerationVersion).toHaveBeenCalledWith(
+        client.UserPoolId,
+      );
+      expect(mockTriggers.preTokenGeneration).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({
+          version: "2",
+          source: "HostedAuth",
+          clientMetadata: { key: "value" },
+          scopes: ["openid", "email"],
+          groupConfiguration: {
+            groupsToOverride: ["admins"],
+            iamRolesToOverride: ["role-admins"],
+            preferredRole: "role-admins",
+          },
+        }),
+      );
+    });
+
+    it("applies a version 2 response to both tokens", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "PreTokenGeneration",
+      );
+      mockTriggers.preTokenGenerationVersion.mockReturnValue("2");
+      mockTriggers.preTokenGeneration.mockResolvedValue({
+        claimsAndScopeOverrideDetails: {
+          idTokenGeneration: { claimsToAddOrOverride: { tenant: "t1" } },
+          accessTokenGeneration: {
+            claimsToAddOrOverride: { tenant: { id: "t1" } },
+            scopesToAdd: ["example.test/read"],
+          },
+          groupOverrideDetails: { groupsToOverride: ["override"] },
+        },
+      });
+
+      const tokens = await generator.generate(
+        TestContext,
+        user,
+        ["admins"],
+        TDB.appClient(),
+        undefined,
+        "Authentication",
+      );
+
+      const id = jwt.decode(tokens.IdToken) as Record<string, unknown>;
+      expect(id).toMatchObject({
+        tenant: "t1",
+        "cognito:groups": ["override"],
+      });
+      expect(id).not.toHaveProperty("cognito:roles");
+      expect(jwt.decode(tokens.AccessToken)).toMatchObject({
+        tenant: { id: "t1" },
+        "cognito:groups": ["override"],
+        scope: "aws.cognito.signin.user.admin example.test/read",
+      });
+    });
+  });
+
   describe("TokenGeneration lambda is not configured", () => {
     it("generates the default tokens", async () => {
       mockTriggers.enabled.mockReturnValue(false);

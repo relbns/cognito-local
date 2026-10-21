@@ -28,7 +28,10 @@ import { CryptoService } from "../../src/services/crypto";
 import type { DataStoreFactory } from "../../src/services/dataStore/factory";
 import { StormDBDataStoreFactory } from "../../src/services/dataStore/stormDb";
 import { otp } from "../../src/services/otp";
-import { JwtTokenGenerator } from "../../src/services/tokenGenerator";
+import {
+  JwtTokenGenerator,
+  poolGroups,
+} from "../../src/services/tokenGenerator";
 import { JwtTokenVerifier } from "../../src/services/tokenVerifier";
 import { UserPoolServiceFactoryImpl } from "../../src/services/userPoolService";
 
@@ -108,6 +111,7 @@ export const withCognitoSdk =
           clock,
           triggers,
           config.TokenConfig,
+          poolGroups(cognitoClient),
         ),
         tokenVerifier: new JwtTokenVerifier(
           clock,

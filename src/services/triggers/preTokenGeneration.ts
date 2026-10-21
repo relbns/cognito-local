@@ -1,11 +1,17 @@
-import type { Lambda, PreTokenGenerationTriggerResponse } from "../lambda";
+import type { Lambda } from "../lambda";
 import type { Attribute } from "../sdkTypes";
+import type {
+  GroupConfiguration,
+  PreTokenGenerationResponse,
+  PreTokenGenerationVersion,
+} from "../tokenCustomization";
 import { attributesToRecord } from "../userPoolService";
 import type { Trigger } from "./trigger";
 
 export type Source =
   | "AuthenticateDevice"
   | "Authentication"
+  | "ClientCredentials"
   | "HostedAuth"
   | "NewPasswordChallenge"
   | "RefreshTokens";
@@ -28,28 +34,16 @@ export type PreTokenGenerationTrigger = Trigger<
 
     source: Source;
 
-    /**
-     * The input object containing the current group configuration. It includes groupsToOverride, iamRolesToOverride, and
-     * preferredRole.
-     */
-    groupConfiguration: {
-      /**
-       * A list of the group names that are associated with the user that the identity token is issued for.
-       */
-      groupsToOverride: readonly string[] | undefined;
+    /** The event version from LambdaConfig.PreTokenGenerationConfig.LambdaVersion. */
+    version: PreTokenGenerationVersion;
 
-      /**
-       * A list of the current IAM roles associated with these groups.
-       */
-      iamRolesToOverride: readonly string[] | undefined;
+    /** The user's groups and their IAM roles; null for client credentials. */
+    groupConfiguration: GroupConfiguration | null;
 
-      /**
-       * A string indicating the preferred IAM role.
-       */
-      preferredRole: string | undefined;
-    };
+    /** The scopes of the access token, sent from event version 2. */
+    scopes: readonly string[];
   },
-  PreTokenGenerationTriggerResponse
+  PreTokenGenerationResponse
 >;
 
 type PreTokenGenerationServices = {
@@ -64,18 +58,22 @@ export const PreTokenGeneration =
       clientId,
       clientMetadata,
       groupConfiguration,
+      scopes,
       source,
       userAttributes,
       username,
       userPoolId,
+      version,
     },
   ) =>
     lambda.invoke(ctx, "PreTokenGeneration", {
       clientId,
       clientMetadata,
       groupConfiguration,
+      scopes,
       triggerSource: `TokenGeneration_${source}`,
       userAttributes: attributesToRecord(userAttributes),
       username,
       userPoolId,
+      version,
     });
