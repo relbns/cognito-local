@@ -239,6 +239,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. The forgot-password flow does not run it. |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA |
-| CustomEmailSender | Replaces message delivery for the same events except SMS MFA. The code is encrypted with the configured KMS key. |
+| CustomEmailSender | Replaces delivery of every email the emulator sends for those events. The code is encrypted with the configured KMS key. |
+| CustomSMSSender | Replaces delivery of every SMS: sign-up and resend codes, forgot password, AdminCreateUser temporary passwords, attribute update and verification, and SMS MFA (`CustomSMSSender_Authentication`). The event's `request.type` is `customSMSSenderRequestV1` and the code is encrypted with the configured KMS key. |
 
-CustomSMSSender can be configured on a pool but never runs.
+With a custom sender trigger the code still appears in the admin UI Codes viewer.

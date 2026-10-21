@@ -165,4 +165,91 @@ describe("messages service", () => {
       });
     });
   });
+
+  describe("custom senders", () => {
+    const smsDelivery = {
+      AttributeName: "phone_number",
+      DeliveryMedium: "SMS",
+      Destination: "+15555550100",
+    } as const;
+
+    const deliver = (
+      source: "SignUp" | "Authentication",
+      details: typeof smsDelivery | typeof deliveryDetails,
+    ) =>
+      new MessagesService(mockTriggers, mockMessageDelivery).deliver(
+        TestContext,
+        source,
+        null,
+        "userPoolId",
+        user,
+        "123456",
+        { client: "metadata" },
+        details,
+      );
+
+    it.each(["SignUp", "Authentication"] as const)(
+      "hands a %s SMS to CustomSMSSender instead of delivering it",
+      async (source) => {
+        mockTriggers.enabled.mockImplementation(
+          (name) => name === "CustomSMSSender",
+        );
+
+        await deliver(source, smsDelivery);
+
+        expect(mockTriggers.customSmsSender).toHaveBeenCalledWith(TestContext, {
+          clientId: "CLIENT_ID_NOT_APPLICABLE",
+          clientMetadata: { client: "metadata" },
+          code: "123456",
+          source: `CustomSMSSender_${source}`,
+          userAttributes: user.Attributes,
+          username: user.Username,
+          userPoolId: "userPoolId",
+        });
+        expect(mockMessageDelivery.deliver).not.toHaveBeenCalled();
+      },
+    );
+
+    it("delivers an email normally when only CustomSMSSender is configured", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "CustomSMSSender",
+      );
+
+      await deliver("SignUp", deliveryDetails);
+
+      expect(mockTriggers.customSmsSender).not.toHaveBeenCalled();
+      expect(mockMessageDelivery.deliver).toHaveBeenCalled();
+    });
+
+    it("delivers an SMS normally when only CustomEmailSender is configured", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "CustomEmailSender",
+      );
+
+      await deliver("SignUp", smsDelivery);
+
+      expect(mockTriggers.customEmailSender).not.toHaveBeenCalled();
+      expect(mockMessageDelivery.deliver).toHaveBeenCalledWith(
+        TestContext,
+        user,
+        smsDelivery,
+        { __code: "123456" },
+      );
+    });
+
+    it("hands an email to CustomEmailSender", async () => {
+      mockTriggers.enabled.mockImplementation(
+        (name) => name === "CustomEmailSender" || name === "CustomSMSSender",
+      );
+
+      await deliver("SignUp", deliveryDetails);
+
+      expect(mockTriggers.customEmailSender).toHaveBeenCalledWith(
+        TestContext,
+        expect.objectContaining({ source: "CustomEmailSender_SignUp" }),
+      );
+      expect(mockTriggers.customSmsSender).not.toHaveBeenCalled();
+      expect(mockMessageDelivery.deliver).not.toHaveBeenCalled();
+    });
+  });
 });

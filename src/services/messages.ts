@@ -57,6 +57,23 @@ export class MessagesService implements Messages {
     deliveryDetails: DeliveryDetails,
   ): Promise<void> {
     if (
+      deliveryDetails.DeliveryMedium === "SMS" &&
+      this.triggers.enabled("CustomSMSSender", userPoolId)
+    ) {
+      await this.triggers.customSmsSender(ctx, {
+        clientId: clientId ?? AWS_ADMIN_CLIENT_ID,
+        clientMetadata,
+        code,
+        source: `CustomSMSSender_${source}`,
+        userAttributes: user.Attributes,
+        username: user.Username,
+        userPoolId,
+      });
+      return;
+    }
+
+    if (
+      deliveryDetails.DeliveryMedium === "EMAIL" &&
       this.triggers.enabled("CustomEmailSender", userPoolId) &&
       source !== "Authentication"
     ) {

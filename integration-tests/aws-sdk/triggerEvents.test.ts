@@ -2,6 +2,8 @@ import type { CognitoIdentityServiceProvider } from "aws-sdk";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fakeLambdaClient } from "../../src/__tests__/fakeLambdaClient";
 import { type Lambda, LambdaService } from "../../src/services";
+import type { Context } from "../../src/services/context";
+import { CryptoService } from "../../src/services/crypto";
 import { withCognitoSdk } from "./setup";
 
 type TriggerEvent = {
@@ -21,6 +23,7 @@ const lambdaService = new LambdaService(
   Object.fromEntries(
     [
       "CustomEmailSender",
+      "CustomSMSSender",
       "PostAuthentication",
       "PreAuthentication",
       "PreSignUp",
@@ -38,6 +41,12 @@ const lambda = (): Lambda => ({
   enabled: (name) => name in handlers,
   invoke: lambdaService.invoke.bind(lambdaService) as Lambda["invoke"],
 });
+
+class FakeCrypto extends CryptoService {
+  async encrypt(_ctx: Context, plaintext: string): Promise<string> {
+    return `encrypted:${plaintext}`;
+  }
+}
 
 const eventsFor = (name: string) =>
   invocations.filter((x) => x.name === name).map((x) => x.event);
@@ -70,7 +79,7 @@ const createPool = async (
 describe(
   "Trigger events",
   withCognitoSdk(
-    (Cognito) => {
+    (Cognito, { codeLog, messageDelivery }) => {
       beforeEach(() => {
         handlers = {};
         invocations = [];
@@ -271,6 +280,122 @@ describe(
         });
       });
 
+      describe("CustomSMSSender", () => {
+        const PHONE = "+15555550100";
+
+        const expectSentBySmsSender = (source: string) => {
+          const events = eventsFor("CustomSMSSender");
+          expect(events.map((e) => e.triggerSource)).toEqual([source]);
+          const [event] = events;
+          expect(event.request.type).toEqual("customSMSSenderRequestV1");
+          expect(event.request.userAttributes.phone_number).toEqual(PHONE);
+          const code = event.request.code.replace(/^encrypted:/, "");
+          expect(codeLog().list()[0]).toMatchObject({
+            code,
+            deliveryMedium: "SMS",
+            destination: PHONE,
+          });
+          expect(messageDelivery().collectedMessages).toEqual([]);
+          return code;
+        };
+
+        it("sends the sign-up code with CustomSMSSender_SignUp", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client, {
+            AutoVerifiedAttributes: ["phone_number"],
+          });
+          handlers.CustomSMSSender = () => {};
+          handlers.CustomEmailSender = () => {};
+
+          await client
+            .signUp({
+              ClientId: clientId,
+              Username: "jane",
+              Password: PASSWORD,
+              UserAttributes: [{ Name: "phone_number", Value: PHONE }],
+            })
+            .promise();
+
+          const code = expectSentBySmsSender("CustomSMSSender_SignUp");
+          expect(eventsFor("CustomEmailSender")).toEqual([]);
+          await client
+            .confirmSignUp({
+              ClientId: clientId,
+              Username: "jane",
+              ConfirmationCode: code,
+            })
+            .promise();
+          const user = await client
+            .adminGetUser({ UserPoolId: userPoolId, Username: "jane" })
+            .promise();
+          expect(user.UserStatus).toEqual("CONFIRMED");
+        });
+
+        it("sends the temporary password with CustomSMSSender_AdminCreateUser", async () => {
+          const client = Cognito();
+          const { userPoolId } = await createPool(client);
+          handlers.CustomSMSSender = () => {};
+
+          await client
+            .adminCreateUser({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              DesiredDeliveryMediums: ["SMS"],
+              UserAttributes: [{ Name: "phone_number", Value: PHONE }],
+            })
+            .promise();
+
+          expectSentBySmsSender("CustomSMSSender_AdminCreateUser");
+        });
+
+        it("sends the MFA code with CustomSMSSender_Authentication", async () => {
+          const client = Cognito();
+          const { userPoolId, clientId } = await createPool(client, {
+            MfaConfiguration: "OPTIONAL",
+          });
+          await client
+            .adminCreateUser({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              MessageAction: "SUPPRESS",
+              UserAttributes: [
+                { Name: "phone_number", Value: PHONE },
+                { Name: "phone_number_verified", Value: "true" },
+              ],
+            })
+            .promise();
+          await client
+            .adminSetUserPassword({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              Password: PASSWORD,
+              Permanent: true,
+            })
+            .promise();
+          await client
+            .adminSetUserSettings({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              MFAOptions: [
+                { DeliveryMedium: "SMS", AttributeName: "phone_number" },
+              ],
+            })
+            .promise();
+          handlers.CustomSMSSender = () => {};
+
+          const auth = await client
+            .initiateAuth({
+              AuthFlow: "USER_PASSWORD_AUTH",
+              ClientId: clientId,
+              AuthParameters: { USERNAME: "jane", PASSWORD: PASSWORD },
+            })
+            .promise();
+
+          expect(auth.ChallengeName).toEqual("SMS_MFA");
+          expectSentBySmsSender("CustomSMSSender_Authentication");
+        });
+      });
+
       describe("UserMigration", () => {
         it("creates the user under the sign-in username with a sub", async () => {
           const client = Cognito();
@@ -371,6 +496,6 @@ describe(
         });
       });
     },
-    { lambda },
+    { lambda, crypto: () => new FakeCrypto() },
   ),
 );

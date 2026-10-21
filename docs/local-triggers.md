@@ -34,7 +34,7 @@ Or for every pool, in `<data>/config.json`:
 - Supported triggers: the ones cognito-local invokes (`PreSignUp`, `PostConfirmation`,
   `PreAuthentication`, `PostAuthentication`, `DefineAuthChallenge`, `CreateAuthChallenge`,
   `VerifyAuthChallengeResponse`, `PreTokenGeneration`, `UserMigration`, `CustomMessage`,
-  `CustomEmailSender`).
+  `CustomEmailSender`, `CustomSMSSender`).
 
 ## Modules and handlers
 

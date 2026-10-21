@@ -461,7 +461,7 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 - The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
 - The `USER_AUTH` (choice-based) flow, and with it passkey sign-in.
 - Device tracking (`NewDeviceMetadata`, device challenges) and the `MFA_SETUP` challenge.
-- Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.
+- Refresh token rotation.
 - Some operations only store their input: user import jobs import nothing, and risk, log delivery,
   branding and terms settings have no effect.
 - Request parameters are not validated against the API model, so a missing parameter may give a

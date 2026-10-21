@@ -31,6 +31,7 @@ import {
 type CognitoUserPoolEvent =
   | CreateAuthChallengeTriggerEvent
   | CustomEmailSenderTriggerEvent
+  | CustomSMSSenderTriggerEvent
   | CustomMessageTriggerEvent
   | DefineAuthChallengeTriggerEvent
   | PostAuthenticationTriggerEvent
@@ -60,6 +61,37 @@ interface CustomEmailSenderEvent
     | "CustomEmailSender_SignUp"
     | "CustomEmailSender_UpdateUserAttribute"
     | "CustomEmailSender_VerifyUserAttribute";
+}
+
+interface CustomSMSSenderEvent extends Omit<EventCommonParameters, "clientId"> {
+  clientId: string | null;
+  code: string;
+  clientMetadata: Record<string, string> | undefined;
+  triggerSource:
+    | "CustomSMSSender_AdminCreateUser"
+    | "CustomSMSSender_Authentication"
+    | "CustomSMSSender_ForgotPassword"
+    | "CustomSMSSender_ResendCode"
+    | "CustomSMSSender_SignUp"
+    | "CustomSMSSender_UpdateUserAttribute"
+    | "CustomSMSSender_VerifyUserAttribute";
+}
+
+// aws-lambda has no type for this event; it has the custom email sender's shape.
+export interface CustomSMSSenderTriggerEvent {
+  version: string;
+  region: string;
+  userPoolId: string;
+  triggerSource: CustomSMSSenderEvent["triggerSource"];
+  userName: string;
+  callerContext: { awsSdkVersion: string; clientId: string };
+  request: {
+    type: "customSMSSenderRequestV1";
+    code: string;
+    userAttributes: Record<string, string>;
+    clientMetadata?: Record<string, string>;
+  };
+  response: Record<string, unknown>;
 }
 
 interface CustomMessageEvent extends Omit<EventCommonParameters, "clientId"> {
@@ -154,6 +186,7 @@ export interface FunctionConfig {
   CreateAuthChallenge?: string;
   CustomEmailSender?: string;
   CustomMessage?: string;
+  CustomSMSSender?: string;
   DefineAuthChallenge?: string;
   PostAuthentication?: string;
   PostConfirmation?: string;
@@ -185,6 +218,8 @@ export type PostConfirmationTriggerResponse =
   PostConfirmationTriggerEvent["response"];
 export type CustomEmailSenderTriggerResponse =
   CustomEmailSenderTriggerEvent["response"];
+export type CustomSMSSenderTriggerResponse =
+  CustomSMSSenderTriggerEvent["response"];
 
 interface DefineAuthChallengeEvent extends EventCommonParameters {
   clientMetadata: Record<string, string> | undefined;
@@ -306,6 +341,11 @@ export interface Lambda {
   ): Promise<PostConfirmationTriggerResponse>;
   invoke(
     ctx: Context,
+    lambda: "CustomSMSSender",
+    event: CustomSMSSenderEvent,
+  ): Promise<CustomSMSSenderTriggerResponse>;
+  invoke(
+    ctx: Context,
     lambda: "CustomEmailSender",
     event: CustomEmailSenderEvent,
   ): Promise<CustomEmailSenderTriggerResponse>;
@@ -349,6 +389,7 @@ export class LambdaService implements Lambda {
       | CreateAuthChallengeEvent
       | CustomEmailSenderEvent
       | CustomMessageEvent
+      | CustomSMSSenderEvent
       | DefineAuthChallengeEvent
       | PostAuthenticationEvent
       | PostConfirmationEvent
@@ -474,6 +515,7 @@ export class LambdaService implements Lambda {
       | CreateAuthChallengeEvent
       | CustomEmailSenderEvent
       | CustomMessageEvent
+      | CustomSMSSenderEvent
       | DefineAuthChallengeEvent
       | PostAuthenticationEvent
       | PostConfirmationEvent
@@ -658,6 +700,28 @@ export class LambdaService implements Lambda {
           callerContext,
           request: {
             type: "customEmailSenderRequestV1",
+            code: event.code,
+            userAttributes: event.userAttributes,
+            clientMetadata: event.clientMetadata,
+          },
+          response: {},
+        };
+      case "CustomSMSSender_AdminCreateUser":
+      case "CustomSMSSender_Authentication":
+      case "CustomSMSSender_ForgotPassword":
+      case "CustomSMSSender_ResendCode":
+      case "CustomSMSSender_SignUp":
+      case "CustomSMSSender_UpdateUserAttribute":
+      case "CustomSMSSender_VerifyUserAttribute":
+        return {
+          version,
+          region,
+          userPoolId: event.userPoolId,
+          triggerSource: event.triggerSource,
+          userName: event.username,
+          callerContext,
+          request: {
+            type: "customSMSSenderRequestV1",
             code: event.code,
             userAttributes: event.userAttributes,
             clientMetadata: event.clientMetadata,

@@ -1,7 +1,7 @@
 # Lambda and KMS client options
 
 The emulator calls two AWS services itself: Lambda, to run triggers that are not `file:` targets,
-and KMS, to encrypt the code a `CustomEmailSender` trigger receives. Both clients come from the
+and KMS, to encrypt the code a `CustomEmailSender` or `CustomSMSSender` trigger receives. Both clients come from the
 AWS SDK for JavaScript v3 (`@aws-sdk/client-lambda`, and `@aws-crypto/client-node` 5.x for KMS).
 Their options live in `.cognito/config.json`:
 

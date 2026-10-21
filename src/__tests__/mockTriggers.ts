@@ -5,6 +5,7 @@ export const newMockTriggers = (): MockedObject<Triggers> => ({
   createAuthChallenge: vi.fn(),
   customMessage: vi.fn(),
   customEmailSender: vi.fn(),
+  customSmsSender: vi.fn(),
   defineAuthChallenge: vi.fn(),
   enabled: vi.fn(),
   postAuthentication: vi.fn(),

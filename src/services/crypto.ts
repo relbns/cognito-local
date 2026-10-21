@@ -31,7 +31,7 @@ export class CryptoService {
 
     if (!this.config || !this.config.KMSKeyAlias || !this.config.KMSKeyId) {
       throw new Error(
-        "KMSConfig.KMSKeyAlias and KMSConfig.KMSKeyId is required when using a CustomEmailSender trigger.",
+        "KMSConfig.KMSKeyAlias and KMSConfig.KMSKeyId is required when using a CustomEmailSender or CustomSMSSender trigger.",
       );
     }
 
