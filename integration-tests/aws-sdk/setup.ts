@@ -40,6 +40,7 @@ export const withCognitoSdk =
     fn: (
       cognito: () => AWS.CognitoIdentityServiceProvider,
       services: {
+        readonly codeLog: () => InMemoryCodeLog;
         readonly dataStoreFactory: () => DataStoreFactory;
         readonly messageDelivery: () => FakeMessageDeliveryService;
         readonly serverUrl: () => string;
@@ -49,11 +50,13 @@ export const withCognitoSdk =
       logger = MockLogger as any,
       clock = new DateClock(),
       lambda,
+      crypto,
       config = DefaultConfig,
     }: {
       logger?: Logger;
       clock?: Clock;
       lambda?: () => Lambda;
+      crypto?: () => CryptoService;
       config?: Config;
     } = {},
   ) =>
@@ -63,6 +66,7 @@ export const withCognitoSdk =
     let cognitoSdk: AWS.CognitoIdentityServiceProvider;
     let dataStoreFactory: DataStoreFactory;
     let fakeMessageDeliveryService: FakeMessageDeliveryService;
+    let codeLog: InMemoryCodeLog;
     let baseUrl: string;
 
     beforeEach(async () => {
@@ -83,11 +87,11 @@ export const withCognitoSdk =
           enabled: vi.fn().mockReturnValue(false),
           invoke: vi.fn(),
         },
-        new CryptoService({ KMSKeyId: "", KMSKeyAlias: "" }),
+        crypto?.() ?? new CryptoService({ KMSKeyId: "", KMSKeyAlias: "" }),
       );
 
       fakeMessageDeliveryService = new FakeMessageDeliveryService();
-      const codeLog = new InMemoryCodeLog(clock);
+      codeLog = new InMemoryCodeLog(clock);
       const services = {
         authSessions: new RecordingAuthSessions(
           new InMemoryAuthSessions(clock),
@@ -151,6 +155,7 @@ export const withCognitoSdk =
     });
 
     fn(() => cognitoSdk, {
+      codeLog: () => codeLog,
       dataStoreFactory: () => dataStoreFactory,
       messageDelivery: () => fakeMessageDeliveryService,
       serverUrl: () => baseUrl,

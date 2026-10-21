@@ -16,6 +16,7 @@ import {
   attribute,
   attributesAppend,
   attributesInclude,
+  attributesToRecord,
   type User,
 } from "../services/userPoolService";
 import type { Target } from "./Target";
@@ -211,7 +212,9 @@ export const SignUp =
           userAttributes: attributes,
           username,
           userPoolId: userPool.options.Id,
-          validationData: undefined,
+          validationData: req.ValidationData
+            ? attributesToRecord(req.ValidationData)
+            : undefined,
         });
 
       if (autoConfirmUser) {

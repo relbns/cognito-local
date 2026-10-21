@@ -212,7 +212,7 @@ describe("SignUp target", () => {
         ],
         userPoolId: "test",
         username: "user-supplied",
-        validationData: undefined,
+        validationData: { another: "attribute" },
       });
     });
 
@@ -248,7 +248,7 @@ describe("SignUp target", () => {
         ],
         userPoolId: "test",
         username: expect.stringMatching(UUID),
-        validationData: undefined,
+        validationData: { another: "attribute" },
       });
     });
 
