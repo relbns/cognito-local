@@ -102,6 +102,64 @@ describe(
         });
       });
 
+      describe("PreSignUp on AdminCreateUser", () => {
+        it("runs with PreSignUp_AdminCreateUser and leaves the user FORCE_CHANGE_PASSWORD", async () => {
+          const client = Cognito();
+          const { userPoolId } = await createPool(client);
+          handlers.PreSignUp = (event) => {
+            event.response.autoConfirmUser = true;
+            event.response.autoVerifyEmail = true;
+          };
+
+          const created = await client
+            .adminCreateUser({
+              UserPoolId: userPoolId,
+              Username: "jane",
+              MessageAction: "SUPPRESS",
+              UserAttributes: [{ Name: "email", Value: "jane@example.test" }],
+              ValidationData: [{ Name: "invite", Value: "abc123" }],
+              ClientMetadata: { source: "admin" },
+            })
+            .promise();
+
+          const [event] = eventsFor("PreSignUp");
+          expect(event.triggerSource).toEqual("PreSignUp_AdminCreateUser");
+          expect(event.userName).toEqual("jane");
+          expect(event.request.validationData).toEqual({ invite: "abc123" });
+          expect(event.request.clientMetadata).toEqual({ source: "admin" });
+          expect(event.request.userAttributes.email).toEqual(
+            "jane@example.test",
+          );
+          expect(created.User?.UserStatus).toEqual("FORCE_CHANGE_PASSWORD");
+        });
+
+        it("does not create the user when the trigger throws", async () => {
+          const client = Cognito();
+          const { userPoolId } = await createPool(client);
+          handlers.PreSignUp = () => {
+            throw new Error("denied");
+          };
+
+          await expect(
+            client
+              .adminCreateUser({
+                UserPoolId: userPoolId,
+                Username: "jane",
+                MessageAction: "SUPPRESS",
+              })
+              .promise(),
+          ).rejects.toMatchObject({
+            code: "UserLambdaValidationException",
+            message: "PreSignUp failed with error denied.",
+          });
+          await expect(
+            client
+              .adminGetUser({ UserPoolId: userPoolId, Username: "jane" })
+              .promise(),
+          ).rejects.toMatchObject({ code: "UserNotFoundException" });
+        });
+      });
+
       describe("UserMigration", () => {
         it("creates the user under the sign-in username with a sub", async () => {
           const client = Cognito();

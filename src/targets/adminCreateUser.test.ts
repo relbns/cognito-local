@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, type MockedObject } from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
+import { newMockTriggers } from "../__tests__/mockTriggers";
 import { newMockUserPoolService } from "../__tests__/mockUserPoolService";
 import { UUID } from "../__tests__/patterns";
 import { TestContext } from "../__tests__/testContext";
@@ -10,10 +11,11 @@ import {
   AliasExistsError,
   InvalidParameterError,
   InvalidPasswordError,
+  UserLambdaValidationError,
   UsernameExistsError,
 } from "../errors";
 import { type Config, DefaultConfig } from "../server/config";
-import type { Messages, UserPoolService } from "../services";
+import type { Messages, Triggers, UserPoolService } from "../services";
 import { attribute } from "../services/userPoolService";
 import { AdminCreateUser, type AdminCreateUserTarget } from "./adminCreateUser";
 
@@ -24,16 +26,99 @@ describe("AdminCreateUser target", () => {
   let mockUserPoolService: MockedObject<UserPoolService>;
   let mockMessages: MockedObject<Messages>;
   let config: Config;
+  let mockTriggers: MockedObject<Triggers>;
 
   beforeEach(() => {
     mockUserPoolService = newMockUserPoolService();
     mockMessages = newMockMessages();
     config = DefaultConfig;
+    mockTriggers = newMockTriggers();
     adminCreateUser = AdminCreateUser({
       cognito: newMockCognitoService(mockUserPoolService),
       clock: new ClockFake(originalDate),
       config,
       messages: mockMessages,
+      triggers: mockTriggers,
+    });
+  });
+
+  describe("when PreSignUp trigger is enabled", () => {
+    beforeEach(() => {
+      mockTriggers.enabled.mockImplementation(
+        (trigger) => trigger === "PreSignUp",
+      );
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+    });
+
+    it("runs it with PreSignUp_AdminCreateUser and the request ValidationData", async () => {
+      mockTriggers.preSignUp.mockResolvedValue({
+        autoConfirmUser: false,
+        autoVerifyEmail: false,
+        autoVerifyPhone: false,
+      });
+
+      await adminCreateUser(TestContext, {
+        ClientMetadata: { client: "metadata" },
+        MessageAction: "SUPPRESS",
+        TemporaryPassword: "pwd-Aa1!",
+        UserAttributes: [{ Name: "email", Value: "jane@example.test" }],
+        Username: "jane",
+        UserPoolId: "test",
+        ValidationData: [{ Name: "invite", Value: "abc123" }],
+      });
+
+      expect(mockTriggers.preSignUp).toHaveBeenCalledWith(TestContext, {
+        clientId: "CLIENT_ID_NOT_APPLICABLE",
+        clientMetadata: { client: "metadata" },
+        source: "PreSignUp_AdminCreateUser",
+        userAttributes: [
+          { Name: "email", Value: "jane@example.test" },
+          { Name: "sub", Value: expect.stringMatching(UUID) },
+        ],
+        username: "jane",
+        userPoolId: "test",
+        validationData: { invite: "abc123" },
+      });
+    });
+
+    it("ignores autoConfirmUser and auto-verification in the response", async () => {
+      mockTriggers.preSignUp.mockResolvedValue({
+        autoConfirmUser: true,
+        autoVerifyEmail: true,
+        autoVerifyPhone: true,
+      });
+
+      const result = await adminCreateUser(TestContext, {
+        MessageAction: "SUPPRESS",
+        TemporaryPassword: "pwd-Aa1!",
+        UserAttributes: [{ Name: "email", Value: "jane@example.test" }],
+        Username: "jane",
+        UserPoolId: "test",
+      });
+
+      expect(result.User?.UserStatus).toEqual("FORCE_CHANGE_PASSWORD");
+      expect(result.User?.Attributes).not.toContainEqual({
+        Name: "email_verified",
+        Value: "true",
+      });
+    });
+
+    it("does not create the user when the trigger fails", async () => {
+      mockTriggers.preSignUp.mockRejectedValue(
+        new UserLambdaValidationError("PreSignUp failed with error denied."),
+      );
+
+      await expect(
+        adminCreateUser(TestContext, {
+          MessageAction: "SUPPRESS",
+          TemporaryPassword: "pwd-Aa1!",
+          Username: "jane",
+          UserPoolId: "test",
+        }),
+      ).rejects.toEqual(
+        new UserLambdaValidationError("PreSignUp failed with error denied."),
+      );
+      expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
     });
   });
 

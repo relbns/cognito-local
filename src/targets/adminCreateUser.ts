@@ -14,10 +14,12 @@ import type { Messages, Services, UserPoolService } from "../services";
 import { enforceAliasUniqueness } from "../services/aliases";
 import type { Context } from "../services/context";
 import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import { AWS_ADMIN_CLIENT_ID } from "../services/messages";
 import { assertPasswordConformsToPolicy } from "../services/passwordPolicy";
 import type { Present } from "../services/sdkTypes";
 import {
   attributesInclude,
+  attributesToRecord,
   attributeValue,
   type User,
 } from "../services/userPoolService";
@@ -33,10 +35,12 @@ export type AdminCreateUserTarget = Target<
   AdminCreateUserResponse
 >;
 
+// Seeds create users without triggers.
 type AdminCreateUserServices = Pick<
   Services,
   "clock" | "cognito" | "messages" | "config"
->;
+> &
+  Partial<Pick<Services, "triggers">>;
 
 const selectAppropriateDeliveryMethod = (
   desiredDeliveryMediums: DeliveryMediumType[],
@@ -104,6 +108,7 @@ export const AdminCreateUser =
     cognito,
     messages,
     config,
+    triggers,
   }: AdminCreateUserServices): AdminCreateUserTarget =>
   async (ctx, req) => {
     const userPool = await cognito.getUserPool(ctx, req.UserPoolId);
@@ -195,12 +200,22 @@ export const AdminCreateUser =
       usernameConflict: "UsernameExistsException",
     });
 
-    await userPool.saveUser(ctx, user);
+    // Cognito ignores autoConfirmUser, autoVerifyEmail and autoVerifyPhone here (pre sign-up trigger docs).
+    if (triggers?.enabled("PreSignUp", userPool.options.Id)) {
+      await triggers.preSignUp(ctx, {
+        clientId: AWS_ADMIN_CLIENT_ID,
+        clientMetadata: req.ClientMetadata,
+        source: "PreSignUp_AdminCreateUser",
+        userAttributes: user.Attributes,
+        username,
+        userPoolId: userPool.options.Id,
+        validationData: req.ValidationData
+          ? attributesToRecord(req.ValidationData)
+          : undefined,
+      });
+    }
 
-    // TODO: should throw InvalidParameterException when a non-email is supplied as the Username when the pool has email as a UsernameAttribute
-    // TODO: support MessageAction=="RESEND"
-    // TODO: should generate a TemporaryPassword if one isn't set
-    // TODO: support PreSignIn lambda and ValidationData
+    await userPool.saveUser(ctx, user);
 
     if (!supressWelcomeMessage) {
       await deliverWelcomeMessage(

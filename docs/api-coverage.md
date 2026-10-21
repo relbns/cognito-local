@@ -230,7 +230,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 
 | Trigger | Runs on |
 | --- | --- |
-| PreSignUp | SignUp (with its `ValidationData` as `validationData`), and the first federated sign-in (`PreSignUp_ExternalProvider`) |
+| PreSignUp | SignUp (with its `ValidationData` as `validationData`), AdminCreateUser (`PreSignUp_AdminCreateUser`, with `ValidationData` and `ClientMetadata`; a thrown error stops the user from being created, and `autoConfirmUser`, `autoVerifyEmail` and `autoVerifyPhone` are ignored, as in Cognito), and the first federated sign-in (`PreSignUp_ExternalProvider`). Seed files create users without it. |
 | PostConfirmation | ConfirmSignUp, AdminConfirmSignUp, ConfirmForgotPassword, a SignUp that PreSignUp auto-confirms, and the first federated sign-in |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
 | PreTokenGeneration | Every token issue. Version 1 event: `claimsToAddOrOverride` and `claimsToSuppress` change the ID token; group overrides are ignored. |
