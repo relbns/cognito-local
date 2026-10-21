@@ -90,6 +90,11 @@ RespondToAuthChallenge and AdminRespondToAuthChallenge answer `CUSTOM_CHALLENGE`
   `ClientMetadata` reaches the pre token generation trigger.
 - GlobalSignOut, AdminUserGlobalSignOut and RevokeToken revoke tokens as described in
   [tokens.md](tokens.md#revocation).
+- SignUp returns `NotAuthorizedException` ("SignUp is not permitted for this user pool") when the
+  pool's `AdminCreateUserConfig.AllowAdminCreateUserOnly` is `true`.
+- ForgotPassword for an unknown user runs UserMigration (`UserMigration_ForgotPassword`) when the
+  pool has it, and sends the code to the migrated user. Without it, or when the trigger rejects the
+  user, it returns `UserNotFoundException` ("Username/client id combination not found.").
 
 ## MFA
 
@@ -270,6 +275,11 @@ ListUserPoolClientSecrets return everything in one response.
 | --- | --- | --- |
 | `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form, or issues the code at once when the browser has a session for the pool. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. `prompt=login` always shows the form, and `prompt=none` uses the session or redirects with `error=login_required`. |
 | `/login` | GET | The same as `/oauth2/authorize`; `/logout` sends the browser here. |
+| `/signup` | GET, POST | The sign-up page, linked from the login page. Answers HTTP 400 when the pool's `AllowAdminCreateUserOnly` is `true`. See [Hosted sign-up and password reset](#hosted-sign-up-and-password-reset). |
+| `/confirm` | GET, POST | The confirmation code page after sign-up. GET with `username` opens it for an existing unconfirmed user. |
+| `/resendcode` | POST | Sends a new confirmation code from the confirm page. |
+| `/forgotPassword` | GET, POST | The password reset request page, linked from the login page. |
+| `/confirmForgotPassword` | GET, POST | The reset code and new password page. GET with `username` opens it for a code already sent. |
 | `/oauth2/token` | POST | `authorization_code`, `refresh_token` and `client_credentials` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` issues an M2M access token for custom scopes (see [tokens.md](tokens.md#client-credentials)). |
 | `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token, limited to the app client's `ReadAttributes` when it sets them. |
 | `/oauth2/revoke` | POST | Revokes a refresh token and the access tokens issued from it. |
@@ -287,14 +297,37 @@ The built-in login form checks the password, then follows the user's state:
 | `RESET_REQUIRED` | Shows `Password reset required for the user.` |
 | `UNCONFIRMED` | Shows `Incorrect username or password.` |
 | `FORCE_CHANGE_PASSWORD` | Asks for a new password, checks it against the pool password policy (unless `PasswordPolicyConfig.Enforce` is `false`), stores it and marks the user `CONFIRMED`. |
-| MFA required | Applies the InitiateAuth rule (pool MFA `ON`, or not `OFF` and the user has MFA). An SMS code goes to `phone_number` through message delivery and appears in the admin Codes viewer. A TOTP code is checked against the user's verified authenticator. A user with both methods and no preferred one chooses first. A user with no method set up is refused, since the form does not offer MFA setup; `src/services/mfaSetup.ts` has the helpers a setup step needs (`needsMfaSetup`, `mfaSetupOptions`, `newTotpSecret`, `totpUri`, `completeTotpSetup`). A wrong code shows `Invalid code or auth state for the user.` |
+| MFA required | Applies the InitiateAuth rule (pool MFA `ON`, or not `OFF` and the user has MFA). An SMS code goes to `phone_number` through message delivery and appears in the admin Codes viewer. A TOTP code is checked against the user's verified authenticator. A user with both methods and no preferred one chooses first. A wrong code shows `Invalid code or auth state for the user.` |
+| MFA `ON`, no method | Follows the `MFA_SETUP` rule of the API: when the pool has an `SmsConfiguration` and the user a `phone_number`, it sends an SMS code. Otherwise, when the pool offers TOTP, it shows an authenticator setup page with the secret key and its `otpauth://` link (no QR code). A correct code registers the authenticator as the user's enabled, preferred MFA and finishes the sign-in. When only SMS can be set up and the user has no phone number, the form shows `SMS MFA is enabled but the user has no phone number to send the code to.` |
 
 A successful sign-in runs PostAuthentication (`PostAuthentication_Authentication`) and issues the code
 or tokens from the user as the trigger left it. The steps after the password are kept on the server
 under a random id that expires after 3 minutes, so the username, client, redirect URI, PKCE challenge,
-scope and state come from the server, not from the page. The form has no sign-up or forgot-password
-pages. PreAuthentication runs before the password is checked, and an error it throws is shown on the
-form.
+scope and state come from the server, not from the page. PreAuthentication runs before the password
+is checked, and an error it throws is shown on the form.
+
+### Hosted sign-up and password reset
+
+The login page links `/signup` (unless the pool's `AllowAdminCreateUserOnly` is `true`) and
+`/forgotPassword`, with `client_id`, `response_type`, `scope`, `redirect_uri`, `state` and the PKCE
+parameters in the query. Each page checks them as `/oauth2/authorize` does. The pages call the
+SignUp, ConfirmSignUp, ResendConfirmationCode, ForgotPassword and ConfirmForgotPassword operations,
+with `SecretHash` computed on the server for a client with a secret, so the password policy, the
+required attributes, PreSignUp, PostConfirmation, UserMigration, CustomMessage, the custom sender
+triggers and auto-verification behave as through the API. An error those operations return is shown
+on the page.
+
+| Page | What it does |
+| --- | --- |
+| Sign-up | Asks for the username (`Email` or `Phone number` when the pool signs in with one of them, `Username` otherwise), each required attribute of the pool's schema (as `requiredAttributes[<name>]`) and a password. An auto-confirmed user is signed in at once. Otherwise the confirm page opens; when the pool has no `AutoVerifiedAttributes`, no code is sent and the login page says an administrator must confirm the account. |
+| Confirm | Takes the code from the delivery (also in the admin Codes viewer) and can send a new one. After a sign-up in the same browser, a correct code signs the user in (PreAuthentication, MFA, PostAuthentication) and redirects with the code or tokens. Opened from a link with `username`, it confirms the account and shows the login page. |
+| Forgot password | Asks for the username and sends a reset code. |
+| Reset password | Asks for the code and the new password twice, then shows the login page. |
+
+After the first page the username and the authorize parameters are kept on the server under the
+`login_session` id, for an hour, and the code pages send only that id. Fields are labelled and carry
+`autocomplete` values (`username`, `email`, `tel`, `new-password`, `current-password`,
+`one-time-code`).
 
 A sign-in through the form or a federated provider sets a `cognito` cookie (HttpOnly, `SameSite=Lax`,
 `Path=/`) for one hour, as Cognito's managed login does. While it is valid, `/oauth2/authorize` for
@@ -320,7 +353,7 @@ The emulator runs these triggers, from a Lambda endpoint (`LambdaClient`) or a
 | PreAuthentication | Every sign-in attempt before the password or challenge is checked: InitiateAuth and AdminInitiateAuth with a password, SRP, `CUSTOM_AUTH` or `USER_AUTH` (once, before any factor is chosen), and the built-in login form (`PreAuthentication_Authentication`). `validationData` is the request's `ClientMetadata`. An unknown user triggers it only when the app client has `PreventUserExistenceErrors: ENABLED`, with `userNotFound: true`. A thrown error fails the sign-in with `UserLambdaValidationException` ("PreAuthentication failed with error ..."). Refresh-token and federated sign-ins do not run it. |
 | PostAuthentication | A successful sign-in through InitiateAuth, AdminInitiateAuth, a challenge response, the built-in login form or a federated provider |
 | PreTokenGeneration | Every token issue. Sends the event version set in `PreTokenGenerationConfig.LambdaVersion` (`V1_0`, `V2_0`, `V3_0`) with the user's groups and roles; version 2 and 3 responses customize the ID token, the access token and its scopes. See [tokens.md](tokens.md#pre-token-generation). |
-| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. The forgot-password flow does not run it. |
+| UserMigration | Sign-in of an unknown user, including through the built-in login form (`UserMigration_Authentication`). The user keeps the username they signed in with (or the `username` the trigger returns), or gets the `sub` as the username in a pool that signs in with email or phone number. The emulator generates the `sub`, stores the returned attributes, sets `CONFIRMED` only when `finalUserStatus` says so (otherwise `RESET_REQUIRED`), applies `forceAliasCreation` and `enableSMSMFA`, and sends no welcome message whatever `messageAction` says. ForgotPassword of an unknown user runs it as `UserMigration_ForgotPassword`, without `password` and `validationData`, and the user stays `RESET_REQUIRED` until ConfirmForgotPassword sets a password. |
 | DefineAuthChallenge, CreateAuthChallenge, VerifyAuthChallengeResponse | `CUSTOM_AUTH` |
 | CustomMessage | Sign-up, resend code, forgot password, AdminCreateUser, attribute update and verification, SMS MFA, and the `EMAIL_OTP` and `SMS_OTP` codes of `USER_AUTH` |
 | CustomEmailSender | Replaces delivery of every email the emulator sends for those events, including `EMAIL_OTP` sign-in codes (`CustomEmailSender_Authentication`). The code is encrypted with the configured KMS key. |

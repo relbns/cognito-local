@@ -22,7 +22,8 @@ The client also needs `AllowedOAuthFlowsUserPoolClient: true`, `AllowedOAuthFlow
    provider (`COGNITO` or a provider name of the pool) and scopes, and keep PKCE on or off.
 2. **Build authorize URL** shows the `/oauth2/authorize` URL with this page as `redirect_uri`, and
    warns when the page is not in the client's `CallbackURLs` or the provider does not exist.
-3. Follow the link and sign in on the built-in login page or the mock IdP.
+3. Follow the link and sign in on the built-in login page or the mock IdP. The login page also
+   links the sign-up and forgot-password pages, which come back here after a confirmed sign-up.
 4. The redirect lands back on `/_admin/callback` with `code` and `state` (or `error` and
    `error_description`). The client and the PKCE verifier of a login started here are filled in.
 5. **Exchange code** posts to `/oauth2/token`, sending the client secret from the emulator's store
