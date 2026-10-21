@@ -1,6 +1,7 @@
 # Command line
 
-One binary, `cognito-local`, with subcommands. Every option has a flag, nothing prompts when stdin
+One program with subcommands, installed as two commands that behave the same: `cognito-emulator`
+and `cognito-local`. This page uses `cognito-local`. Every option has a flag, nothing prompts when stdin
 is not a terminal, and `status`, `seed`, `export` and `reset` print JSON with `--json`.
 
 ```bash
@@ -11,14 +12,15 @@ npx github:relbns/cognito-local start --seed ./cognito-local.seed.json
 
 | How | Command |
 |-----|---------|
+| From the npm registry (once published) | `npx cognito-emulator start`, or `npm install -g cognito-emulator` |
 | From GitHub, no clone | `npx github:relbns/cognito-local start` (npm clones the repo, installs its dev dependencies and builds it once; add `#<branch or sha>` to pin a version) |
 | Global command | `npm install -g "$(npm pack github:relbns/cognito-local \| tail -1)"` in an empty directory, then `cognito-local start`. A plain `npm install -g github:relbns/cognito-local` fails with npm 10 (`tsc: command not found`: npm builds the git dependency in global mode without its dev dependencies) |
 | Project dev dependency | `npm install --save-dev github:relbns/cognito-local`, then `npx cognito-local start` |
 | From a clone | `npm install` (builds `lib/`), then `node lib/bin/cli.js start`, or `npm run cli -- start` to run the TypeScript source |
 | Old entry point | `node lib/bin/start.js` still works and is the same as `cognito-local start` |
 
-The package is named `@relbns/cognito-local` so that it can be published without clashing with
-upstream's `cognito-local`. It is not published to npm.
+The npm package is `cognito-emulator`, so it does not clash with upstream's `cognito-local`. It is not
+on the npm registry yet; the GitHub commands above work today.
 
 ## Commands
 

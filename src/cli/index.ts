@@ -71,7 +71,8 @@ export interface RuntimeInfo {
 
 class UsageError extends Error {}
 
-const USAGE = `cognito-local: a local Amazon Cognito User Pools emulator
+const USAGE = `cognito-emulator: a local Amazon Cognito User Pools emulator
+Installed as two commands, cognito-emulator and cognito-local, that run the same program.
 
 Usage:
   cognito-local [start] [--port <n>] [--host <h>] [--data <dir>] [--seed <file>] [--admin | --no-admin]

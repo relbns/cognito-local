@@ -1,9 +1,14 @@
 {
-  "name": "@relbns/cognito-local",
+  "name": "cognito-emulator",
   "version": "0.0.0-development",
   "description": "A local emulator of Amazon Cognito User Pools, with a seed file, local triggers and a CLI",
   "license": "MIT",
+  "homepage": "https://github.com/relbns/cognito-local#readme",
+  "bugs": {
+    "url": "https://github.com/relbns/cognito-local/issues"
+  },
   "bin": {
+    "cognito-emulator": "lib/bin/cli.js",
     "cognito-local": "lib/bin/cli.js"
   },
   "main": "lib/index.js",

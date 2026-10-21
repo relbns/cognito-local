@@ -68,9 +68,21 @@ describe("cognito-local CLI", () => {
       const help = fakeIO();
       expect(await runCli(["--help"], help.io)).toBe(0);
       expect(help.stdout()).toContain("cognito-local seed <file>");
+      expect(help.stdout()).toContain("cognito-emulator");
       const version = fakeIO();
       expect(await runCli(["--version"], version.io)).toBe(0);
       expect(version.stdout().trim()).not.toBe("");
+    });
+
+    it("installs both command names, one matching the package name for npx", () => {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(ROOT, "package.json"), "utf8"),
+      );
+      expect(pkg.name).toBe("cognito-emulator");
+      expect(pkg.bin).toEqual({
+        "cognito-emulator": "lib/bin/cli.js",
+        "cognito-local": "lib/bin/cli.js",
+      });
     });
 
     it.each([
