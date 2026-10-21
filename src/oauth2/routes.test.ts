@@ -270,6 +270,134 @@ describe("OAuth2 routes", () => {
     });
   });
 
+  describe("POST /oauth2/token grant_type=client_credentials", () => {
+    const basic = (id: string, secret: string) =>
+      `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
+
+    beforeEach(() => {
+      appClient = TDB.appClient({
+        ClientId: "m2m",
+        ClientSecret: "m2m-secret",
+        UserPoolId: "us-east-1_test",
+        AllowedOAuthFlows: ["client_credentials"],
+        AllowedOAuthFlowsUserPoolClient: true,
+        AllowedOAuthScopes: ["example.test/read"],
+      });
+      mockCognito.getAppClient.mockResolvedValue(appClient);
+      (mockUserPoolService.options as any)._resourceServers = [
+        { Identifier: "example.test", Scopes: [{ ScopeName: "read" }] },
+      ];
+    });
+
+    it("returns an access token only", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("m2m", "m2m-secret"))
+        .type("form")
+        .send({
+          grant_type: "client_credentials",
+          scope: "example.test/read",
+          aws_client_metadata: '{"ip":"192.0.2.1"}',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        access_token: "access",
+        expires_in: 3600,
+        token_type: "Bearer",
+      });
+      expect(mockTokenGenerator.generateClientCredentials).toHaveBeenCalledWith(
+        expect.anything(),
+        appClient,
+        ["example.test/read"],
+        { ip: "192.0.2.1" },
+      );
+    });
+
+    it("accepts the secret in the body", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app).post("/oauth2/token").type("form").send({
+        grant_type: "client_credentials",
+        client_id: "m2m",
+        client_secret: "m2m-secret",
+      });
+
+      expect(res.status).toBe(200);
+    });
+
+    it.each([
+      ["a wrong secret", { client_id: "m2m", client_secret: "wrong" }],
+      ["no secret", { client_id: "m2m" }],
+    ])("refuses invalid_client for %s", async (_, credentials) => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .type("form")
+        .send({ grant_type: "client_credentials", ...credentials });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_client");
+    });
+
+    it("refuses invalid_client for a client without a secret", async () => {
+      mockCognito.getAppClient.mockResolvedValue({
+        ...appClient,
+        ClientSecret: undefined,
+      });
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .type("form")
+        .send({ grant_type: "client_credentials", client_id: "m2m" });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: "invalid_client" });
+    });
+
+    it.each([
+      ["unauthorized_client", { AllowedOAuthFlows: ["code"] }, undefined],
+      ["invalid_scope", {}, "example.test/write"],
+      [
+        "invalid_grant",
+        { AllowedOAuthScopes: ["openid"] },
+        "example.test/read",
+      ],
+    ])("refuses %s", async (error, overrides, scope) => {
+      mockCognito.getAppClient.mockResolvedValue({
+        ...appClient,
+        ...(overrides as Partial<typeof appClient>),
+      });
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("m2m", "m2m-secret"))
+        .type("form")
+        .send({
+          grant_type: "client_credentials",
+          ...(scope ? { scope } : {}),
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error });
+      expect(
+        mockTokenGenerator.generateClientCredentials,
+      ).not.toHaveBeenCalled();
+    });
+
+    it("refuses aws_client_metadata that is not a JSON object", async () => {
+      const { app } = buildApp(mockCognito, mockTokenGenerator);
+      const res = await supertest(app)
+        .post("/oauth2/token")
+        .set("Authorization", basic("m2m", "m2m-secret"))
+        .type("form")
+        .send({ grant_type: "client_credentials", aws_client_metadata: "[1]" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_request");
+    });
+  });
+
   describe("POST /oauth2/token", () => {
     describe("grant_type=authorization_code", () => {
       it("exchanges a valid code for tokens", async () => {
@@ -460,7 +588,7 @@ describe("OAuth2 routes", () => {
       const res = await supertest(app)
         .post("/oauth2/token")
         .type("form")
-        .send({ grant_type: "client_credentials" });
+        .send({ grant_type: "password" });
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("unsupported_grant_type");
     });

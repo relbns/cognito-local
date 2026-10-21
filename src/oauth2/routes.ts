@@ -27,10 +27,13 @@ import {
   buildErrorRedirect,
   COGNITO_PROVIDER,
   decideAuthorize,
+  decideClientCredentials,
   includesIdToken,
   isClientAuthenticated,
   parseClientCredentials,
+  parseClientMetadata,
   parseScopes,
+  type ResourceServerScopes,
 } from "./oauthRequest";
 import { verifyS256 } from "./pkce";
 
@@ -313,13 +316,57 @@ export function attachOAuth2Routes(
     return renderOutcome(ctx, res, login, outcome);
   });
 
+  const clientCredentialsGrant = async (
+    ctx: Context,
+    res: Response,
+    appClient: AppClient,
+    body: Record<string, string>,
+  ) => {
+    if (!appClient.ClientSecret) return tokenError(res, "invalid_client");
+    const clientMetadata = parseClientMetadata(body.aws_client_metadata);
+    if (clientMetadata === null) {
+      return tokenError(
+        res,
+        "invalid_request",
+        "aws_client_metadata must be a JSON object",
+      );
+    }
+    const userPool = await services.cognito.getUserPool(
+      ctx,
+      appClient.UserPoolId,
+    );
+    const decision = decideClientCredentials(
+      appClient,
+      body.scope,
+      (userPool.options as { _resourceServers?: ResourceServerScopes[] })
+        ._resourceServers ?? [],
+    );
+    if (decision.kind === "error") return tokenError(res, decision.error);
+
+    const token = await services.tokenGenerator.generateClientCredentials(
+      ctx,
+      appClient,
+      decision.scopes,
+      clientMetadata,
+    );
+    return res.status(200).json({
+      access_token: token.AccessToken,
+      expires_in: token.ExpiresIn,
+      token_type: token.TokenType,
+    });
+  };
+
   app.post("/oauth2/token", async (req: Request, res: Response) => {
     const body = req.body as Record<string, string>;
     const { grant_type } = body;
 
     const ctx: Context = { logger: req.log };
 
-    if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
+    if (
+      grant_type !== "authorization_code" &&
+      grant_type !== "refresh_token" &&
+      grant_type !== "client_credentials"
+    ) {
       return tokenError(
         res,
         "unsupported_grant_type",
@@ -344,6 +391,10 @@ export function attachOAuth2Routes(
     }
     if (!isClientAuthenticated(appClient, credentials.clientSecret)) {
       return tokenError(res, "invalid_client", "Client authentication failed");
+    }
+
+    if (grant_type === "client_credentials") {
+      return clientCredentialsGrant(ctx, res, appClient, body);
     }
 
     if (grant_type === "authorization_code") {

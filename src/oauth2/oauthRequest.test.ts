@@ -3,9 +3,11 @@ import * as TDB from "../__tests__/testDataBuilder";
 import {
   buildErrorRedirect,
   decideAuthorize,
+  decideClientCredentials,
   includesIdToken,
   isClientAuthenticated,
   parseClientCredentials,
+  parseClientMetadata,
   parseScopes,
 } from "./oauthRequest";
 
@@ -193,5 +195,94 @@ describe("helpers", () => {
       error_description: "bad",
       state: "s1",
     });
+  });
+});
+
+describe("decideClientCredentials", () => {
+  const servers = [
+    {
+      Identifier: "example.test",
+      Scopes: [{ ScopeName: "read" }, { ScopeName: "write" }],
+    },
+    {
+      Identifier: "https://api.example.test",
+      Scopes: [{ ScopeName: "admin" }],
+    },
+  ];
+  const client = (overrides = {}) => ({
+    AllowedOAuthFlows: ["client_credentials" as const],
+    AllowedOAuthFlowsUserPoolClient: true,
+    AllowedOAuthScopes: ["example.test/read", "https://api.example.test/admin"],
+    ...overrides,
+  });
+
+  it("grants every allowed custom scope when no scope is requested", () => {
+    expect(decideClientCredentials(client(), undefined, servers)).toEqual({
+      kind: "grant",
+      scopes: ["example.test/read", "https://api.example.test/admin"],
+    });
+  });
+
+  it("grants the requested scopes", () => {
+    expect(
+      decideClientCredentials(client(), "example.test/read", servers),
+    ).toEqual({ kind: "grant", scopes: ["example.test/read"] });
+  });
+
+  it.each([
+    ["the flow is not allowed", { AllowedOAuthFlows: ["code"] }],
+    ["OAuth is off for the client", { AllowedOAuthFlowsUserPoolClient: false }],
+    ["no flows are set", { AllowedOAuthFlows: undefined }],
+  ])("refuses unauthorized_client when %s", (_, overrides) => {
+    expect(
+      decideClientCredentials(client(overrides), undefined, servers),
+    ).toEqual({ kind: "error", error: "unauthorized_client" });
+  });
+
+  it.each([
+    "example.test/delete",
+    "other/read",
+    "openid",
+    "aws.cognito.signin.user.admin",
+  ])("refuses invalid_scope for %s, which is not a custom scope", (scope) => {
+    expect(decideClientCredentials(client(), scope, servers)).toEqual({
+      kind: "error",
+      error: "invalid_scope",
+    });
+  });
+
+  it("refuses invalid_grant for a custom scope the client is not allowed", () => {
+    expect(
+      decideClientCredentials(
+        client(),
+        "example.test/read example.test/write",
+        servers,
+      ),
+    ).toEqual({ kind: "error", error: "invalid_grant" });
+  });
+
+  it("refuses invalid_scope when the client has no custom scope", () => {
+    expect(
+      decideClientCredentials(
+        client({ AllowedOAuthScopes: ["openid"] }),
+        undefined,
+        servers,
+      ),
+    ).toEqual({ kind: "error", error: "invalid_scope" });
+  });
+});
+
+describe("parseClientMetadata", () => {
+  it("reads a JSON object", () => {
+    expect(parseClientMetadata('{"a":"1","b":2}')).toEqual({ a: "1", b: "2" });
+  });
+
+  it("is undefined when absent", () => {
+    expect(parseClientMetadata(undefined)).toBeUndefined();
+    expect(parseClientMetadata("")).toBeUndefined();
+  });
+
+  it.each(["not json", "[1]", "3", "null"])("is null for %s", (value) => {
+    expect(parseClientMetadata(value)).toBeNull();
   });
 });

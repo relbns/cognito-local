@@ -49,6 +49,33 @@ The sessions are stored on the user record in the pool's data file, so revocatio
 restart. Tokens issued before this version have no `origin_jti`: their access tokens are refused as
 revoked, and their refresh tokens still work and start a tracked session.
 
+## Client credentials
+
+`POST /oauth2/token` with `grant_type=client_credentials` issues an access token to an app client
+(machine-to-machine). The client authenticates with HTTP Basic or `client_id` and `client_secret` in
+the body, and needs a secret, `AllowedOAuthFlowsUserPoolClient: true` and `client_credentials` in
+`AllowedOAuthFlows`. `scope` lists custom scopes of the pool's resource servers
+(`<identifier>/<scope name>`); without it the token gets every custom scope in
+`AllowedOAuthScopes`.
+
+The response is `{"access_token", "expires_in", "token_type": "Bearer"}`, with no ID or refresh
+token. The token has `sub` and `client_id` set to the client id, `token_use: "access"`, `scope`,
+`auth_time`, `iat`, `exp`, `iss`, `jti` and `version: 2`, and no `username`, `cognito:groups` or
+`origin_jti`. Cognito operations that take an access token refuse it (`Access Token does not have
+required scopes`), and `/oauth2/userInfo` answers `invalid_token`.
+
+| Case | Response (HTTP 400) |
+| --- | --- |
+| Unknown client, no secret on the client, wrong or missing secret | `invalid_client` |
+| `client_credentials` not in `AllowedOAuthFlows`, or `AllowedOAuthFlowsUserPoolClient` not `true` | `{"error":"unauthorized_client"}` |
+| A scope that is not a custom scope of the pool (standard scopes included), or no custom scope to grant | `{"error":"invalid_scope"}` |
+| A custom scope that exists but is not in `AllowedOAuthScopes` | `{"error":"invalid_grant"}` |
+| `aws_client_metadata` that is not a JSON object | `invalid_request` |
+
+`aws_client_metadata`, a URL-encoded JSON object, becomes `request.clientMetadata` of a version 3
+pre token generation event (`TokenGeneration_ClientCredentials`, `userName: "ClientCredentials"`,
+`groupConfiguration: null`). Version 1 and 2 triggers do not run for this grant.
+
 ## Pre token generation
 
 The trigger runs before every token issue. Its event `version` follows the pool's
@@ -83,8 +110,7 @@ is dropped without an error:
 - `email_verified`, `phone_number_verified`, `updated_at` and `address` take no object or array value
   in the ID token.
 
-Version 3 also runs for the `client_credentials` grant (see
-[oauth-callback.md](oauth-callback.md#client-credentials)).
+Version 3 also runs for the `client_credentials` grant (see [Client credentials](#client-credentials)).
 
 ID tokens carry `cognito:roles` and `cognito:preferred_role` when the user's groups have a `RoleArn`,
 with or without the trigger.

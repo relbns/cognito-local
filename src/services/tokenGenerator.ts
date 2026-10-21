@@ -97,6 +97,12 @@ export interface Tokens {
   readonly TokenType: "Bearer";
 }
 
+export interface ClientCredentialsToken {
+  readonly AccessToken: string;
+  readonly ExpiresIn: number;
+  readonly TokenType: "Bearer";
+}
+
 export interface GenerateOptions {
   /** Reuse the session of an existing refresh token instead of starting a new one. */
   originJti?: string;
@@ -118,6 +124,13 @@ export interface TokenGenerator {
     scopes?: readonly string[],
     options?: GenerateOptions,
   ): Promise<Tokens>;
+  /** An access token for an app client (M2M): sub and client_id are the client id, no user claims. */
+  generateClientCredentials(
+    ctx: Context,
+    userPoolClient: AppClient,
+    scopes: readonly string[],
+    clientMetadata: Record<string, string> | undefined,
+  ): Promise<ClientCredentialsToken>;
 }
 
 const UNIT_SECONDS: Record<TimeUnitsType, number> = {
@@ -359,6 +372,61 @@ export class JwtTokenGenerator implements TokenGenerator {
         } satisfies SignOptions,
       ),
       ExpiresIn: accessTokenSeconds,
+      TokenType: "Bearer",
+    };
+  }
+
+  public async generateClientCredentials(
+    ctx: Context,
+    userPoolClient: AppClient,
+    scopes: readonly string[],
+    clientMetadata: Record<string, string> | undefined,
+  ): Promise<ClientCredentialsToken> {
+    const now = Math.floor(this.clock.get().getTime() / 1000);
+    let accessToken: Claims = {
+      sub: userPoolClient.ClientId,
+      token_use: "access",
+      scope: scopes.join(" "),
+      auth_time: now,
+      iat: now,
+      version: 2,
+      jti: uuid.v4(),
+      client_id: userPoolClient.ClientId,
+    };
+
+    const userPoolId = userPoolClient.UserPoolId;
+    if (
+      this.triggers.enabled("PreTokenGeneration", userPoolId) &&
+      this.triggers.preTokenGenerationVersion(userPoolId) === "3"
+    ) {
+      const response = await this.triggers.preTokenGeneration(ctx, {
+        clientId: userPoolClient.ClientId,
+        clientMetadata,
+        source: "ClientCredentials",
+        version: "3",
+        userAttributes: [],
+        username: "ClientCredentials",
+        groupConfiguration: null,
+        scopes,
+        userPoolId,
+      });
+      accessToken = applyPreTokenGenerationResponse(
+        "3",
+        response,
+        { accessToken },
+        userPoolClient.ClientId,
+      ).accessToken;
+    }
+
+    const expiresIn = tokenValiditySeconds(userPoolClient, "AccessToken");
+    return {
+      AccessToken: jwt.sign(accessToken, PrivateKey.pem, {
+        algorithm: "RS256",
+        issuer: `${this.tokenConfig.IssuerDomain}/${userPoolId}`,
+        expiresIn,
+        keyid: "CognitoLocal",
+      } satisfies SignOptions),
+      ExpiresIn: expiresIn,
       TokenType: "Bearer",
     };
   }

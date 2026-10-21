@@ -191,6 +191,29 @@ describe("JwtTokenVerifier", () => {
       ).resolves.toMatchObject({ user });
     });
 
+    it("refuses a client credentials token on user operations", async () => {
+      const generator = new JwtTokenGenerator(clock, newMockTriggers(), {
+        IssuerDomain: ISSUER_DOMAIN,
+      });
+      const { AccessToken } = await generator.generateClientCredentials(
+        TestContext,
+        client,
+        ["example.test/read"],
+        undefined,
+      );
+
+      await expect(
+        verifier.verifyAccessToken(TestContext, AccessToken),
+      ).rejects.toEqual(
+        new NotAuthorizedError("Access Token does not have required scopes"),
+      );
+      await expect(
+        verifier.verifyAccessToken(TestContext, AccessToken, {
+          requireAdminScope: false,
+        }),
+      ).rejects.toEqual(new NotAuthorizedError("Invalid Access Token"));
+    });
+
     describe("with TokenConfig.Verify false", () => {
       it("decodes the token without checking it", async () => {
         clock.advanceBy(48 * 60 * 60 * 1000);

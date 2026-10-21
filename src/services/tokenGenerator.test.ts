@@ -297,6 +297,98 @@ describe("JwtTokenGenerator", () => {
     });
   });
 
+  describe("generateClientCredentials", () => {
+    const client = TDB.appClient({
+      ClientId: "m2m-client",
+      UserPoolId: "pool-1",
+      AccessTokenValidity: 30,
+      TokenValidityUnits: { AccessToken: "minutes" },
+    });
+
+    it("issues an access token for the client", async () => {
+      mockTriggers.enabled.mockReturnValue(false);
+
+      const token = await tokenGenerator.generateClientCredentials(
+        TestContext,
+        client,
+        ["example.test/read", "example.test/write"],
+        undefined,
+      );
+
+      expect(token.ExpiresIn).toBe(30 * ONE_MINUTE);
+      expect(token.TokenType).toBe("Bearer");
+      const claims = jwt.decode(token.AccessToken) as Record<string, unknown>;
+      expect(claims).toEqual({
+        sub: "m2m-client",
+        client_id: "m2m-client",
+        token_use: "access",
+        scope: "example.test/read example.test/write",
+        auth_time: Math.floor(originalDate.getTime() / 1000),
+        iat: Math.floor(originalDate.getTime() / 1000),
+        exp: Math.floor(originalDate.getTime() / 1000) + 30 * ONE_MINUTE,
+        version: 2,
+        jti: expect.stringMatching(UUID),
+        iss: "http://example.com/pool-1",
+      });
+    });
+
+    it("runs a version 3 trigger with the client credentials event", async () => {
+      mockTriggers.enabled.mockReturnValue(true);
+      mockTriggers.preTokenGenerationVersion.mockReturnValue("3");
+      mockTriggers.preTokenGeneration.mockResolvedValue({
+        claimsAndScopeOverrideDetails: {
+          accessTokenGeneration: {
+            claimsToAddOrOverride: { tenant: "t1" },
+            scopesToSuppress: ["example.test/write"],
+          },
+        },
+      });
+
+      const token = await tokenGenerator.generateClientCredentials(
+        TestContext,
+        client,
+        ["example.test/read", "example.test/write"],
+        { ip: "192.0.2.1" },
+      );
+
+      expect(mockTriggers.preTokenGeneration).toHaveBeenCalledWith(
+        TestContext,
+        {
+          clientId: "m2m-client",
+          clientMetadata: { ip: "192.0.2.1" },
+          source: "ClientCredentials",
+          version: "3",
+          userAttributes: [],
+          username: "ClientCredentials",
+          groupConfiguration: null,
+          scopes: ["example.test/read", "example.test/write"],
+          userPoolId: "pool-1",
+        },
+      );
+      expect(jwt.decode(token.AccessToken)).toMatchObject({
+        tenant: "t1",
+        scope: "example.test/read",
+      });
+    });
+
+    it.each(["1", "2"] as const)(
+      "does not run a version %s trigger",
+      async (version) => {
+        mockTriggers.enabled.mockReturnValue(true);
+        mockTriggers.preTokenGenerationVersion.mockReturnValue(version);
+
+        await tokenGenerator.generateClientCredentials(
+          TestContext,
+          client,
+          ["example.test/read"],
+          undefined,
+        );
+
+        expect(mockTriggers.preTokenGeneration).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe("TokenGeneration lambda is not configured", () => {
     it("generates the default tokens", async () => {
       mockTriggers.enabled.mockReturnValue(false);

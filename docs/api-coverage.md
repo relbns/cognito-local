@@ -186,7 +186,7 @@ ListUserPoolClientSecrets return everything in one response.
 | Endpoint | Method | Behaviour |
 | --- | --- | --- |
 | `/oauth2/authorize` | GET, POST | `code` and `token` response types, optional PKCE (`S256` only), scopes checked against `AllowedOAuthScopes`, errors redirected to `redirect_uri`. Without `identity_provider`, or with `COGNITO`, it shows the built-in login form. With a federated `identity_provider` or `idp_identifier` it redirects to the mock IdP. |
-| `/oauth2/token` | POST | `authorization_code` and `refresh_token` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` returns `unsupported_grant_type`. |
+| `/oauth2/token` | POST | `authorization_code`, `refresh_token` and `client_credentials` grants. Clients with a secret authenticate with HTTP Basic or `client_secret` in the body. `client_credentials` issues an M2M access token for custom scopes (see [tokens.md](tokens.md#client-credentials)). |
 | `/oauth2/userInfo` | GET | OpenID Connect UserInfo for a bearer access token. |
 | `/oauth2/revoke` | POST | Revokes a refresh token and the access tokens issued from it. |
 | `/logout` | GET | Takes `client_id` and `logout_uri` and redirects to `logout_uri` when it is one of the client's `LogoutURLs`. The `redirect_uri` + `response_type` form is not supported. |

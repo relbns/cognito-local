@@ -4,6 +4,7 @@ import {
   AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
   CreateGroupCommand,
+  CreateResourceServerCommand,
   CreateUserPoolClientCommand,
   CreateUserPoolCommand,
   InitiateAuthCommand,
@@ -167,6 +168,80 @@ describe(
       it("sends a version 3 event for user sign-in", async () => {
         await signIn("V3_0");
         expect(events[0].version).toBe("3");
+      });
+
+      it("customizes a client credentials token with a version 3 trigger", async () => {
+        events.length = 0;
+        const cognito = new CognitoIdentityProviderClient({
+          region: "us-east-1",
+          endpoint: serverUrl(),
+          credentials,
+        });
+        const pool = await cognito.send(
+          new CreateUserPoolCommand({
+            PoolName: "m2m",
+            LambdaConfig: {
+              PreTokenGenerationConfig: {
+                LambdaArn:
+                  "arn:aws:lambda:us-east-1:000000000000:function:pre-token",
+                LambdaVersion: "V3_0",
+              },
+            },
+          }),
+        );
+        const UserPoolId = pool.UserPool!.Id!;
+        await cognito.send(
+          new CreateResourceServerCommand({
+            UserPoolId,
+            Identifier: "example.test",
+            Name: "api",
+            Scopes: [{ ScopeName: "read", ScopeDescription: "read" }],
+          }),
+        );
+        const app = await cognito.send(
+          new CreateUserPoolClientCommand({
+            UserPoolId,
+            ClientName: "service",
+            GenerateSecret: true,
+            AllowedOAuthFlows: ["client_credentials"],
+            AllowedOAuthFlowsUserPoolClient: true,
+            AllowedOAuthScopes: ["example.test/read"],
+          }),
+        );
+        const { ClientId, ClientSecret } = app.UserPoolClient!;
+
+        const res = await fetch(`${serverUrl()}/oauth2/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "client_credentials",
+            client_id: ClientId!,
+            client_secret: ClientSecret!,
+            aws_client_metadata: JSON.stringify({ ip: "192.0.2.1" }),
+          }).toString(),
+        });
+        const access = jwt.decode((await res.json()).access_token) as Record<
+          string,
+          unknown
+        >;
+
+        expect(events[0]).toMatchObject({
+          version: "3",
+          triggerSource: "TokenGeneration_ClientCredentials",
+          userName: "ClientCredentials",
+          callerContext: { clientId: ClientId },
+          request: {
+            userAttributes: {},
+            groupConfiguration: null,
+            scopes: ["example.test/read"],
+            clientMetadata: { ip: "192.0.2.1" },
+          },
+        });
+        expect(access).toMatchObject({
+          sub: ClientId,
+          tenant: { id: "t1" },
+          scope: "example.test/read",
+        });
       });
     },
     { lambda: preTokenGenerationLambda },

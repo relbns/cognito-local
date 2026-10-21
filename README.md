@@ -458,7 +458,6 @@ operations; [docs/api-coverage.md](docs/api-coverage.md) lists them with what ea
 ### Not supported yet
 
 - Federated providers are a mock page, with no real OIDC token exchange or SAML assertion.
-- The `client_credentials` grant on `/oauth2/token` (only `authorization_code` and `refresh_token`).
 - The `USER_AUTH` (choice-based) flow, and with it passkey sign-in.
 - Device tracking (`NewDeviceMetadata`, device challenges) and the `MFA_SETUP` challenge.
 - Refresh token rotation, and the PreAuthentication and CustomSMSSender triggers.

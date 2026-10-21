@@ -210,6 +210,12 @@ export class JwtTokenVerifier implements TokenVerifier {
       throw new NotAuthorizedError(TokenErrorMessages.expiredAccessToken);
     }
 
+    if (claims.username === undefined && claims.sub === claims.client_id) {
+      throw requireAdminScope
+        ? new NotAuthorizedError(TokenErrorMessages.missingScope)
+        : invalid();
+    }
+
     const user = await userPool.getUserByUsername(
       ctx,
       String(claims.username ?? claims.sub ?? ""),
